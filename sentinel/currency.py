@@ -65,8 +65,10 @@ class Currency:
         # Check DB cache first (2 hours = 7200 seconds)
         cached = await self._db.cache_get("currency:rates")
         if cached is not None:
-            self._rates_cache = json.loads(cached)
-            return self._rates_cache
+            loaded = json.loads(cached)
+            if isinstance(loaded, dict):
+                self._rates_cache = loaded
+                return self._rates_cache
 
         # Try to load from settings
         stored = await self._settings.get("exchange_rates")

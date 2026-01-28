@@ -58,6 +58,8 @@ class SimulationDatabase(BaseDatabase):
             columns = [desc[0] for desc in cursor.description]
             placeholders = ",".join(["?" for _ in columns])
             cols_str = ",".join(columns)
+            if self._connection is None:
+                return
             for row in rows:
                 await self._connection.execute(
                     f"INSERT OR REPLACE INTO {table} ({cols_str}) VALUES ({placeholders})",  # noqa: S608
@@ -76,7 +78,7 @@ class SimulationDatabase(BaseDatabase):
     # Override: Prices with simulation date filtering
     # -------------------------------------------------------------------------
 
-    async def get_prices(self, symbol: str, days: int = None) -> list[dict]:
+    async def get_prices(self, symbol: str, days: int | None = None) -> list[dict]:
         """
         Get prices for a symbol, filtered by simulation date if set.
 
@@ -86,7 +88,7 @@ class SimulationDatabase(BaseDatabase):
         if self._simulation_date:
             # Filter to only include prices on or before simulation date
             query = "SELECT * FROM prices WHERE symbol = ? AND date <= ? ORDER BY date DESC"
-            params = [symbol, self._simulation_date]
+            params: list[str | int] = [symbol, self._simulation_date]
         else:
             query = "SELECT * FROM prices WHERE symbol = ? ORDER BY date DESC"
             params = [symbol]

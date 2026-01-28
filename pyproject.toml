@@ -47,6 +47,8 @@ select = ["F", "E", "W", "I", "S", "B"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**/*.py" = ["S101"]
+"sentinel/backtester.py" = ["S101"]  # Type narrowing assertions
+"sentinel/ml_ensemble.py" = ["S101"]  # Type narrowing assertions
 
 [tool.pyright]
 pythonVersion = "3.13"

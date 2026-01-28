@@ -117,19 +117,18 @@ class BaseDatabase:
         """Set multiple cash balances at once. Clears existing balances."""
         await self.conn.execute("DELETE FROM cash_balances")
         for currency, amount in balances.items():
-            if amount > 0:  # Only store non-zero balances
-                await self.conn.execute(
-                    """INSERT INTO cash_balances (currency, amount, updated_at)
-                       VALUES (?, ?, datetime('now'))""",
-                    (currency, amount),
-                )
+            await self.conn.execute(
+                """INSERT INTO cash_balances (currency, amount, updated_at)
+                   VALUES (?, ?, datetime('now'))""",
+                (currency, amount),
+            )
         await self.conn.commit()
 
     # -------------------------------------------------------------------------
     # Allocation Targets
     # -------------------------------------------------------------------------
 
-    async def get_allocation_targets(self, target_type: str = None) -> list[dict]:
+    async def get_allocation_targets(self, target_type: str | None = None) -> list[dict]:
         """Get allocation targets (geography or industry weights)."""
         query = "SELECT * FROM allocation_targets"
         params = []
@@ -173,7 +172,7 @@ class BaseDatabase:
             (broker_trade_id, symbol, side, executed_at, json.dumps(raw_data)),
         )
         await self.conn.commit()
-        return cursor.lastrowid
+        return cursor.lastrowid or 0
 
     async def get_trades(
         self,
@@ -284,10 +283,10 @@ class BaseDatabase:
     # Prices (base implementation, can be overridden)
     # -------------------------------------------------------------------------
 
-    async def get_prices(self, symbol: str, days: int = None) -> list[dict]:
+    async def get_prices(self, symbol: str, days: int | None = None) -> list[dict]:
         """Get historical prices for a security."""
         query = "SELECT * FROM prices WHERE symbol = ? ORDER BY date DESC"
-        params = [symbol]
+        params: list[str | int] = [symbol]
         if days:
             query += " LIMIT ?"
             params.append(days)

@@ -141,7 +141,7 @@ class BacktestDatabaseBuilder:
         self.real_db = real_db
         self.temp_dir = tempfile.mkdtemp()
         self.temp_path = Path(self.temp_dir) / "backtest.db"
-        self.temp_db: Database = None
+        self.temp_db: Database | None = None
         self.broker = Broker()
         self._symbols: list[str] = []
 
@@ -224,6 +224,7 @@ class BacktestDatabaseBuilder:
 
     async def _copy_settings(self) -> None:
         """Copy settings and allocation targets from real database."""
+        assert self.temp_db is not None
         # Copy settings
         cursor = await self.real_db.conn.execute("SELECT key, value FROM settings")
         rows = await cursor.fetchall()
@@ -273,6 +274,7 @@ class BacktestDatabaseBuilder:
 
     async def _copy_symbol_data(self, symbol: str, security: dict, prices: list[dict]) -> None:
         """Copy security and price data from real database to temp database."""
+        assert self.temp_db is not None
         # Insert security
         cols = list(security.keys())
         placeholders = ",".join(["?" for _ in cols])
@@ -314,6 +316,7 @@ class BacktestDatabaseBuilder:
 
     async def _fetch_symbol_data(self, symbol: str) -> None:
         """Fetch security and price data from Tradernet API."""
+        assert self.temp_db is not None
         await self.broker.connect()
 
         # Fetch security info
@@ -566,6 +569,10 @@ class Backtester:
 
             self._sim_broker = BacktestBroker(self._sim_db)
 
+            # Assert that db and broker are now initialized (for type checker)
+            assert self._sim_db is not None
+            assert self._sim_broker is not None
+
             # Initialize cash
             await self._sim_db.set_cash_balance("EUR", self.config.initial_capital)
 
@@ -681,6 +688,7 @@ class Backtester:
         """
         from datetime import datetime
 
+        assert self._sim_db is not None, "Simulation database not initialized"
         # Use get_trades from the database which works with new schema
         trades = await self._sim_db.get_trades(symbol=symbol, limit=1)
 
@@ -712,6 +720,7 @@ class Backtester:
 
     async def _update_position_prices(self):
         """Update position prices to current simulation date."""
+        assert self._sim_db is not None and self._sim_broker is not None
         positions = await self._sim_db.get_all_positions()
         for pos in positions:
             quote = await self._sim_broker.get_quote(pos["symbol"])
@@ -732,6 +741,7 @@ class Backtester:
         from sentinel.planner import Planner
         from sentinel.portfolio import Portfolio
 
+        assert self._sim_db is not None and self._sim_broker is not None
         trades = []
         currency = Currency()
 
@@ -766,6 +776,7 @@ class Backtester:
 
     async def _execute_trade(self, rec, tracking: dict, currency) -> Optional[SimulatedTrade]:
         """Execute a trade recommendation in the simulation."""
+        assert self._sim_db is not None
         symbol = rec.symbol
         action = rec.action
         quantity = rec.quantity
@@ -870,6 +881,7 @@ class Backtester:
         """Create snapshot using Portfolio class."""
         from sentinel.currency import Currency
 
+        assert self._sim_db is not None
         currency = Currency()
 
         # Cash

@@ -351,6 +351,7 @@ class TestTradingBuy:
         db.get_trades = AsyncMock(return_value=[])  # No recent trades
         db.record_trade = AsyncMock()
         db.upsert_position = AsyncMock()  # Required for get_price()
+        db.get_cash_balances = AsyncMock(return_value={"EUR": 10000.0})  # Sufficient EUR
 
         broker = MagicMock()
         broker.get_quote = AsyncMock(return_value={"price": 100.00})
@@ -389,6 +390,7 @@ class TestTradingBuy:
         db.get_trades = AsyncMock(return_value=[])
         db.record_trade = AsyncMock()
         db.upsert_position = AsyncMock()
+        db.get_cash_balances = AsyncMock(return_value={"EUR": 10000.0})
 
         broker = MagicMock()
         broker.get_quote = AsyncMock(return_value={"price": 100.00})
@@ -449,6 +451,154 @@ class TestTradingBuy:
 
         with pytest.raises(ValueError, match="no valid price"):
             await security.buy(10)
+
+
+class TestEurCurrencyConversion:
+    """Tests for EUR currency auto-conversion from other currencies."""
+
+    @pytest.mark.asyncio
+    async def test_buy_eur_security_converts_from_hkd_when_eur_insufficient(self):
+        """buy() converts HKD to EUR when EUR balance is insufficient for EUR purchase."""
+        from unittest.mock import patch
+
+        db = MagicMock()
+        db.get_trades = AsyncMock(return_value=[])
+        db.upsert_position = AsyncMock()
+        # EUR balance insufficient, but HKD available
+        db.get_cash_balances = AsyncMock(return_value={"EUR": 100.0, "HKD": 17000.0, "USD": 50.0})
+
+        broker = MagicMock()
+        broker.get_quote = AsyncMock(return_value={"price": 1000.00})
+        broker.buy = AsyncMock(return_value="ORDER123")
+        broker.connected = True
+
+        mock_fx = MagicMock()
+        mock_fx.exchange = AsyncMock(return_value={"order_id": "FX123"})
+
+        mock_currency = MagicMock()
+        mock_currency.get_rate = AsyncMock(return_value=0.11)  # 1 HKD = 0.11 EUR
+
+        with (
+            patch("sentinel.currency_exchange.CurrencyExchangeService", return_value=mock_fx),
+            patch("sentinel.currency.Currency", return_value=mock_currency),
+        ):
+            security = Security("ASML.EU", db=db, broker=broker)
+            security._data = {
+                "symbol": "ASML.EU",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_buy": 1,
+            }
+            security._position = {"current_price": 1000.00}
+
+            await security.buy(1, auto_convert=True)
+
+            # Should have attempted to convert from other currencies
+            mock_fx.exchange.assert_called()
+            # The order should still be placed
+            broker.buy.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_buy_eur_security_fails_when_no_currencies_to_convert(self):
+        """buy() fails when EUR insufficient and no other currencies available."""
+        from unittest.mock import patch
+
+        db = MagicMock()
+        db.get_trades = AsyncMock(return_value=[])
+        db.upsert_position = AsyncMock()
+        # Only EUR with insufficient balance
+        db.get_cash_balances = AsyncMock(return_value={"EUR": 100.0})
+
+        broker = MagicMock()
+        broker.get_quote = AsyncMock(return_value={"price": 1000.00})
+        broker.connected = True
+
+        mock_fx = MagicMock()
+        mock_fx.exchange = AsyncMock(return_value=None)
+
+        with patch("sentinel.currency_exchange.CurrencyExchangeService", return_value=mock_fx):
+            security = Security("ASML.EU", db=db, broker=broker)
+            security._data = {
+                "symbol": "ASML.EU",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_buy": 1,
+            }
+            security._position = {"current_price": 1000.00}
+
+            with pytest.raises(ValueError, match="Insufficient EUR balance"):
+                await security.buy(1, auto_convert=True)
+
+    @pytest.mark.asyncio
+    async def test_buy_eur_security_succeeds_when_eur_sufficient(self):
+        """buy() succeeds without conversion when EUR balance is sufficient."""
+        db = MagicMock()
+        db.get_trades = AsyncMock(return_value=[])
+        db.upsert_position = AsyncMock()
+        # EUR balance is sufficient
+        db.get_cash_balances = AsyncMock(return_value={"EUR": 5000.0})
+
+        broker = MagicMock()
+        broker.get_quote = AsyncMock(return_value={"price": 1000.00})
+        broker.buy = AsyncMock(return_value="ORDER123")
+
+        security = Security("ASML.EU", db=db, broker=broker)
+        security._data = {
+            "symbol": "ASML.EU",
+            "currency": "EUR",
+            "min_lot": 1,
+            "allow_buy": 1,
+        }
+        security._position = {"current_price": 1000.00}
+
+        order_id = await security.buy(1, auto_convert=True)
+
+        assert order_id == "ORDER123"
+        broker.buy.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_buy_eur_security_converts_negative_eur_balance(self):
+        """buy() converts from other currencies when EUR balance is negative (margin)."""
+        from unittest.mock import patch
+
+        db = MagicMock()
+        db.get_trades = AsyncMock(return_value=[])
+        db.upsert_position = AsyncMock()
+        # Negative EUR balance (margin), but HKD available
+        # Need 500 EUR for trade, have -2000 EUR, so need 2500 EUR * 1.02 buffer = 2550 EUR
+        # HKD at 0.11 rate: 17000 HKD = 1870 EUR (not enough, but we convert what we can)
+        db.get_cash_balances = AsyncMock(return_value={"EUR": -2000.0, "HKD": 17000.0, "USD": 10000.0})
+
+        broker = MagicMock()
+        broker.get_quote = AsyncMock(return_value={"price": 500.00})
+        broker.buy = AsyncMock(return_value="ORDER123")
+        broker.connected = True
+
+        mock_fx = MagicMock()
+        mock_fx.exchange = AsyncMock(return_value={"order_id": "FX123"})
+
+        mock_currency = MagicMock()
+        # 1 HKD = 0.11 EUR, 1 USD = 0.85 EUR
+        mock_currency.get_rate = AsyncMock(side_effect=lambda c: {"HKD": 0.11, "USD": 0.85, "GBP": 1.15}.get(c, 1.0))
+
+        with (
+            patch("sentinel.currency_exchange.CurrencyExchangeService", return_value=mock_fx),
+            patch("sentinel.currency.Currency", return_value=mock_currency),
+        ):
+            security = Security("TEST.EU", db=db, broker=broker)
+            security._data = {
+                "symbol": "TEST.EU",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_buy": 1,
+            }
+            security._position = {"current_price": 500.00}
+
+            await security.buy(1, auto_convert=True)
+
+            # Should have converted currencies to EUR
+            assert mock_fx.exchange.call_count >= 1
+            broker.buy.assert_called_once()
 
 
 class TestTradingSell:
@@ -568,6 +718,7 @@ class TestTradeCooloff:
         db.get_trades = AsyncMock(return_value=[{"executed_at": old_trade_time.isoformat()}])
         db.record_trade = AsyncMock()
         db.upsert_position = AsyncMock()
+        db.get_cash_balances = AsyncMock(return_value={"EUR": 10000.0})
 
         broker = MagicMock()
         broker.get_quote = AsyncMock(return_value={"price": 100.00})
@@ -621,6 +772,7 @@ class TestAsianMarketHandling:
         db.get_trades = AsyncMock(return_value=[])
         db.record_trade = AsyncMock()
         db.upsert_position = AsyncMock()
+        db.get_cash_balances = AsyncMock(return_value={"EUR": 10000.0})
 
         broker = MagicMock()
         broker.get_quote = AsyncMock(return_value={"price": 100.00})
@@ -669,6 +821,7 @@ class TestAsianMarketHandling:
         db = MagicMock()
         db.get_trades = AsyncMock(return_value=[])
         db.upsert_position = AsyncMock()
+        db.get_cash_balances = AsyncMock(return_value={"EUR": 10000.0})
 
         broker = MagicMock()
         broker.get_quote = AsyncMock(return_value={"price": 100.00})
@@ -774,7 +927,7 @@ class TestManagement:
         trades = await security.get_trades(limit=50)
 
         assert len(trades) == 2
-        db.get_trades.assert_called_once_with("AAPL.US", 50)
+        db.get_trades.assert_called_once_with(symbol="AAPL.US", limit=50)
 
 
 class TestQuoteDataParsing:

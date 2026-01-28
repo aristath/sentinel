@@ -222,7 +222,7 @@ class MLPredictor:
         except Exception as e:
             logger.error(f"Failed to store prediction for {symbol}: {e}")
 
-    def clear_cache(self, symbol: str = None):
+    def clear_cache(self, symbol: str | None = None):
         """Clear model cache for a symbol or all symbols."""
         if symbol:
             self._models.pop(symbol, None)

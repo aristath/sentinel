@@ -384,6 +384,114 @@ class TestMLMonitor:
         assert mock_monitor.track_symbol_performance.await_count == 2
 
 
+class TestTradingBalanceFix:
+    """Tests for trading_balance_fix task."""
+
+    @pytest.mark.asyncio
+    async def test_balance_fix_skips_when_broker_not_connected(self, mock_db, mock_broker):
+        """Verify task skips when broker not connected."""
+        from sentinel.jobs.tasks import trading_balance_fix
+
+        mock_broker.connected = False
+
+        await trading_balance_fix(mock_db, mock_broker)
+
+        # Should not attempt to get balances
+        mock_db.get_cash_balances.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_balance_fix_does_nothing_when_all_positive(self, mock_db, mock_broker):
+        """Verify no action when all balances are positive."""
+        from sentinel.jobs.tasks import trading_balance_fix
+
+        mock_broker.connected = True
+        mock_db.get_cash_balances = AsyncMock(return_value={"EUR": 1000.0, "USD": 500.0})
+
+        with patch("sentinel.currency_exchange.CurrencyExchangeService") as MockFx:
+            mock_fx = MagicMock()
+            mock_fx.exchange = AsyncMock()
+            MockFx.return_value = mock_fx
+
+            await trading_balance_fix(mock_db, mock_broker)
+
+            # Should not attempt any exchanges
+            mock_fx.exchange.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_balance_fix_converts_positive_to_cover_negative(self, mock_db, mock_broker):
+        """Verify conversion from positive to negative balance currencies."""
+        from sentinel.jobs.tasks import trading_balance_fix
+
+        mock_broker.connected = True
+        # EUR is negative, USD is positive
+        mock_db.get_cash_balances = AsyncMock(return_value={"EUR": -500.0, "USD": 1000.0})
+
+        with patch("sentinel.currency_exchange.CurrencyExchangeService") as MockFx:
+            mock_fx = MagicMock()
+            mock_fx.exchange = AsyncMock(return_value={"order_id": "FX123"})
+            MockFx.return_value = mock_fx
+
+            with patch("sentinel.currency.Currency") as MockCurrency:
+                mock_currency = MagicMock()
+                # 1 EUR = 1 EUR, 1 USD = 0.85 EUR
+                mock_currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt if curr == "EUR" else amt * 0.85)
+                mock_currency.get_rate = AsyncMock(return_value=0.85)
+                MockCurrency.return_value = mock_currency
+
+                await trading_balance_fix(mock_db, mock_broker)
+
+                # Should have attempted to convert USD to EUR
+                mock_fx.exchange.assert_awaited()
+                call_args = mock_fx.exchange.call_args
+                assert call_args[0][0] == "USD"  # from currency
+                assert call_args[0][1] == "EUR"  # to currency
+
+    @pytest.mark.asyncio
+    async def test_balance_fix_logs_error_when_no_positive_balances(self, mock_db, mock_broker):
+        """Verify error logged when no positive balances to convert from."""
+        from sentinel.jobs.tasks import trading_balance_fix
+
+        mock_broker.connected = True
+        # All negative - nothing to convert from
+        mock_db.get_cash_balances = AsyncMock(return_value={"EUR": -500.0, "USD": -200.0})
+
+        with patch("sentinel.currency_exchange.CurrencyExchangeService") as MockFx:
+            mock_fx = MagicMock()
+            mock_fx.exchange = AsyncMock()
+            MockFx.return_value = mock_fx
+
+            # Should complete without error, but not attempt any exchanges
+            await trading_balance_fix(mock_db, mock_broker)
+
+            mock_fx.exchange.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_balance_fix_includes_buffer(self, mock_db, mock_broker):
+        """Verify buffer is added when calculating conversion amount."""
+        from sentinel.jobs.tasks import trading_balance_fix
+
+        mock_broker.connected = True
+        # Small negative balance
+        mock_db.get_cash_balances = AsyncMock(return_value={"EUR": -5.0, "USD": 1000.0})
+
+        with patch("sentinel.currency_exchange.CurrencyExchangeService") as MockFx:
+            mock_fx = MagicMock()
+            mock_fx.exchange = AsyncMock(return_value={"order_id": "FX123"})
+            MockFx.return_value = mock_fx
+
+            with patch("sentinel.currency.Currency") as MockCurrency:
+                mock_currency = MagicMock()
+                mock_currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt if curr == "EUR" else amt * 0.85)
+                mock_currency.get_rate = AsyncMock(return_value=0.85)
+                MockCurrency.return_value = mock_currency
+
+                await trading_balance_fix(mock_db, mock_broker)
+
+                # Should convert enough to cover deficit + buffer (10 EUR)
+                # Deficit = 5, buffer = 10, total needed = 15 EUR
+                mock_fx.exchange.assert_awaited()
+
+
 class TestBackupR2:
     """Tests for backup_r2 task."""
 

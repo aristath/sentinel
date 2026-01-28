@@ -312,6 +312,105 @@ async def trading_rebalance(planner) -> None:
         logger.info("Portfolio is balanced")
 
 
+async def trading_balance_fix(db, broker) -> None:
+    """Fix negative currency balances by converting from positive balances.
+
+    This job runs periodically to ensure no currency has a negative balance,
+    which would incur margin fees. It converts from currencies with positive
+    balances to those with negative balances.
+    """
+    from sentinel.currency import Currency
+    from sentinel.currency_exchange import CurrencyExchangeService
+
+    if not broker.connected:
+        logger.warning("Broker not connected, skipping balance fix")
+        return
+
+    # Get current cash balances
+    balances = await db.get_cash_balances()
+    if not balances:
+        logger.info("No cash balances to check")
+        return
+
+    # Find negative and positive balances
+    negative = {c: amt for c, amt in balances.items() if amt < 0}
+    positive = {c: amt for c, amt in balances.items() if amt > 0}
+
+    if not negative:
+        logger.info("All currency balances are non-negative")
+        return
+
+    logger.warning(f"Found negative balances: {negative}")
+
+    if not positive:
+        logger.error("No positive currency balances available for conversion")
+        return
+
+    # Initialize services
+    currency = Currency()
+    fx = CurrencyExchangeService()
+
+    # Buffer: aim to bring balance slightly positive, not just 0
+    BUFFER_EUR = 10.0
+
+    # Process each negative currency
+    for neg_currency, neg_amount in negative.items():
+        # Convert deficit to EUR, then add buffer (buffer is always in EUR terms)
+        if neg_currency == "EUR":
+            deficit_eur = abs(neg_amount) + BUFFER_EUR
+        else:
+            deficit_eur = await currency.to_eur(abs(neg_amount), neg_currency) + BUFFER_EUR
+
+        logger.info(f"Covering {neg_currency} deficit: {abs(neg_amount):.2f} ({deficit_eur:.2f} EUR incl. buffer)")
+
+        # Try to convert from positive balances
+        for pos_currency, pos_amount in list(positive.items()):
+            if deficit_eur <= 0:
+                break
+
+            if pos_amount <= 0:
+                continue
+
+            # Calculate EUR value of positive balance
+            pos_eur_value = await currency.to_eur(pos_amount, pos_currency)
+
+            # Determine how much to convert
+            convert_eur = min(pos_eur_value, deficit_eur)
+
+            # Calculate amount in source currency
+            rate = await currency.get_rate(pos_currency)
+            if rate > 0:
+                convert_amount = convert_eur / rate
+            else:
+                convert_amount = pos_amount
+
+            convert_amount = min(convert_amount, pos_amount)
+
+            if convert_amount <= 0:
+                continue
+
+            # Determine target currency
+            target_currency = "EUR" if neg_currency == "EUR" else neg_currency
+
+            logger.info(f"Converting {convert_amount:.2f} {pos_currency} to {target_currency}")
+
+            try:
+                result = await fx.exchange(pos_currency, target_currency, convert_amount)
+                if result:
+                    logger.info(f"Successfully converted {convert_amount:.2f} {pos_currency} to {target_currency}")
+                    # Update tracking
+                    actual_eur = await currency.to_eur(convert_amount, pos_currency)
+                    deficit_eur -= actual_eur
+                    positive[pos_currency] = pos_amount - convert_amount
+                else:
+                    logger.error(f"Failed to convert {pos_currency} to {target_currency}")
+            except Exception as e:
+                logger.error(f"Error converting {pos_currency} to {target_currency}: {e}")
+
+        if deficit_eur > 0:
+            logger.warning(f"Could not fully cover {neg_currency} deficit. Remaining: {deficit_eur:.2f} EUR")
+
+
 async def planning_refresh(db, planner) -> None:
     """Refresh trading plan by clearing caches and regenerating recommendations."""
     # Clear planner-related caches

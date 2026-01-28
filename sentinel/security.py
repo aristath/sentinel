@@ -128,7 +128,7 @@ class Security:
             await self._db.replace_prices(self.symbol, prices)
         return len(prices)
 
-    async def get_historical_prices(self, days: int = None) -> list[dict]:
+    async def get_historical_prices(self, days: int | None = None) -> list[dict]:
         """Get historical prices from database."""
         return await self._db.get_prices(self.symbol, days)
 
@@ -205,16 +205,76 @@ class Security:
         trade_value = price * quantity
 
         # Auto-convert currency if needed and enabled
-        if auto_convert and self.currency != "EUR":
+        if auto_convert:
             from sentinel.currency_exchange import CurrencyExchangeService
 
             fx = CurrencyExchangeService()
-            converted = await fx.ensure_balance(self.currency, trade_value, source_currency="EUR")
-            if not converted:
-                raise ValueError(
-                    f"Insufficient {self.currency} balance and auto-conversion failed. "
-                    f"Need {trade_value:.2f} {self.currency}"
-                )
+
+            if self.currency != "EUR":
+                # Non-EUR purchase: convert EUR to target currency
+                converted = await fx.ensure_balance(self.currency, trade_value, source_currency="EUR")
+                if not converted:
+                    raise ValueError(
+                        f"Insufficient {self.currency} balance and auto-conversion failed. "
+                        f"Need {trade_value:.2f} {self.currency}"
+                    )
+            else:
+                # EUR purchase: ensure we have enough EUR, convert from other currencies if needed
+                balances = await self._db.get_cash_balances()
+                eur_balance = balances.get("EUR", 0)
+
+                if eur_balance < trade_value:
+                    # Calculate how much EUR we need (with 2% buffer for fees/slippage)
+                    needed_eur = (trade_value - eur_balance) * 1.02
+                    estimated_eur_from_conversions = 0.0
+
+                    # Get currency converter once (not inside loop)
+                    from sentinel.currency import Currency
+
+                    currency_converter = Currency()
+
+                    # Try to convert from other currencies with positive balances
+                    # Priority order: USD, GBP, HKD
+                    for source_curr in ["USD", "GBP", "HKD"]:
+                        if needed_eur <= estimated_eur_from_conversions:
+                            break  # We have enough pending conversions
+
+                        source_balance = balances.get(source_curr, 0)
+                        if source_balance <= 0:
+                            continue
+
+                        # Calculate how much of this currency we need to convert
+                        rate = await currency_converter.get_rate(source_curr)  # rate = 1 source_curr in EUR
+
+                        if rate <= 0:
+                            continue
+
+                        # How much EUR can we get from this currency?
+                        max_eur_from_source = source_balance * rate
+                        still_needed = needed_eur - estimated_eur_from_conversions
+
+                        if max_eur_from_source <= still_needed:
+                            # Convert all of this currency
+                            convert_amount = source_balance
+                            eur_gained = max_eur_from_source
+                        else:
+                            # Convert only what we need
+                            convert_amount = still_needed / rate
+                            eur_gained = still_needed
+
+                        # Execute conversion
+                        result = await fx.exchange(source_curr, "EUR", convert_amount)
+                        if result:
+                            estimated_eur_from_conversions += eur_gained
+
+                    # Check if we have enough (current + pending conversions)
+                    total_expected_eur = eur_balance + estimated_eur_from_conversions
+                    if total_expected_eur < trade_value:
+                        raise ValueError(
+                            f"Insufficient EUR balance. Have {eur_balance:.2f} EUR + "
+                            f"{estimated_eur_from_conversions:.2f} EUR pending from conversions = "
+                            f"{total_expected_eur:.2f} EUR, but need {trade_value:.2f} EUR."
+                        )
 
         # For Asian markets, use limit order at ask price (market orders not supported)
         limit_price = None
@@ -265,7 +325,7 @@ class Security:
         row = await cursor.fetchone()
         return row["score"] if row else None
 
-    async def set_score(self, score: float, components: dict = None) -> None:
+    async def set_score(self, score: float, components: dict | None = None) -> None:
         """Set the calculated score for this security."""
         import json
 
@@ -287,4 +347,4 @@ class Security:
 
     async def get_trades(self, limit: int = 50) -> list[dict]:
         """Get trade history for this security."""
-        return await self._db.get_trades(self.symbol, limit)
+        return await self._db.get_trades(symbol=self.symbol, limit=limit)

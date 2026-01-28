@@ -25,9 +25,11 @@ class Database(BaseDatabase):
     """Single source of truth for all database operations."""
 
     _instances: dict[str, "Database"] = {}  # path -> instance
-    _default_path: str = None
+    _default_path: str | None = None
+    _path: Path
+    _connection: aiosqlite.Connection | None
 
-    def __new__(cls, path: str = None):
+    def __new__(cls, path: str | None = None):
         """
         Singleton pattern per path - one database instance per unique path.
 
@@ -49,7 +51,7 @@ class Database(BaseDatabase):
 
         return cls._instances[path]
 
-    def __init__(self, path: str = None):
+    def __init__(self, path: str | None = None):
         # Path is already set in __new__, nothing to do here
         pass
 
@@ -177,7 +179,7 @@ class Database(BaseDatabase):
             )
         await self.conn.commit()
 
-    async def get_prices_bulk(self, symbols: list[str], days: int = None) -> dict[str, list[dict]]:
+    async def get_prices_bulk(self, symbols: list[str], days: int | None = None) -> dict[str, list[dict]]:
         """Get historical prices for multiple securities in a single query.
 
         Args:
@@ -271,7 +273,7 @@ class Database(BaseDatabase):
 
         return row["value"]
 
-    async def cache_set(self, key: str, value: str, ttl_seconds: int = None) -> None:
+    async def cache_set(self, key: str, value: str, ttl_seconds: int | None = None) -> None:
         """Set a cached value. TTL is optional (None = never expires)."""
         import time
 
@@ -286,7 +288,7 @@ class Database(BaseDatabase):
         await self.conn.execute("DELETE FROM cache WHERE key = ?", (key,))
         await self.conn.commit()
 
-    async def cache_clear(self, prefix: str = None) -> int:
+    async def cache_clear(self, prefix: str | None = None) -> int:
         """Clear cache entries. If prefix given, only clear keys starting with it."""
         if prefix:
             cursor = await self.conn.execute("DELETE FROM cache WHERE key LIKE ?", (f"{prefix}%",))
@@ -309,12 +311,12 @@ class Database(BaseDatabase):
     # Security Metadata
     # -------------------------------------------------------------------------
 
-    async def update_security_metadata(self, symbol: str, data: dict, market_id: str = None) -> None:
+    async def update_security_metadata(self, symbol: str, data: dict, market_id: str | None = None) -> None:
         """Update security with raw Tradernet metadata."""
         import json
 
         updates = ["data = ?", "last_synced = datetime('now')"]
-        params = [json.dumps(data)]
+        params: list[str | int] = [json.dumps(data)]
 
         if market_id:
             updates.append("market_id = ?")
@@ -601,7 +603,8 @@ class Database(BaseDatabase):
     async def seed_default_job_schedules(self) -> None:
         """Seed default job schedules if table is empty."""
         cursor = await self.conn.execute("SELECT COUNT(*) FROM job_schedules")
-        count = (await cursor.fetchone())[0]
+        row = await cursor.fetchone()
+        count = row[0] if row else 0
         if count > 0:
             return
 
@@ -624,6 +627,7 @@ class Database(BaseDatabase):
             ("trading:check_markets", 30, 30, 2, "trading", "Check which markets are open"),
             ("trading:execute", 30, 15, 2, "trading", "Execute pending trade recommendations"),
             ("trading:rebalance", 60, 60, 0, "trading", "Check portfolio rebalance needs"),
+            ("trading:balance_fix", 15, 15, 0, "trading", "Fix negative currency balances"),
             ("planning:refresh", 60, 30, 0, "trading", "Refresh trading plan and recommendations"),
             ("ml:retrain", 10080, 10080, 3, "ml", "Retrain ML models for all ML-enabled securities"),
             ("ml:monitor", 10080, 10080, 0, "ml", "Monitor ML performance for all ML-enabled securities"),

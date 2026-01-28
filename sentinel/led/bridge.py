@@ -29,7 +29,7 @@ class LEDBridge:
             Returns False gracefully if not running on Arduino UNO Q.
         """
         try:
-            from arduino.app_utils import Bridge
+            from arduino.app_utils import Bridge  # type: ignore[import-not-found]
 
             self._bridge = Bridge
             self._connected = True

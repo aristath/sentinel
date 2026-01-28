@@ -201,10 +201,13 @@ class Analyzer:
         """Analyze the long-term trend direction and strength."""
         # Linear regression on the trend component
         x = np.arange(len(long_term))
-        slope, _, r_value, _, _ = stats.linregress(x, long_term)
+        regress_result = stats.linregress(x, long_term)
+        slope = float(regress_result[0])  # type: ignore[arg-type]  # slope
+        r_value = float(regress_result[2])  # type: ignore[arg-type]  # rvalue
 
         # Normalize slope by average value
-        avg_val = np.mean(np.abs(long_term))
+        avg_val = float(np.mean(np.abs(long_term)))
+        normalized_slope = 0.0
         if avg_val > 0:
             normalized_slope = slope / avg_val * 252  # Annualize
 
@@ -279,7 +282,7 @@ class Analyzer:
             return 0.0
 
         consistency = trend_var / total_var
-        return np.clip(consistency, 0.0, 1.0)
+        return float(np.clip(consistency, 0.0, 1.0))
 
     def _calculate_cagr(self, prices: np.ndarray) -> float:
         """Calculate Compound Annual Growth Rate."""
@@ -765,7 +768,7 @@ class Analyzer:
 
         return count
 
-    def invalidate_cache(self, symbol: str = None) -> int:
+    def invalidate_cache(self, symbol: str | None = None) -> int:
         """
         Invalidate cached analysis results.
 

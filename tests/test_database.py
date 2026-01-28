@@ -454,13 +454,24 @@ class TestCashBalances:
         assert "USD" in result
 
     @pytest.mark.asyncio
-    async def test_zero_balance_not_stored(self, temp_db):
-        """Zero balances are not stored."""
+    async def test_zero_balance_stored(self, temp_db):
+        """Zero balances are stored."""
         await temp_db.set_cash_balances({"EUR": 0.0, "USD": 100.0})
 
         result = await temp_db.get_cash_balances()
-        assert "EUR" not in result
+        assert "EUR" in result
+        assert result["EUR"] == 0.0
         assert "USD" in result
+
+    @pytest.mark.asyncio
+    async def test_negative_balance_stored(self, temp_db):
+        """Negative balances (margin) are stored correctly."""
+        await temp_db.set_cash_balances({"EUR": -2309.04, "USD": 7.5, "GBP": -2.11})
+
+        result = await temp_db.get_cash_balances()
+        assert result["EUR"] == -2309.04
+        assert result["USD"] == 7.5
+        assert result["GBP"] == -2.11
 
 
 class TestAllocationTargets:

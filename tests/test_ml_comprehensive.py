@@ -275,7 +275,7 @@ class TestNeuralNetEdgeCases:
         nn.build_model()
         X = np.random.randn(5, NUM_FEATURES)
 
-        with pytest.raises((AttributeError, ValueError)):
+        with pytest.raises((AttributeError, ValueError, AssertionError)):
             nn.predict(X)
 
 

@@ -278,7 +278,7 @@ class Broker:
         mode = await self._settings.get("trading_mode", "research")
         return mode == "live"
 
-    async def buy(self, symbol: str, quantity: int, price: float = None) -> Optional[str]:
+    async def buy(self, symbol: str, quantity: int, price: float | None = None) -> Optional[str]:
         """Place a buy order. Returns order ID if successful.
 
         Args:
@@ -296,17 +296,17 @@ class Broker:
         if not self._trading:
             return None
         try:
-            kwargs = {"quantity": quantity}
             if price is not None:
-                kwargs["price"] = price
-            response = self._trading.buy(symbol, **kwargs)
+                response = self._trading.buy(symbol, quantity=quantity, price=price)
+            else:
+                response = self._trading.buy(symbol, quantity=quantity)
             logger.info(f"Buy {symbol} response: {response}")
             return response.get("order_id") if response else None
         except Exception as e:
             logger.error(f"Failed to buy {symbol}: {e}")
             return None
 
-    async def sell(self, symbol: str, quantity: int, price: float = None) -> Optional[str]:
+    async def sell(self, symbol: str, quantity: int, price: float | None = None) -> Optional[str]:
         """Place a sell order. Returns order ID if successful.
 
         Args:
@@ -324,10 +324,10 @@ class Broker:
         if not self._trading:
             return None
         try:
-            kwargs = {"quantity": quantity}
             if price is not None:
-                kwargs["price"] = price
-            response = self._trading.sell(symbol, **kwargs)
+                response = self._trading.sell(symbol, quantity=quantity, price=price)
+            else:
+                response = self._trading.sell(symbol, quantity=quantity)
             logger.info(f"Sell {symbol} response: {response}")
             return response.get("order_id") if response else None
         except Exception as e:
@@ -396,7 +396,7 @@ class Broker:
     async def get_trades_history(
         self,
         start_date: str = "2020-01-01",
-        end_date: str = None,
+        end_date: str | None = None,
     ) -> list[dict]:
         """
         Fetch trade history from Tradernet API.

@@ -14,6 +14,7 @@ Usage:
 
 import asyncio
 import json
+import math
 from dataclasses import asdict, dataclass
 from typing import Optional
 
@@ -288,7 +289,8 @@ class Planner:
         # Get min_trade_value from settings if not provided
         if min_trade_value is None:
             settings = Settings()
-            min_trade_value = await settings.get("min_trade_value", default=100.0)
+            setting_value = await settings.get("min_trade_value", default=100.0)
+            min_trade_value = float(setting_value) if setting_value is not None else 100.0
 
         # Check cache first
         cache_key = f"planner:recommendations:{min_trade_value}"
@@ -582,6 +584,15 @@ class Planner:
 
         # Sort: SELL first (to generate cash for buys), then by priority within each action type
         recommendations.sort(key=lambda x: (0 if x.action == "sell" else 1, -x.priority))
+
+        # Add deficit-fix sells at the front (highest priority)
+        deficit_sells = await self._get_deficit_sells()
+        if deficit_sells:
+            # Remove any normal sells that overlap with deficit-fix sells (avoid duplicates)
+            deficit_symbols = {s.symbol for s in deficit_sells}
+            recommendations = [r for r in recommendations if r.symbol not in deficit_symbols or r.action != "sell"]
+            # Deficit sells go first - they have priority 1000
+            recommendations = deficit_sells + recommendations
 
         # Apply cash constraint: scale down buys to fit available budget
         recommendations = await self._apply_cash_constraint(recommendations, min_trade_value)
@@ -943,6 +954,184 @@ class Planner:
 
         # Same direction as last trade, or enough time has passed
         return False, ""
+
+    # -------------------------------------------------------------------------
+    # Negative Balance Fixes
+    # -------------------------------------------------------------------------
+
+    # Buffer to maintain above zero when calculating deficit (avoid oscillating)
+    BALANCE_BUFFER_EUR = 10.0
+
+    async def _get_deficit_sells(self) -> list[TradeRecommendation]:
+        """
+        Generate sell recommendations if negative balances can't be covered by positive balances.
+
+        A separate job handles currency conversions. This method only generates sells
+        when the total positive currency balances are insufficient to cover the deficit.
+
+        Returns:
+            List of TradeRecommendation for sells to cover uncoverable deficit
+        """
+        # Get current cash balances
+        balances = await self._db.get_cash_balances()
+
+        # Calculate total deficit (negative balances) in EUR
+        # Buffer is always in EUR terms, added after converting to EUR
+        total_deficit_eur = 0.0
+        for currency, amount in balances.items():
+            if amount < 0:
+                if currency == "EUR":
+                    total_deficit_eur += abs(amount) + self.BALANCE_BUFFER_EUR
+                else:
+                    total_deficit_eur += await self._currency.to_eur(abs(amount), currency) + self.BALANCE_BUFFER_EUR
+
+        if total_deficit_eur == 0:
+            return []
+
+        # Calculate total positive balances in EUR (these will be converted by separate job)
+        total_positive_eur = 0.0
+        for currency, amount in balances.items():
+            if amount > 0:
+                total_positive_eur += await self._currency.to_eur(amount, currency)
+
+        # Only generate sells if positive balances can't cover the deficit
+        uncovered_deficit = total_deficit_eur - total_positive_eur
+        if uncovered_deficit <= 0:
+            return []
+
+        return await self._generate_deficit_sells(uncovered_deficit)
+
+    async def _generate_deficit_sells(self, deficit_eur: float) -> list[TradeRecommendation]:
+        """
+        Generate sell recommendations to cover remaining deficit.
+
+        Prioritizes: lowest score first, then smallest position first.
+
+        Args:
+            deficit_eur: Amount in EUR that needs to be raised
+
+        Returns:
+            List of TradeRecommendation for sells to cover deficit
+        """
+        sells: list[TradeRecommendation] = []
+        remaining_deficit = deficit_eur
+
+        # Get all positions with their scores
+        positions = await self._db.get_all_positions()
+        if not positions:
+            return sells
+
+        # Fetch scores for all positions
+        position_data = []
+        for pos in positions:
+            symbol = pos["symbol"]
+            qty = pos.get("quantity", 0)
+            if qty <= 0:
+                continue
+
+            price = pos.get("current_price", 0)
+            if price <= 0:
+                continue
+
+            # Get security data
+            sec = await self._db.get_security(symbol)
+            if not sec:
+                continue
+
+            # Check if selling is allowed
+            if not sec.get("allow_sell", 1):
+                continue
+
+            currency = sec.get("currency", "EUR")
+            lot_size = sec.get("min_lot", 1)
+
+            # Get score
+            cursor = await self._db.conn.execute("SELECT score FROM scores WHERE symbol = ?", (symbol,))
+            row = await cursor.fetchone()
+            score = row["score"] if row and row["score"] is not None else 0
+
+            # Calculate EUR value
+            local_value = qty * price
+            eur_value = await self._currency.to_eur(local_value, currency)
+
+            position_data.append(
+                {
+                    "symbol": symbol,
+                    "quantity": qty,
+                    "price": price,
+                    "currency": currency,
+                    "lot_size": lot_size,
+                    "score": score,
+                    "eur_value": eur_value,
+                }
+            )
+
+        # Sort by: lowest score first, then smallest value first
+        position_data.sort(key=lambda x: (x["score"], x["eur_value"]))
+
+        # Generate sells until deficit is covered
+        total_value = await self._portfolio.total_value()
+
+        for pos in position_data:
+            if remaining_deficit <= 0:
+                break
+
+            symbol = pos["symbol"]
+            qty = pos["quantity"]
+            price = pos["price"]
+            currency = pos["currency"]
+            lot_size = pos["lot_size"]
+            eur_value = pos["eur_value"]
+            score = pos["score"]
+
+            # Calculate how many shares to sell
+            if eur_value <= remaining_deficit:
+                # Sell entire position
+                sell_qty = (qty // lot_size) * lot_size
+            else:
+                # Sell partial position
+                # Calculate shares needed to cover remaining deficit
+                rate = await self._currency.get_rate(currency)
+                if rate > 0:
+                    local_needed = remaining_deficit / rate
+                else:
+                    local_needed = remaining_deficit
+                shares_needed = local_needed / price
+                # Round up to next lot size (ceil division)
+                sell_qty = math.ceil(shares_needed / lot_size) * lot_size
+                sell_qty = min(sell_qty, qty)  # Don't sell more than we have
+
+            if sell_qty < lot_size:
+                continue
+
+            # Calculate allocations for the recommendation
+            current_alloc = eur_value / total_value if total_value > 0 else 0
+            sell_value_local = sell_qty * price
+            sell_value_eur = await self._currency.to_eur(sell_value_local, currency)
+
+            sells.append(
+                TradeRecommendation(
+                    symbol=symbol,
+                    action="sell",
+                    current_allocation=current_alloc,
+                    target_allocation=0,  # We're selling to cover deficit
+                    allocation_delta=-current_alloc,
+                    current_value_eur=eur_value,
+                    target_value_eur=eur_value - sell_value_eur,
+                    value_delta_eur=-sell_value_eur,
+                    quantity=sell_qty,
+                    price=price,
+                    currency=currency,
+                    lot_size=lot_size,
+                    expected_return=score,
+                    priority=1000,  # High priority - deficit fix
+                    reason=f"Sell to cover negative balance deficit ({remaining_deficit:.0f} EUR remaining)",
+                )
+            )
+
+            remaining_deficit -= sell_value_eur
+
+        return sells
 
     async def get_rebalance_summary(self) -> dict:
         """

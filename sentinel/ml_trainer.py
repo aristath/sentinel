@@ -28,7 +28,7 @@ class TrainingDataGenerator:
     async def generate_training_data(
         self,
         start_date: str = "2017-01-01",
-        end_date: str = None,
+        end_date: str | None = None,
         symbols: Optional[List[str]] = None,
         prediction_horizon_days: int = 14,
     ) -> pd.DataFrame:

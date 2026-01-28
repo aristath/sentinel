@@ -201,8 +201,8 @@ class FeatureExtractor:
             # =====================================================================
             # Price Position (1 feature)
             # =====================================================================
-            current_price = price_data["close"].iloc[-1]
-            ma_200 = price_data["close"].rolling(200).mean().iloc[-1]
+            current_price = price_data["close"].iloc[-1]  # type: ignore[union-attr]
+            ma_200 = price_data["close"].rolling(200).mean().iloc[-1]  # type: ignore[union-attr]
             if pd.notna(ma_200) and ma_200 > 0:
                 features["price_normalized"] = (current_price - ma_200) / ma_200
             else:
@@ -222,7 +222,7 @@ class FeatureExtractor:
             # ATR (Average True Range)
             if "high" in price_data.columns and "low" in price_data.columns:
                 try:
-                    atr_indicator = ta.volatility.AverageTrueRange(
+                    atr_indicator = ta.volatility.AverageTrueRange(  # type: ignore[attr-defined]
                         price_data["high"], price_data["low"], price_data["close"], window=14
                     )
                     atr_value = atr_indicator.average_true_range().iloc[-1]
@@ -240,16 +240,16 @@ class FeatureExtractor:
             # Volume (2 features)
             # =====================================================================
             if "volume" in price_data.columns and price_data["volume"].notna().any():  # type: ignore[reportGeneralClassIssues]
-                current_volume = price_data["volume"].iloc[-1]
-                avg_volume_20d = price_data["volume"].rolling(20).mean().iloc[-1]
+                current_volume = price_data["volume"].iloc[-1]  # type: ignore[union-attr]
+                avg_volume_20d = price_data["volume"].rolling(20).mean().iloc[-1]  # type: ignore[union-attr]
 
                 if pd.notna(avg_volume_20d) and avg_volume_20d > 0 and pd.notna(current_volume):
                     features["volume_normalized"] = float(current_volume / avg_volume_20d)
                 else:
                     features["volume_normalized"] = 1.0
 
-                volume_ma_5 = price_data["volume"].rolling(5).mean().iloc[-1]
-                volume_ma_20 = price_data["volume"].rolling(20).mean().iloc[-1]
+                volume_ma_5 = price_data["volume"].rolling(5).mean().iloc[-1]  # type: ignore[union-attr]
+                volume_ma_20 = price_data["volume"].rolling(20).mean().iloc[-1]  # type: ignore[union-attr]
                 if pd.notna(volume_ma_5) and pd.notna(volume_ma_20) and volume_ma_20 > 0:
                     features["volume_trend"] = float((volume_ma_5 - volume_ma_20) / volume_ma_20)
                 else:
@@ -263,7 +263,7 @@ class FeatureExtractor:
             # =====================================================================
             # RSI
             try:
-                rsi_indicator = ta.momentum.RSIIndicator(price_data["close"], window=14)
+                rsi_indicator = ta.momentum.RSIIndicator(price_data["close"], window=14)  # type: ignore[attr-defined]
                 rsi_value = rsi_indicator.rsi().iloc[-1]
                 features["rsi_14"] = float(rsi_value / 100.0) if pd.notna(rsi_value) else 0.5
             except Exception as e:
@@ -272,7 +272,7 @@ class FeatureExtractor:
 
             # MACD
             try:
-                macd_indicator = ta.trend.MACD(price_data["close"])
+                macd_indicator = ta.trend.MACD(price_data["close"])  # type: ignore[attr-defined]
                 macd_value = macd_indicator.macd_diff().iloc[-1]
                 if pd.notna(macd_value) and current_price > 0:
                     normalized_macd = np.clip(macd_value / current_price, -0.1, 0.1) / 0.1
@@ -285,7 +285,7 @@ class FeatureExtractor:
 
             # Bollinger Bands position
             try:
-                bollinger = ta.volatility.BollingerBands(price_data["close"], window=20, window_dev=2)
+                bollinger = ta.volatility.BollingerBands(price_data["close"], window=20, window_dev=2)  # type: ignore[attr-defined]
                 bb_high = bollinger.bollinger_hband().iloc[-1]
                 bb_low = bollinger.bollinger_lband().iloc[-1]
                 if pd.notna(bb_high) and pd.notna(bb_low) and bb_high > bb_low:
@@ -419,6 +419,8 @@ class FeatureExtractor:
             price_data = self._aggregate_cache[agg_symbol]
         else:
             # Load aggregate price data
+            if self.db is None:
+                return features
             prices_bulk = await self.db.get_prices_bulk([agg_symbol])
             prices = prices_bulk.get(agg_symbol, [])
 
@@ -442,21 +444,21 @@ class FeatureExtractor:
 
             # Momentum: 20-day return
             if len(closes) >= 21:
-                current = closes.iloc[-1]
-                past = closes.iloc[-21]
+                current = closes.iloc[-1]  # type: ignore[union-attr]
+                past = closes.iloc[-21]  # type: ignore[union-attr]
                 if pd.notna(current) and pd.notna(past) and past > 0:
                     features[f"{prefix}_agg_momentum"] = float((current / past) - 1.0)
 
             # RSI-14 (normalized to 0-1)
             if len(closes) >= 15:
-                rsi_indicator = ta.momentum.RSIIndicator(closes, window=14)
+                rsi_indicator = ta.momentum.RSIIndicator(closes, window=14)  # type: ignore[attr-defined]
                 rsi_value = rsi_indicator.rsi().iloc[-1]
                 if pd.notna(rsi_value):
                     features[f"{prefix}_agg_rsi"] = float(rsi_value / 100.0)
 
             # Volatility: 20-day rolling std of returns
             if len(closes) >= 21:
-                returns = closes.pct_change()
+                returns = closes.pct_change()  # type: ignore[union-attr]
                 vol = returns.rolling(20).std().iloc[-1]
                 if pd.notna(vol):
                     features[f"{prefix}_agg_volatility"] = float(vol)

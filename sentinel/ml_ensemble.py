@@ -96,7 +96,7 @@ class NumpyNeuralNetwork:
         beta: np.ndarray,
         running_mean: np.ndarray,
         running_var: np.ndarray,
-    ) -> Tuple[np.ndarray, Dict]:
+    ) -> Tuple[np.ndarray, Optional[Dict]]:
         """
         BatchNorm forward pass.
 
@@ -173,7 +173,7 @@ class NumpyNeuralNetwork:
         """ReLU backward pass."""
         return dout * (x > 0).astype(np.float32)
 
-    def _dropout(self, x: np.ndarray, rate: float) -> Tuple[np.ndarray, np.ndarray]:
+    def _dropout(self, x: np.ndarray, rate: float) -> Tuple[np.ndarray, Optional[np.ndarray]]:
         """
         Dropout forward pass.
 
@@ -437,14 +437,17 @@ class NeuralNetReturnPredictor:
         """
         # Scale features (fit on training data only)
         self.scaler = StandardScaler()
-        X_train_scaled = self.scaler.fit_transform(X_train).astype(np.float32)
-        X_val_scaled = self.scaler.transform(X_val).astype(np.float32)
+        X_train_scaled = self.scaler.fit_transform(X_train).astype(np.float32)  # type: ignore[union-attr]
+        X_val_scaled = self.scaler.transform(X_val).astype(np.float32)  # type: ignore[union-attr]
         y_train = y_train.astype(np.float32)
         y_val = y_val.astype(np.float32)
 
         # Build model if not exists
         if self.model is None:
             self.build_model(input_dim=X_train.shape[1])
+
+        # Assert model is built
+        assert self.model is not None
 
         # Check minimum samples for BatchNorm
         n_train = len(X_train_scaled)
@@ -505,7 +508,7 @@ class NeuralNetReturnPredictor:
             # Validation phase
             self.model.eval_mode()
             val_predictions = self.model.forward(X_val_scaled)
-            val_loss = np.mean((val_predictions.flatten() - y_val) ** 2)
+            val_loss = float(np.mean((val_predictions.flatten() - y_val) ** 2))
             history["val_loss"].append(val_loss)
 
             # Early stopping check
@@ -556,6 +559,7 @@ class NeuralNetReturnPredictor:
         eps: float = 1e-8,
     ):
         """Apply Adam optimizer update."""
+        assert self.model is not None
         # Map gradient names to model attributes
         param_map = {
             "W1": (self.model.weights, 0),
@@ -605,22 +609,24 @@ class NeuralNetReturnPredictor:
         Returns:
             Predicted returns (N,)
         """
-        X_scaled = self.scaler.transform(X).astype(np.float32)
+        assert self.model is not None and self.scaler is not None
+        X_scaled = self.scaler.transform(X).astype(np.float32)  # type: ignore[union-attr]
         self.model.eval_mode()
         predictions = self.model.forward(X_scaled).flatten()
         return predictions
 
     def save(self, path: str):
         """Save model, scaler, metadata."""
-        path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
+        assert self.model is not None
+        save_path = Path(path)
+        save_path.mkdir(parents=True, exist_ok=True)
 
         # Save model state as NumPy archive
         state = self.model.get_state()
-        np.savez(path / "nn_model.npz", **state)
+        np.savez(save_path / "nn_model.npz", **state)
 
         # Save scaler
-        with open(path / "nn_scaler.pkl", "wb") as f:
+        with open(save_path / "nn_scaler.pkl", "wb") as f:
             pickle.dump(self.scaler, f)
 
         # Save metadata
@@ -629,52 +635,53 @@ class NeuralNetReturnPredictor:
             "input_dim": self.input_dim,
             "architecture": [self.input_dim, 64, 32, 16, 1],
         }
-        with open(path / "nn_metadata.json", "w") as f:
+        with open(save_path / "nn_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
 
     def load(self, path: str):
         """Load model, scaler, metadata."""
-        path = Path(path)
+        load_path = Path(path)
 
         # Check for old PyTorch format
-        if (path / "nn_model.pt").exists() and not (path / "nn_model.npz").exists():
+        if (load_path / "nn_model.pt").exists() and not (load_path / "nn_model.npz").exists():
             raise RuntimeError(
-                f"Found old PyTorch model at {path / 'nn_model.pt'}. "
+                f"Found old PyTorch model at {load_path / 'nn_model.pt'}. "
                 "This format is no longer supported after NumPy migration. "
                 "Delete the old model files and retrain."
             )
 
         # Check for old Keras format
-        if (path / "nn_model.keras").exists():
+        if (load_path / "nn_model.keras").exists():
             raise RuntimeError(
-                f"Found old Keras model at {path / 'nn_model.keras'}. "
+                f"Found old Keras model at {load_path / 'nn_model.keras'}. "
                 "This format is no longer supported. Delete and retrain."
             )
 
         # Load metadata to get input_dim
-        with open(path / "nn_metadata.json", "r") as f:
+        with open(load_path / "nn_metadata.json", "r") as f:
             metadata = json.load(f)
             self.input_dim = metadata.get("input_dim", NUM_FEATURES)
 
         # Validate input dimension matches current feature count
         if self.input_dim != NUM_FEATURES:
             raise RuntimeError(
-                f"Model at {path} was trained with {self.input_dim} features, "
+                f"Model at {load_path} was trained with {self.input_dim} features, "
                 f"but current system expects {NUM_FEATURES} features. "
                 "Delete the old model files and retrain with the new feature set."
             )
 
         # Rebuild model with correct input dim
         self.build_model(input_dim=self.input_dim)
+        assert self.model is not None
 
         # Load model state from NumPy archive
-        with np.load(path / "nn_model.npz") as data:
+        with np.load(load_path / "nn_model.npz") as data:
             state = {key: data[key] for key in data.files}
         self.model.set_state(state)
         self.model.eval_mode()
 
         # Load scaler
-        with open(path / "nn_scaler.pkl", "rb") as f:
+        with open(load_path / "nn_scaler.pkl", "rb") as f:
             self.scaler = pickle.load(f)  # noqa: S301
 
 
@@ -780,39 +787,43 @@ class XGBoostReturnPredictor:
         Returns:
             Predicted returns (N,)
         """
+        assert self.model is not None and self.scaler is not None
         X_scaled = self.scaler.transform(X)
         predictions = self.model.predict(X_scaled)
         return predictions
 
     def save(self, path: str):
         """Save model, scaler, metadata, and feature importance."""
-        path = Path(path)
-        path.mkdir(parents=True, exist_ok=True)
+        assert self.model is not None
+        save_path = Path(path)
+        save_path.mkdir(parents=True, exist_ok=True)
 
         # Save model
-        self.model.save_model(str(path / "xgb_model.json"))
+        self.model.save_model(str(save_path / "xgb_model.json"))
 
         # Save scaler
-        with open(path / "xgb_scaler.pkl", "wb") as f:
+        with open(save_path / "xgb_scaler.pkl", "wb") as f:
             pickle.dump(self.scaler, f)
 
         # Save metadata with feature importance
+        n_estimators = self.model.n_estimators if self.model.n_estimators is not None else 150
+        max_depth = self.model.max_depth if self.model.max_depth is not None else 4
         metadata = {
             "model_type": "xgboost",
             "input_dim": NUM_FEATURES,
-            "n_estimators": int(self.model.n_estimators),
-            "max_depth": int(self.model.max_depth),
+            "n_estimators": int(n_estimators),
+            "max_depth": int(max_depth),
             "feature_importance": self.feature_importance or {},
         }
-        with open(path / "xgb_metadata.json", "w") as f:
+        with open(save_path / "xgb_metadata.json", "w") as f:
             json.dump(metadata, f, indent=2)
 
     def load(self, path: str):
         """Load model, scaler, metadata, and feature importance."""
-        path = Path(path)
+        load_path = Path(path)
 
         # Load metadata first to validate input_dim
-        metadata_path = path / "xgb_metadata.json"
+        metadata_path = load_path / "xgb_metadata.json"
         if metadata_path.exists():
             with open(metadata_path, "r") as f:
                 metadata = json.load(f)
@@ -822,17 +833,17 @@ class XGBoostReturnPredictor:
                 saved_input_dim = metadata.get("input_dim")
                 if saved_input_dim is not None and saved_input_dim != NUM_FEATURES:
                     raise RuntimeError(
-                        f"XGBoost model at {path} was trained with {saved_input_dim} features, "
+                        f"XGBoost model at {load_path} was trained with {saved_input_dim} features, "
                         f"but current system expects {NUM_FEATURES} features. "
                         "Delete the old model files and retrain with the new feature set."
                     )
 
         # Load model
         self.model = xgb.XGBRegressor()
-        self.model.load_model(str(path / "xgb_model.json"))
+        self.model.load_model(str(load_path / "xgb_model.json"))
 
         # Load scaler
-        with open(path / "xgb_scaler.pkl", "rb") as f:
+        with open(load_path / "xgb_scaler.pkl", "rb") as f:
             self.scaler = pickle.load(f)  # noqa: S301
 
 
@@ -874,28 +885,35 @@ class EnsembleBlender:
             Combined training metrics (all computed on the same validation set)
         """
         # Split data ONCE - both models use the same split
-        X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=validation_split, random_state=42)
+        X_train_split, X_val_split, y_train_split, y_val_split = train_test_split(
+            X, y, test_size=validation_split, random_state=42
+        )
+        # Ensure numpy arrays for type safety
+        X_train_arr: np.ndarray = np.asarray(X_train_split)
+        X_val_arr: np.ndarray = np.asarray(X_val_split)
+        y_train_arr: np.ndarray = np.asarray(y_train_split)
+        y_val_arr: np.ndarray = np.asarray(y_val_split)
 
-        logger.info(f"Training data: {len(X_train)} samples, Validation: {len(X_val)} samples")
+        logger.info(f"Training data: {len(X_train_arr)} samples, Validation: {len(X_val_arr)} samples")
 
         logger.info("Training Neural Network...")
-        nn_metrics = self.nn_predictor.train(X_train, y_train, X_val, y_val)
+        nn_metrics = self.nn_predictor.train(X_train_arr, y_train_arr, X_val_arr, y_val_arr)
 
         logger.info("Training XGBoost...")
-        xgb_metrics = self.xgb_predictor.train(X_train, y_train, X_val, y_val)
+        xgb_metrics = self.xgb_predictor.train(X_train_arr, y_train_arr, X_val_arr, y_val_arr)
 
         # Calculate ensemble validation metrics on the SAME validation set
-        nn_preds = self.nn_predictor.predict(X_val)
-        xgb_preds = self.xgb_predictor.predict(X_val)
+        nn_preds = self.nn_predictor.predict(X_val_arr)
+        xgb_preds = self.xgb_predictor.predict(X_val_arr)
 
         ensemble_preds = self.nn_weight * nn_preds + self.xgb_weight * xgb_preds
 
-        ensemble_mae = np.mean(np.abs(ensemble_preds - y_val))
-        ensemble_rmse = np.sqrt(np.mean((ensemble_preds - y_val) ** 2))
+        ensemble_mae = np.mean(np.abs(ensemble_preds - y_val_arr))
+        ensemble_rmse = np.sqrt(np.mean((ensemble_preds - y_val_arr) ** 2))
 
         # Calculate R²
-        ss_res = np.sum((y_val - ensemble_preds) ** 2)
-        ss_tot = np.sum((y_val - np.mean(y_val)) ** 2)
+        ss_res = np.sum((y_val_arr - ensemble_preds) ** 2)
+        ss_tot = np.sum((y_val_arr - np.mean(y_val_arr)) ** 2)
         ensemble_r2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
 
         logger.info(f"Ensemble validation: MAE={ensemble_mae:.4f}, RMSE={ensemble_rmse:.4f}, R²={ensemble_r2:.4f}")
@@ -969,8 +987,8 @@ class EnsembleBlender:
         path.mkdir(parents=True, exist_ok=True)
 
         # Save both models
-        self.nn_predictor.save(path)
-        self.xgb_predictor.save(path)
+        self.nn_predictor.save(str(path))
+        self.xgb_predictor.save(str(path))
 
         # Save ensemble metadata
         metadata = {
@@ -995,8 +1013,8 @@ class EnsembleBlender:
         path = DATA_DIR / "ml_models" / symbol
 
         # Load both models
-        self.nn_predictor.load(path)
-        self.xgb_predictor.load(path)
+        self.nn_predictor.load(str(path))
+        self.xgb_predictor.load(str(path))
 
         # Load ensemble metadata
         with open(path / "ensemble_metadata.json", "r") as f:

@@ -55,7 +55,7 @@ class MLMonitor:
             ORDER BY symbol, predicted_at
         """
         cursor = await self.db.conn.execute(query, (start_date, end_date))
-        predictions = await cursor.fetchall()
+        predictions = list(await cursor.fetchall())
 
         if len(predictions) == 0:
             logger.info("No predictions to evaluate yet")
@@ -236,7 +236,7 @@ class MLMonitor:
         """
         cutoff = datetime.now().isoformat()
         cursor = await self.db.conn.execute(query, (symbol, cutoff))
-        historical = await cursor.fetchall()
+        historical = list(await cursor.fetchall())
 
         if len(historical) < 5:
             logger.debug(f"{symbol}: Not enough historical data for drift detection")
@@ -262,7 +262,7 @@ class MLMonitor:
         drift_mae = current_mae > (baseline_mae + 2 * std_mae) if std_mae > epsilon else False
         drift_rmse = current_rmse > (baseline_rmse + 2 * std_rmse) if std_rmse > epsilon else False
 
-        return drift_mae or drift_rmse
+        return bool(drift_mae or drift_rmse)
 
     async def generate_report(self) -> str:
         """Generate performance report for all symbols."""
@@ -358,13 +358,13 @@ Top 10 Symbols by MAE (worst first):
             ORDER BY predicted_at
         """
         cursor = await self.db.conn.execute(query, (symbol, start_date, end_date))
-        predictions = await cursor.fetchall()
+        predictions = list(await cursor.fetchall())
 
         if len(predictions) == 0:
             return None
 
         # Evaluate predictions
-        metrics = await self._evaluate_symbol(symbol, predictions, horizon_days)
+        metrics = await self._evaluate_symbol(symbol, list(predictions), horizon_days)
 
         if metrics and metrics["predictions_evaluated"] > 0:
             tracked_at = datetime.now().isoformat()

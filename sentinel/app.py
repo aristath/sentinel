@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # Global instances
 _scheduler = None  # APScheduler instance
 _led_controller = None
-_led_task: asyncio.Task = None
+_led_task: asyncio.Task | None = None
 
 
 @asynccontextmanager
@@ -147,7 +147,7 @@ async def _sync_missing_prices(db: Database, broker: Broker):
     for symbol in symbols:
         cursor = await db.conn.execute("SELECT COUNT(*) as cnt FROM prices WHERE symbol = ?", (symbol,))
         row = await cursor.fetchone()
-        if row["cnt"] < 100:  # Less than 100 days of data
+        if row is None or row["cnt"] < 100:  # Less than 100 days of data
             missing.append(symbol)
 
     if not missing:
@@ -740,11 +740,9 @@ async def get_unified_view(period: str = "1Y"):
 
         # Use blended final_score from ML predictions if available, otherwise fall back to wavelet score
         ml_pred = ml_preds_map.get(symbol, {})
-        base_expected_return = (
-            ml_pred.get("final_score")
-            if ml_pred.get("final_score") is not None
-            else (components.get("expected_return", 0) or 0)
-        )
+        ml_score = ml_pred.get("final_score")
+        fallback_score = components.get("expected_return", 0) or 0
+        base_expected_return: float = float(ml_score if ml_score is not None else fallback_score)
         adjusted_expected_return = adjust_score_for_conviction(base_expected_return, user_multiplier)
         conviction_boost = adjusted_expected_return - base_expected_return
 
@@ -1316,7 +1314,7 @@ async def update_job_schedule(job_type: str, data: dict):
 
 
 @app.get("/api/jobs/history")
-async def get_job_history(job_type: str = None, limit: int = 50):
+async def get_job_history(job_type: str | None = None, limit: int = 50):
     """Get job execution history."""
     db = Database()
 
@@ -1340,7 +1338,7 @@ async def get_cache_stats():
 
 
 @app.post("/api/cache/clear")
-async def clear_cache(name: str = None):
+async def clear_cache(name: str | None = None):
     """
     Clear cache entries.
 
