@@ -691,7 +691,8 @@ async def get_unified_view(period: str = "1Y"):
         # Check for price anomaly
         price_warning = None
         if current_price > 0 and prices:
-            historical_closes = [p["close"] for p in prices if p.get("close") and p["close"] > 0]
+            sorted_prices = sorted(prices, key=lambda p: p["date"])
+            historical_closes = [p["close"] for p in sorted_prices if p.get("close") and p["close"] > 0]
             price_warning = get_price_anomaly_warning(current_price, historical_closes, symbol)
 
         # Calculate P/L
