@@ -26,31 +26,38 @@ SUPPORTED_CURRENCIES = [
 # Currencies for rate fetching (excluding EUR which is the base)
 RATE_FETCH_CURRENCIES = [c for c in SUPPORTED_CURRENCIES if c != "EUR"]
 
-# Direct currency pairs available on Tradernet for FX operations
+# Direct currency pairs available on Tradernet for FX operations (MONEY market)
 # Format: (from_currency, to_currency) -> (symbol, action)
+#
+# BUY/SELL semantics follow standard forex convention:
+#   For instrument BASE/QUOTE: BUY = buy base (give quote), SELL = sell base (give quote)
+#   Verified against actively-traded HKD/EUR and HKD/USD pairs.
+#
+# NOTE: The old ITS_MONEY symbols (EURUSD_T0.ITS etc.) had zero volume and
+# inverted BUY/SELL. Replaced with actively-traded MONEY market symbols.
 DIRECT_PAIRS = {
-    # EUR <-> USD (ITS_MONEY market)
-    ("EUR", "USD"): ("EURUSD_T0.ITS", "BUY"),
-    ("USD", "EUR"): ("EURUSD_T0.ITS", "SELL"),
-    # EUR <-> GBP (ITS_MONEY market)
-    ("EUR", "GBP"): ("EURGBP_T0.ITS", "BUY"),
-    ("GBP", "EUR"): ("EURGBP_T0.ITS", "SELL"),
-    # GBP <-> USD (ITS_MONEY market)
-    ("GBP", "USD"): ("GBPUSD_T0.ITS", "BUY"),
-    ("USD", "GBP"): ("GBPUSD_T0.ITS", "SELL"),
-    # HKD <-> EUR (MONEY market, EXANTE)
-    ("EUR", "HKD"): ("HKD/EUR", "BUY"),
-    ("HKD", "EUR"): ("HKD/EUR", "SELL"),
-    # HKD <-> USD (MONEY market, EXANTE)
-    ("USD", "HKD"): ("HKD/USD", "BUY"),
-    ("HKD", "USD"): ("HKD/USD", "SELL"),
+    # EUR <-> USD (base=EUR, quote=USD)
+    ("EUR", "USD"): ("EUR/USD", "SELL"),  # sell EUR → get USD
+    ("USD", "EUR"): ("EUR/USD", "BUY"),  # buy EUR → give USD
+    # EUR <-> GBP (base=EUR, quote=GBP)
+    ("EUR", "GBP"): ("EUR/GBP", "SELL"),  # sell EUR → get GBP
+    ("GBP", "EUR"): ("EUR/GBP", "BUY"),  # buy EUR → give GBP
+    # GBP <-> USD (base=GBP, quote=USD)
+    ("GBP", "USD"): ("GBP/USD", "SELL"),  # sell GBP → get USD
+    ("USD", "GBP"): ("GBP/USD", "BUY"),  # buy GBP → give USD
+    # HKD <-> EUR (base=HKD, quote=EUR)
+    ("EUR", "HKD"): ("HKD/EUR", "BUY"),  # buy HKD → give EUR
+    ("HKD", "EUR"): ("HKD/EUR", "SELL"),  # sell HKD → get EUR
+    # HKD <-> USD (base=HKD, quote=USD)
+    ("USD", "HKD"): ("HKD/USD", "BUY"),  # buy HKD → give USD
+    ("HKD", "USD"): ("HKD/USD", "SELL"),  # sell HKD → get USD
 }
 
-# Symbols for rate lookups (base_currency -> quote_currency)
+# Symbols for rate lookups (MONEY market)
 RATE_SYMBOLS = {
-    ("EUR", "USD"): "EURUSD_T0.ITS",
-    ("EUR", "GBP"): "EURGBP_T0.ITS",
-    ("GBP", "USD"): "GBPUSD_T0.ITS",
+    ("EUR", "USD"): "EUR/USD",
+    ("EUR", "GBP"): "EUR/GBP",
+    ("GBP", "USD"): "GBP/USD",
     ("HKD", "EUR"): "HKD/EUR",
     ("HKD", "USD"): "HKD/USD",
 }
