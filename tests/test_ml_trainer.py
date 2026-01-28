@@ -340,19 +340,24 @@ class TestDataStorage:
 class TestFeatureConsistency:
     """Tests for feature name consistency."""
 
-    def test_num_features_is_14(self):
-        """NUM_FEATURES should be 14 (per-security features only)."""
-        assert NUM_FEATURES == 14
+    def test_num_features_is_20(self):
+        """NUM_FEATURES should be 20 (14 core + 6 aggregate market context)."""
+        assert NUM_FEATURES == 20
 
     def test_feature_names_count(self):
-        """FEATURE_NAMES should have 14 entries."""
-        assert len(FEATURE_NAMES) == 14
+        """FEATURE_NAMES should have 20 entries."""
+        assert len(FEATURE_NAMES) == 20
 
-    def test_feature_names_no_cross_security(self):
-        """Feature names should not include cross-security data."""
-        # These would indicate cross-security contamination
-        cross_security_patterns = ["market_", "sector_", "index_", "cross_"]
+    def test_feature_names_structure(self):
+        """Feature names should follow expected patterns."""
+        # Core features (14)
+        core_features = [
+            f
+            for f in FEATURE_NAMES
+            if not f.endswith("_agg_momentum") and not f.endswith("_agg_rsi") and not f.endswith("_agg_volatility")
+        ]
+        assert len(core_features) == 14
 
-        for name in FEATURE_NAMES:
-            for pattern in cross_security_patterns:
-                assert not name.startswith(pattern), f"Feature {name} suggests cross-security data"
+        # Aggregate features (6)
+        agg_features = [f for f in FEATURE_NAMES if "agg" in f]
+        assert len(agg_features) == 6

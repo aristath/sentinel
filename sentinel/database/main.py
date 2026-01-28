@@ -625,6 +625,7 @@ class Database(BaseDatabase):
             ("sync:quotes", 1440, 1440, 0, "sync", "Sync current quotes"),
             ("sync:metadata", 1440, 1440, 0, "sync", "Sync security metadata"),
             ("sync:exchange_rates", 60, 60, 0, "sync", "Sync exchange rates"),
+            ("aggregate:compute", 1440, 1440, 1, "sync", "Compute aggregate price series"),
             ("scoring:calculate", 1440, 1440, 0, "scoring", "Calculate security scores"),
             ("analytics:regime", 10080, 10080, 3, "analytics", "Train regime detection model"),
             ("trading:check_markets", 30, 30, 2, "trading", "Check which markets are open"),
@@ -734,7 +735,7 @@ class Database(BaseDatabase):
         CREATE INDEX IF NOT EXISTS idx_regime_symbol_date ON regime_states(symbol, date DESC);
 
         -- ML Per-Security Prediction Tables
-        -- 14 features per security - no cross-security contamination
+        -- 20 features per security (14 core + 6 aggregate market context)
         CREATE TABLE IF NOT EXISTS ml_training_samples (
             sample_id TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
@@ -753,6 +754,12 @@ class Database(BaseDatabase):
             macd REAL,
             bollinger_position REAL,
             sentiment_score REAL,
+            country_agg_momentum REAL,
+            country_agg_rsi REAL,
+            country_agg_volatility REAL,
+            industry_agg_momentum REAL,
+            industry_agg_rsi REAL,
+            industry_agg_volatility REAL,
             future_return REAL,
             prediction_horizon_days INTEGER,
             created_at TEXT,
@@ -841,6 +848,21 @@ class Database(BaseDatabase):
             await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN last_run INTEGER DEFAULT 0")
         if "consecutive_failures" not in columns:
             await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
+
+        # Migration: add aggregate feature columns to ml_training_samples if missing
+        cursor = await self.conn.execute("PRAGMA table_info(ml_training_samples)")
+        ml_columns = {row[1] for row in await cursor.fetchall()}
+        agg_columns = [
+            ("country_agg_momentum", "REAL"),
+            ("country_agg_rsi", "REAL"),
+            ("country_agg_volatility", "REAL"),
+            ("industry_agg_momentum", "REAL"),
+            ("industry_agg_rsi", "REAL"),
+            ("industry_agg_volatility", "REAL"),
+        ]
+        for col_name, col_type in agg_columns:
+            if col_name not in ml_columns:
+                await self.conn.execute(f"ALTER TABLE ml_training_samples ADD COLUMN {col_name} {col_type}")
 
     async def _migrate_job_schedules(self) -> None:
         """Migrate job_schedules table to remove deprecated columns."""

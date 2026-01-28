@@ -59,7 +59,7 @@ DEFAULTS = {
     # ML Per-Security Prediction (per-security settings in securities table)
     "ml_ensemble_nn_weight": 0.5,
     "ml_ensemble_xgb_weight": 0.5,
-    "ml_prediction_horizon_days": 14,  # Predict 14 days ahead
+    "ml_prediction_horizon_days": 21,  # Predict 21 days ahead (~1 month)
     "ml_training_lookback_years": 8,
     "ml_validation_split": 0.2,
     "ml_min_samples_per_symbol": 100,  # Min samples to train a model for a symbol

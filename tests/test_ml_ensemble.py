@@ -13,9 +13,9 @@ from sentinel.ml_features import FEATURE_NAMES, NUM_FEATURES
 
 
 def test_feature_count():
-    """Verify feature count is correct (14 features per security)."""
-    assert NUM_FEATURES == 14
-    assert len(FEATURE_NAMES) == 14
+    """Verify feature count is correct (20 features: 14 core + 6 aggregate)."""
+    assert NUM_FEATURES == 20
+    assert len(FEATURE_NAMES) == 20
 
 
 def test_nn_build_train_predict():

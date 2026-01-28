@@ -26,10 +26,10 @@ from sentinel.ml_features import (
 class TestFeatureDefinitions:
     """Tests for feature name definitions and constants."""
 
-    def test_feature_count_is_14(self):
-        """There should be exactly 14 features."""
-        assert NUM_FEATURES == 14
-        assert len(FEATURE_NAMES) == 14
+    def test_feature_count_is_20(self):
+        """There should be exactly 20 features (14 core + 6 aggregate)."""
+        assert NUM_FEATURES == 20
+        assert len(FEATURE_NAMES) == 20
 
     def test_all_features_have_defaults(self):
         """Every feature must have a default value."""

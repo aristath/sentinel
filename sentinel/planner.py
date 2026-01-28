@@ -403,12 +403,13 @@ class Planner:
                 # Reverse to chronological order
                 price_df = price_df.iloc[::-1].reset_index(drop=True)
 
-                # Extract features (ML predicts independently per security)
+                # Extract features with aggregate market context
                 features = await self._feature_extractor.extract_features(
                     symbol=symbol,
                     date=datetime.now().strftime("%Y-%m-%d"),
                     price_data=price_df,
                     sentiment_score=None,
+                    security_data=sec,
                 )
 
             # Apply ML blending if enabled for this security

@@ -39,8 +39,8 @@ async def test_get_job_schedules_returns_all(db):
     """GET /api/jobs/schedules should return all schedules."""
     schedules = await db.get_job_schedules()
 
-    # Should have 14 default schedules
-    assert len(schedules) == 14
+    # Should have 15 default schedules (including aggregate:compute)
+    assert len(schedules) == 15
 
     # Check structure (no longer has enabled, dependencies, is_parameterized fields)
     schedule = schedules[0]

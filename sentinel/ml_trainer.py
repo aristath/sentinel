@@ -21,7 +21,7 @@ class TrainingDataGenerator:
 
     def __init__(self):
         self.db = Database()
-        self.feature_extractor = FeatureExtractor()
+        self.feature_extractor = FeatureExtractor(db=self.db)
         self.settings = Settings()
         self.analyzer = Analyzer()
 
@@ -68,6 +68,10 @@ class TrainingDataGenerator:
         logger.info(f"Period: {start_date} to {end_date}")
         logger.info(f"Prediction horizon: {prediction_horizon_days} days")
 
+        # Pre-fetch all security data for aggregate feature lookups
+        all_securities = await self.db.get_all_securities(active_only=False)
+        security_data_map = {s["symbol"]: s for s in all_securities}
+
         for idx, symbol in enumerate(symbols):
             if (idx + 1) % 10 == 0 or idx == 0:
                 logger.info(f"[{idx + 1}/{total_symbols}] Processing {symbol}...")
@@ -76,12 +80,15 @@ class TrainingDataGenerator:
             if price_data is None or len(price_data) < 200:
                 continue
 
+            # Get security data for aggregate features
+            security_data = security_data_map.get(symbol)
+
             # Create samples with rolling windows (every week)
-            # Each security is processed independently - no cross-security data
             samples = await self._create_samples_for_symbol(
                 symbol=symbol,
                 price_data=price_data,
                 prediction_horizon_days=prediction_horizon_days,
+                security_data=security_data,
             )
 
             all_samples.extend(samples)
@@ -114,11 +121,18 @@ class TrainingDataGenerator:
         symbol: str,
         price_data: pd.DataFrame,
         prediction_horizon_days: int,
+        security_data: Optional[Dict] = None,
     ) -> List[Dict]:
         """
         Create training samples for one symbol.
 
-        Each symbol is processed independently - no cross-security contamination.
+        Each symbol is processed with its own price data plus aggregate market context.
+
+        Args:
+            symbol: Security ticker
+            price_data: DataFrame with OHLCV data
+            prediction_horizon_days: Days ahead to predict
+            security_data: Optional dict with 'geography' and 'industry' for aggregate features
         """
         samples = []
 
@@ -130,12 +144,13 @@ class TrainingDataGenerator:
             window_data = price_data.iloc[: i + 1].copy()  # Only data up to this point
 
             try:
-                # Extract features (ML predicts independently per security)
+                # Extract features (per-security with aggregate market context)
                 features = await self.feature_extractor.extract_features(
                     symbol=symbol,
                     date=sample_date,
                     price_data=window_data,
                     sentiment_score=None,
+                    security_data=security_data,
                 )
 
                 # Calculate label (future return)
@@ -212,7 +227,7 @@ class TrainingDataGenerator:
 
         logger.info(f"Storing {len(df)} samples in database...")
 
-        # 14 features per security - no cross-security data
+        # 20 features per security (14 core + 6 aggregate market context)
         db_columns = [
             "sample_id",
             "symbol",
@@ -231,6 +246,12 @@ class TrainingDataGenerator:
             "macd",
             "bollinger_position",
             "sentiment_score",
+            "country_agg_momentum",
+            "country_agg_rsi",
+            "country_agg_volatility",
+            "industry_agg_momentum",
+            "industry_agg_rsi",
+            "industry_agg_volatility",
             "future_return",
             "prediction_horizon_days",
             "created_at",
@@ -284,18 +305,22 @@ class TrainingDataGenerator:
         logger.info(f"Generating training data for {symbol}...")
         logger.info(f"Period: {start_date} to {end_date}")
 
-        # Get price data for this symbol only - no cross-security data
+        # Get price data for this symbol
         price_data = await self._get_price_data(symbol, start_date, datetime.now().strftime("%Y-%m-%d"))
 
         if len(price_data) < 200 + prediction_horizon_days:
             logger.warning(f"{symbol}: Insufficient price data ({len(price_data)} rows)")
             return pd.DataFrame()
 
-        # Create samples using only this symbol's data
+        # Get security data for aggregate features
+        security_data = await self.db.get_security(symbol)
+
+        # Create samples with aggregate market context
         samples = await self._create_samples_for_symbol(
             symbol=symbol,
             price_data=price_data,
             prediction_horizon_days=prediction_horizon_days,
+            security_data=security_data,
         )
 
         df = pd.DataFrame(samples)
@@ -335,14 +360,21 @@ class TrainingDataGenerator:
 
         symbols = await self._get_universe_symbols()
 
+        # Pre-fetch all security data for aggregate feature lookups
+        all_securities = await self.db.get_all_securities(active_only=False)
+        security_data_map = {s["symbol"]: s for s in all_securities}
+
         all_samples = []
         logger.info(f"Generating incremental samples for {len(symbols)} symbols...")
 
-        # Process each symbol independently
+        # Process each symbol with aggregate market context
         for symbol in symbols:
             price_data = await self._get_price_data(symbol, feature_start, datetime.now().strftime("%Y-%m-%d"))
             if len(price_data) < 200 + prediction_horizon_days:
                 continue
+
+            # Get security data for aggregate features
+            security_data = security_data_map.get(symbol)
 
             # Only create samples for the lookback period
             sample_start_idx = max(200, len(price_data) - lookback_days - prediction_horizon_days)
@@ -353,12 +385,13 @@ class TrainingDataGenerator:
                 window_data = price_data.iloc[: i + 1].copy()
 
                 try:
-                    # Extract features (per-security, no cross-security data)
+                    # Extract features (per-security with aggregate market context)
                     features = await self.feature_extractor.extract_features(
                         symbol=symbol,
                         date=sample_date,
                         price_data=window_data,
                         sentiment_score=None,
+                        security_data=security_data,
                     )
 
                     current_price = price_data.iloc[i]["close"]

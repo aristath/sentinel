@@ -173,9 +173,9 @@ def test_clear_cache_all(predictor):
 
 
 def test_feature_names_consistency():
-    """Verify feature names match expected count (14 features per security)."""
+    """Verify feature names match expected count (20 features: 14 core + 6 aggregate)."""
     assert len(FEATURE_NAMES) == NUM_FEATURES
-    assert NUM_FEATURES == 14
+    assert NUM_FEATURES == 20
 
 
 def test_default_features_complete():

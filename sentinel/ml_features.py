@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 
 # Feature names in the exact order used by the ML models
 # Each security's ML model uses ONLY that security's own data - no cross-contamination
+# Plus aggregate market context features for country and industry groups
 FEATURE_NAMES: List[str] = [
     # Price & Returns (4 features)
     "return_1d",
@@ -42,10 +43,18 @@ FEATURE_NAMES: List[str] = [
     "bollinger_position",
     # Sentiment (1 feature)
     "sentiment_score",
+    # Aggregate Market Context - Country (3 features)
+    "country_agg_momentum",
+    "country_agg_rsi",
+    "country_agg_volatility",
+    # Aggregate Market Context - Industry (3 features)
+    "industry_agg_momentum",
+    "industry_agg_rsi",
+    "industry_agg_volatility",
 ]
 
 # Total number of features (used by ml_ensemble.py)
-NUM_FEATURES = len(FEATURE_NAMES)  # 14
+NUM_FEATURES = len(FEATURE_NAMES)  # 20
 
 # Default feature values for when data is insufficient
 DEFAULT_FEATURES: Dict[str, float] = {
@@ -63,6 +72,13 @@ DEFAULT_FEATURES: Dict[str, float] = {
     "macd": 0.0,
     "bollinger_position": 0.5,
     "sentiment_score": 0.5,
+    # Aggregate market context defaults
+    "country_agg_momentum": 0.0,
+    "country_agg_rsi": 0.5,
+    "country_agg_volatility": 0.02,
+    "industry_agg_momentum": 0.0,
+    "industry_agg_rsi": 0.5,
+    "industry_agg_volatility": 0.02,
 }
 
 
@@ -91,8 +107,15 @@ def validate_features(features: Dict[str, float]) -> Tuple[Dict[str, float], Lis
         Tuple of (cleaned features dict, list of warnings)
     """
     # Physical constraints: features that have mathematical bounds
-    NON_NEGATIVE = {"volatility_10d", "volatility_30d", "atr_14d", "volume_normalized"}
-    ZERO_TO_ONE = {"rsi_14", "sentiment_score"}
+    NON_NEGATIVE = {
+        "volatility_10d",
+        "volatility_30d",
+        "atr_14d",
+        "volume_normalized",
+        "country_agg_volatility",
+        "industry_agg_volatility",
+    }
+    ZERO_TO_ONE = {"rsi_14", "sentiment_score", "country_agg_rsi", "industry_agg_rsi"}
 
     cleaned = {}
     warnings = []
@@ -132,6 +155,7 @@ class FeatureExtractor:
         self.db = db
         self.feature_names = FEATURE_NAMES  # For backward compatibility
         self._market_cache: Dict[str, pd.DataFrame] = {}
+        self._aggregate_cache: Dict[str, pd.DataFrame] = {}
 
     async def extract_features(
         self,
@@ -139,21 +163,23 @@ class FeatureExtractor:
         date: str,
         price_data: pd.DataFrame,
         sentiment_score: Optional[float] = None,
+        security_data: Optional[Dict] = None,
     ) -> Dict[str, float]:
         """
-        Extract all 14 features for a security at a given date.
+        Extract all 20 features for a security at a given date.
 
-        Each security's ML model is completely isolated - uses ONLY that
-        security's own price/volume data. No cross-security contamination.
+        Each security's ML model uses that security's own price/volume data,
+        plus aggregate market context features for the security's country and industry.
 
         Args:
             symbol: Security ticker
             date: Date to extract features for
             price_data: DataFrame with columns [date, open, high, low, close, volume]
             sentiment_score: Optional sentiment score (0-1)
+            security_data: Optional dict with 'geography' and 'industry' for aggregate features
 
         Returns:
-            Dict mapping feature name to value (14 features)
+            Dict mapping feature name to value (20 features)
         """
         if len(price_data) < 200:
             logger.warning(f"{symbol}: insufficient price data ({len(price_data)} rows), using defaults")
@@ -278,6 +304,12 @@ class FeatureExtractor:
             else:
                 features["sentiment_score"] = 0.5  # Default neutral sentiment
 
+            # =====================================================================
+            # Aggregate Market Context (6 features)
+            # =====================================================================
+            agg_features = await self._extract_aggregate_features(security_data, date)
+            features.update(agg_features)
+
         except Exception as e:
             logger.error(f"{symbol}: Feature extraction failed: {e}", exc_info=True)
             return DEFAULT_FEATURES.copy()
@@ -310,3 +342,126 @@ class FeatureExtractor:
 
     # Backward compatibility alias
     _get_default_features = get_default_features
+
+    async def _extract_aggregate_features(
+        self,
+        security_data: Optional[Dict],
+        date: str,
+    ) -> Dict[str, float]:
+        """Extract aggregate market context features for country and industry.
+
+        Args:
+            security_data: Dict with 'geography' and 'industry' fields
+            date: Date to extract features for
+
+        Returns:
+            Dict with 6 aggregate features
+        """
+        features = {
+            "country_agg_momentum": 0.0,
+            "country_agg_rsi": 0.5,
+            "country_agg_volatility": 0.02,
+            "industry_agg_momentum": 0.0,
+            "industry_agg_rsi": 0.5,
+            "industry_agg_volatility": 0.02,
+        }
+
+        if not security_data or not self.db:
+            return features
+
+        # Import here to avoid circular imports
+        from sentinel.aggregates import AggregateComputer
+
+        agg_computer = AggregateComputer(self.db)
+
+        # Extract country aggregate features
+        geography = security_data.get("geography", "")
+        if geography:
+            country_symbol = agg_computer.get_country_aggregate_symbol(geography)
+            if country_symbol:
+                country_features = await self._compute_aggregate_features(country_symbol, date, "country")
+                features.update(country_features)
+
+        # Extract industry aggregate features
+        industry = security_data.get("industry", "")
+        if industry:
+            industry_symbol = agg_computer.get_industry_aggregate_symbol(industry)
+            if industry_symbol:
+                industry_features = await self._compute_aggregate_features(industry_symbol, date, "industry")
+                features.update(industry_features)
+
+        return features
+
+    async def _compute_aggregate_features(
+        self,
+        agg_symbol: str,
+        date: str,
+        prefix: str,
+    ) -> Dict[str, float]:
+        """Compute momentum, RSI, and volatility for an aggregate symbol.
+
+        Args:
+            agg_symbol: Aggregate symbol (e.g., _AGG_COUNTRY_US)
+            date: Date to compute features for
+            prefix: Feature prefix ('country' or 'industry')
+
+        Returns:
+            Dict with 3 features: {prefix}_agg_momentum, {prefix}_agg_rsi, {prefix}_agg_volatility
+        """
+        features = {
+            f"{prefix}_agg_momentum": 0.0,
+            f"{prefix}_agg_rsi": 0.5,
+            f"{prefix}_agg_volatility": 0.02,
+        }
+
+        # Check cache first
+        if agg_symbol in self._aggregate_cache:
+            price_data = self._aggregate_cache[agg_symbol]
+        else:
+            # Load aggregate price data
+            prices_bulk = await self.db.get_prices_bulk([agg_symbol])
+            prices = prices_bulk.get(agg_symbol, [])
+
+            if not prices:
+                return features
+
+            price_data = pd.DataFrame(prices)
+            price_data = price_data.sort_values("date")
+            self._aggregate_cache[agg_symbol] = price_data
+
+        if len(price_data) < 30:
+            return features
+
+        # Filter to data up to the target date
+        price_data = price_data[price_data["date"] <= date]
+        if len(price_data) < 30:
+            return features
+
+        try:
+            closes = price_data["close"].astype(float)
+
+            # Momentum: 20-day return
+            if len(closes) >= 21:
+                current = closes.iloc[-1]
+                past = closes.iloc[-21]
+                if pd.notna(current) and pd.notna(past) and past > 0:
+                    features[f"{prefix}_agg_momentum"] = float((current / past) - 1.0)
+
+            # RSI-14 (normalized to 0-1)
+            if len(closes) >= 15:
+                rsi_indicator = ta.momentum.RSIIndicator(closes, window=14)
+                rsi_value = rsi_indicator.rsi().iloc[-1]
+                if pd.notna(rsi_value):
+                    features[f"{prefix}_agg_rsi"] = float(rsi_value / 100.0)
+
+            # Volatility: 20-day rolling std of returns
+            if len(closes) >= 21:
+                returns = closes.pct_change()
+                vol = returns.rolling(20).std().iloc[-1]
+                if pd.notna(vol):
+                    features[f"{prefix}_agg_volatility"] = float(vol)
+
+        except Exception as e:
+            logger.debug(f"Failed to compute aggregate features for {agg_symbol}: {e}")
+
+        return features

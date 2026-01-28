@@ -92,6 +92,15 @@ async def sync_exchange_rates() -> None:
     logger.info(f"Exchange rates synced: {len(rates)} currencies")
 
 
+async def aggregate_compute(db) -> None:
+    """Compute aggregate price series for country and industry groups."""
+    from sentinel.aggregates import AggregateComputer
+
+    computer = AggregateComputer(db)
+    result = await computer.compute_all_aggregates()
+    logger.info(f"Aggregate computation complete: {result['country']} country, {result['industry']} industry")
+
+
 # -----------------------------------------------------------------------------
 # Scoring Tasks
 # -----------------------------------------------------------------------------

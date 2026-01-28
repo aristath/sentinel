@@ -656,6 +656,14 @@ class NeuralNetReturnPredictor:
             metadata = json.load(f)
             self.input_dim = metadata.get("input_dim", NUM_FEATURES)
 
+        # Validate input dimension matches current feature count
+        if self.input_dim != NUM_FEATURES:
+            raise RuntimeError(
+                f"Model at {path} was trained with {self.input_dim} features, "
+                f"but current system expects {NUM_FEATURES} features. "
+                "Delete the old model files and retrain with the new feature set."
+            )
+
         # Rebuild model with correct input dim
         self.build_model(input_dim=self.input_dim)
 
@@ -791,6 +799,7 @@ class XGBoostReturnPredictor:
         # Save metadata with feature importance
         metadata = {
             "model_type": "xgboost",
+            "input_dim": NUM_FEATURES,
             "n_estimators": int(self.model.n_estimators),
             "max_depth": int(self.model.max_depth),
             "feature_importance": self.feature_importance or {},
@@ -802,6 +811,22 @@ class XGBoostReturnPredictor:
         """Load model, scaler, metadata, and feature importance."""
         path = Path(path)
 
+        # Load metadata first to validate input_dim
+        metadata_path = path / "xgb_metadata.json"
+        if metadata_path.exists():
+            with open(metadata_path, "r") as f:
+                metadata = json.load(f)
+                self.feature_importance = metadata.get("feature_importance", {})
+
+                # Validate input dimension if present
+                saved_input_dim = metadata.get("input_dim")
+                if saved_input_dim is not None and saved_input_dim != NUM_FEATURES:
+                    raise RuntimeError(
+                        f"XGBoost model at {path} was trained with {saved_input_dim} features, "
+                        f"but current system expects {NUM_FEATURES} features. "
+                        "Delete the old model files and retrain with the new feature set."
+                    )
+
         # Load model
         self.model = xgb.XGBRegressor()
         self.model.load_model(str(path / "xgb_model.json"))
@@ -809,13 +834,6 @@ class XGBoostReturnPredictor:
         # Load scaler
         with open(path / "xgb_scaler.pkl", "rb") as f:
             self.scaler = pickle.load(f)  # noqa: S301
-
-        # Load feature importance from metadata if available
-        metadata_path = path / "xgb_metadata.json"
-        if metadata_path.exists():
-            with open(metadata_path, "r") as f:
-                metadata = json.load(f)
-                self.feature_importance = metadata.get("feature_importance", {})
 
 
 class EnsembleBlender:
