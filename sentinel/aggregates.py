@@ -58,7 +58,7 @@ class AggregateComputer:
         await self.db.connect()
 
         # Get distinct geographies
-        categories = await self.db.get_distinct_categories()
+        categories = await self.db.get_categories()
         geographies = categories.get("geographies", [])
 
         computed = 0
@@ -94,7 +94,7 @@ class AggregateComputer:
         await self.db.connect()
 
         # Get distinct industries
-        categories = await self.db.get_distinct_categories()
+        categories = await self.db.get_categories()
         industries = categories.get("industries", [])
 
         computed = 0
@@ -206,7 +206,7 @@ class AggregateComputer:
             for date, row in agg_prices.iterrows()
         ]
 
-        await self.db.replace_prices(agg_symbol, price_records)
+        await self.db.save_prices(agg_symbol, price_records)
         return True
 
     def _build_aggregate_series(self, dfs: Dict[str, pd.DataFrame]) -> Optional[pd.DataFrame]:

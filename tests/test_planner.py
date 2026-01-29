@@ -44,20 +44,17 @@ class TestDeficitSells:
                 {"symbol": "AAPL.US", "quantity": 10, "current_price": 200.0},
             ]
         )
-        db.get_security = AsyncMock(
-            return_value={
-                "symbol": "AAPL.US",
-                "currency": "USD",
-                "min_lot": 1,
-                "allow_sell": 1,
-            }
+        db.get_all_securities = AsyncMock(
+            return_value=[
+                {
+                    "symbol": "AAPL.US",
+                    "currency": "USD",
+                    "min_lot": 1,
+                    "allow_sell": 1,
+                },
+            ]
         )
-
-        # Mock score lookup
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone = AsyncMock(return_value={"score": 0.5})
-        db.conn = MagicMock()
-        db.conn.execute = AsyncMock(return_value=mock_cursor)
+        db.get_scores = AsyncMock(return_value={"AAPL.US": 0.5})
 
         planner = Planner(db=db)
         planner._currency = MagicMock()
@@ -99,27 +96,15 @@ class TestDeficitSells:
                 {"symbol": "LOW.EU", "quantity": 10, "current_price": 100.0},
             ]
         )
-
-        securities = {
-            "HIGH.EU": {"symbol": "HIGH.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1},
-            "LOW.EU": {"symbol": "LOW.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1},
-        }
-        db.get_security = AsyncMock(side_effect=lambda s: securities.get(s))
+        db.get_all_securities = AsyncMock(
+            return_value=[
+                {"symbol": "HIGH.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1},
+                {"symbol": "LOW.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1},
+            ]
+        )
 
         # LOW.EU has lower score
-        scores = {"HIGH.EU": 0.8, "LOW.EU": 0.2}
-
-        async def mock_execute(query, params=None):
-            mock_cursor = MagicMock()
-            if "SELECT score" in query and params:
-                symbol = params[0]
-                mock_cursor.fetchone = AsyncMock(return_value={"score": scores.get(symbol, 0)})
-            else:
-                mock_cursor.fetchone = AsyncMock(return_value=None)
-            return mock_cursor
-
-        db.conn = MagicMock()
-        db.conn.execute = AsyncMock(side_effect=mock_execute)
+        db.get_scores = AsyncMock(return_value={"HIGH.EU": 0.8, "LOW.EU": 0.2})
 
         planner = Planner(db=db)
         planner._currency = MagicMock()
@@ -145,19 +130,17 @@ class TestDeficitSells:
                 {"symbol": "TEST.EU", "quantity": 10, "current_price": 100.0},
             ]
         )
-        db.get_security = AsyncMock(
-            return_value={
-                "symbol": "TEST.EU",
-                "currency": "EUR",
-                "min_lot": 1,
-                "allow_sell": 1,
-            }
+        db.get_all_securities = AsyncMock(
+            return_value=[
+                {
+                    "symbol": "TEST.EU",
+                    "currency": "EUR",
+                    "min_lot": 1,
+                    "allow_sell": 1,
+                },
+            ]
         )
-
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone = AsyncMock(return_value={"score": 0.5})
-        db.conn = MagicMock()
-        db.conn.execute = AsyncMock(return_value=mock_cursor)
+        db.get_scores = AsyncMock(return_value={"TEST.EU": 0.5})
 
         planner = Planner(db=db)
         planner._currency = MagicMock()
@@ -183,17 +166,13 @@ class TestDeficitSells:
                 {"symbol": "CANSELL.EU", "quantity": 10, "current_price": 100.0},
             ]
         )
-
-        securities = {
-            "NOSELL.EU": {"symbol": "NOSELL.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 0},
-            "CANSELL.EU": {"symbol": "CANSELL.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1},
-        }
-        db.get_security = AsyncMock(side_effect=lambda s: securities.get(s))
-
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone = AsyncMock(return_value={"score": 0.5})
-        db.conn = MagicMock()
-        db.conn.execute = AsyncMock(return_value=mock_cursor)
+        db.get_all_securities = AsyncMock(
+            return_value=[
+                {"symbol": "NOSELL.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 0},
+                {"symbol": "CANSELL.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1},
+            ]
+        )
+        db.get_scores = AsyncMock(return_value={"NOSELL.EU": 0.5, "CANSELL.EU": 0.5})
 
         planner = Planner(db=db)
         planner._currency = MagicMock()

@@ -295,17 +295,3 @@ class CurrencyExchangeService:
             currencies.add(from_curr)
             currencies.add(to_curr)
         return sorted(currencies)
-
-
-def get_stock_currency(geography: str) -> str:
-    """Get the trading currency for a stock based on its geography.
-
-    Args:
-        geography: Stock geography code (EU, US, ASIA, UK, Greece, Europe, China)
-
-    Returns:
-        Currency code (EUR, USD, HKD, GBP)
-    """
-    from sentinel.config.currencies import get_currency_for_geography
-
-    return get_currency_for_geography(geography)

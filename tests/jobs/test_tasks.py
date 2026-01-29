@@ -24,7 +24,7 @@ def mock_db():
             {"symbol": "GOOG.US"},
         ]
     )
-    db.replace_prices = AsyncMock()
+    db.save_prices = AsyncMock()
     db.update_quotes_bulk = AsyncMock()
     db.update_security_metadata = AsyncMock()
     db.cache_clear = AsyncMock(return_value=5)
@@ -174,7 +174,7 @@ class TestSyncPrices:
 
         await sync_prices(mock_db, mock_broker, mock_cache)
 
-        assert mock_db.replace_prices.await_count == 2
+        assert mock_db.save_prices.await_count == 2
 
 
 class TestSyncQuotes:

@@ -17,6 +17,7 @@ import { DatePickerInput } from '@mantine/dates';
 import { IconRefresh } from '@tabler/icons-react';
 import { useState } from 'react';
 import { getTrades, syncTrades, getSecurities } from '../api/client';
+import { formatNumber } from '../utils/formatting';
 
 function formatDate(dateStr) {
   if (!dateStr) return '-';
@@ -27,14 +28,6 @@ function formatDate(dateStr) {
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-  });
-}
-
-function formatNumber(num, decimals = 2) {
-  if (num === null || num === undefined) return '-';
-  return Number(num).toLocaleString('en-US', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
   });
 }
 
@@ -207,9 +200,9 @@ export function TradesModal({ opened, onClose }) {
                         </Badge>
                       </Table.Td>
                       <Table.Td ta="right">{formatNumber(qty, 0)}</Table.Td>
-                      <Table.Td ta="right">{formatNumber(price)}</Table.Td>
-                      <Table.Td ta="right">{formatNumber(value)}</Table.Td>
-                      <Table.Td ta="right">{formatNumber(commission)}</Table.Td>
+                      <Table.Td ta="right">{formatNumber(price, 2)}</Table.Td>
+                      <Table.Td ta="right">{formatNumber(value, 2)}</Table.Td>
+                      <Table.Td ta="right">{formatNumber(commission, 2)}</Table.Td>
                       <Table.Td>{currency}</Table.Td>
                     </Table.Tr>
                   );

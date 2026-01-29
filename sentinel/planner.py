@@ -29,6 +29,7 @@ from sentinel.ml_predictor import MLPredictor
 from sentinel.portfolio import Portfolio
 from sentinel.price_validator import PriceValidator, check_trade_blocking
 from sentinel.settings import Settings
+from sentinel.utils.strings import parse_csv_field
 
 
 @dataclass
@@ -70,7 +71,7 @@ class Planner:
         self._analyzer = Analyzer(db=self._db)
         self._settings = Settings()
         self._currency = Currency()
-        self._ml_predictor = MLPredictor()
+        self._ml_predictor = MLPredictor(db=self._db, settings=self._settings)
         self._feature_extractor = FeatureExtractor(db=self._db)
 
     def _calculate_diversification_score(
@@ -96,12 +97,10 @@ class Planner:
         deviations = []
 
         # Parse comma-separated geographies
-        geo_str = security.get("geography", "") or ""
-        geos = [g.strip() for g in geo_str.split(",") if g.strip()]
+        geos = parse_csv_field(security.get("geography"))
 
         # Parse comma-separated industries
-        ind_str = security.get("industry", "") or ""
-        inds = [i.strip() for i in ind_str.split(",") if i.strip()]
+        inds = parse_csv_field(security.get("industry"))
 
         # Calculate deviation for each geography
         for geo in geos:
@@ -154,6 +153,10 @@ class Planner:
         securities = await self._db.get_all_securities(active_only=True)
         scores = {}
 
+        # Batch-fetch all scores to avoid N+1 queries
+        all_symbols = [sec["symbol"] for sec in securities]
+        scores_map = await self._db.get_scores(all_symbols)
+
         # Get current allocations and targets for diversification
         current_allocs = await self._portfolio.get_allocations()
         target_allocs = await self._portfolio.get_target_allocations()
@@ -167,9 +170,7 @@ class Planner:
             if user_multiplier <= 0:
                 continue
 
-            cursor = await self._db.conn.execute("SELECT score FROM scores WHERE symbol = ?", (symbol,))
-            row = await cursor.fetchone()
-            base_score = row["score"] if row and row["score"] is not None else 0
+            base_score = scores_map.get(symbol, 0)
 
             # Apply user multiplier as conviction adjustment
             from sentinel.utils.scoring import adjust_score_for_conviction
@@ -260,13 +261,16 @@ class Planner:
         if total == 0:
             return {}
 
+        from sentinel.utils.positions import PositionCalculator
+
+        pos_calc = PositionCalculator(currency_converter=self._currency)
+
         allocations = {}
         for pos in positions:
             price = pos.get("current_price", 0)
             qty = pos.get("quantity", 0)
-            currency = pos.get("currency", "EUR")
-            value_local = price * qty
-            value_eur = await self._currency.to_eur(value_local, currency)
+            pos_currency = pos.get("currency", "EUR")
+            value_eur = await pos_calc.calculate_value_eur(qty, price, pos_currency)
             allocations[pos["symbol"]] = value_eur / total
 
         # Cache result (10 minutes = 600 seconds)
@@ -288,8 +292,7 @@ class Planner:
         """
         # Get min_trade_value from settings if not provided
         if min_trade_value is None:
-            settings = Settings()
-            setting_value = await settings.get("min_trade_value", default=100.0)
+            setting_value = await self._settings.get("min_trade_value", default=100.0)
             min_trade_value = float(setting_value) if setting_value is not None else 100.0
 
         # Check cache first
@@ -311,10 +314,7 @@ class Planner:
         security_data = {}
 
         # Include all ML-enabled securities so predictions run for them too
-        ml_enabled_cursor = await self._db.conn.execute(
-            "SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1"
-        )
-        ml_enabled_rows = await ml_enabled_cursor.fetchall()
+        ml_enabled_rows = await self._db.get_ml_enabled_securities()
         ml_enabled_symbols = [row["symbol"] for row in ml_enabled_rows]
 
         all_symbols = list(set(list(ideal.keys()) + list(current.keys()) + ml_enabled_symbols))
@@ -322,26 +322,14 @@ class Planner:
         # Fetch all data in parallel for performance
         current_quotes = await self._broker.get_quotes(all_symbols)
 
-        # Parallel fetch: securities, positions, scores, and historical prices
-        securities_tasks = [self._db.get_security(s) for s in all_symbols]
-        positions_tasks = [self._db.get_position(s) for s in all_symbols]
+        # Batch-fetch securities, positions, and scores
+        all_securities = await self._db.get_all_securities(active_only=False)
+        securities_map = {s["symbol"]: s for s in all_securities}
 
-        securities_list, positions_list = await asyncio.gather(
-            asyncio.gather(*securities_tasks),
-            asyncio.gather(*positions_tasks),
-        )
+        all_positions = await self._db.get_all_positions()
+        positions_map = {p["symbol"]: p for p in all_positions}
 
-        # Create lookup maps
-        securities_map = {all_symbols[i]: securities_list[i] for i in range(len(all_symbols))}
-        positions_map = {all_symbols[i]: positions_list[i] for i in range(len(all_symbols))}
-
-        # Fetch scores with components in parallel
-        async def get_score_with_components(symbol):
-            cursor = await self._db.conn.execute("SELECT score, components FROM scores WHERE symbol = ?", (symbol,))
-            return await cursor.fetchone()
-
-        scores_list = await asyncio.gather(*[get_score_with_components(s) for s in all_symbols])
-        scores_map = {all_symbols[i]: scores_list[i] for i in range(len(all_symbols))}
+        scores_map = await self._db.get_scores(all_symbols)
 
         # Fetch full OHLCV historical prices (250 days for ML feature extraction)
         # Use PriceValidator to handle abnormal spikes/crashes in API data
@@ -370,11 +358,7 @@ class Planner:
                         except (ValueError, TypeError):
                             price[col] = 0.0
 
-            # PriceValidator expects chronological order (oldest first)
-            # Reverse, validate, then reverse back to DESC order
-            price_list.reverse()
-            validated_prices = price_validator.validate_and_interpolate(price_list)
-            validated_prices.reverse()  # Back to DESC order
+            validated_prices = price_validator.validate_price_series_desc(price_list)
             return validated_prices
 
         hist_prices_list = await asyncio.gather(*[get_historical_ohlcv(s) for s in all_symbols])
@@ -391,8 +375,7 @@ class Planner:
             user_multiplier = sec.get("user_multiplier", 1.0) if sec else 1.0
 
             # Get wavelet score
-            row = scores_map.get(symbol)
-            wavelet_score = row["score"] if row and row["score"] is not None else 0
+            wavelet_score = scores_map.get(symbol, 0)
 
             # Prepare price data for feature extraction
             hist_rows = hist_prices_map.get(symbol, [])
@@ -1021,7 +1004,13 @@ class Planner:
         if not positions:
             return sells
 
-        # Fetch scores for all positions
+        # Batch-fetch all securities and scores to avoid N+1 queries
+        all_securities = await self._db.get_all_securities(active_only=False)
+        securities_map = {s["symbol"]: s for s in all_securities}
+
+        all_symbols = [pos["symbol"] for pos in positions]
+        scores_map = await self._db.get_scores(all_symbols)
+
         position_data = []
         for pos in positions:
             symbol = pos["symbol"]
@@ -1034,7 +1023,7 @@ class Planner:
                 continue
 
             # Get security data
-            sec = await self._db.get_security(symbol)
+            sec = securities_map.get(symbol)
             if not sec:
                 continue
 
@@ -1045,10 +1034,7 @@ class Planner:
             currency = sec.get("currency", "EUR")
             lot_size = sec.get("min_lot", 1)
 
-            # Get score
-            cursor = await self._db.conn.execute("SELECT score FROM scores WHERE symbol = ?", (symbol,))
-            row = await cursor.fetchone()
-            score = row["score"] if row and row["score"] is not None else 0
+            score = scores_map.get(symbol, 0)
 
             # Calculate EUR value
             local_value = qty * price

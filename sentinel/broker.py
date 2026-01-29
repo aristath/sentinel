@@ -25,16 +25,40 @@ class Broker:
     _instance: Optional["Broker"] = None
     _api = None
     _trading = None
+    _settings: "Settings"
+    _db: "Database"
 
     def __new__(cls):
         """Singleton pattern - one broker connection."""
         if cls._instance is None:
             cls._instance = super().__new__(cls)
+            cls._instance._settings = Settings()
+            cls._instance._db = Database()
         return cls._instance
 
     def __init__(self):
-        self._settings = Settings()
-        self._db = Database()
+        pass  # All init done in __new__
+
+    def _parse_quotes_response(self, response: dict) -> list[dict]:
+        """Extract quotes list from API response (handles both response formats)."""
+        if not response:
+            return []
+        if "quotes" in response:
+            return response["quotes"]
+        if "result" in response and "q" in response["result"]:
+            return response["result"]["q"]
+        return []
+
+    def _map_quote_fields(self, raw_quote: dict) -> dict:
+        """Map raw API quote fields to convenience names."""
+        quote = dict(raw_quote)
+        quote["symbol"] = raw_quote.get("c")
+        quote["price"] = raw_quote.get("ltp")
+        quote["bid"] = raw_quote.get("bbp")
+        quote["ask"] = raw_quote.get("bap")
+        quote["change"] = raw_quote.get("chg")
+        quote["change_percent"] = raw_quote.get("pcp")
+        return quote
 
     async def connect(self) -> bool:
         """Connect to Tradernet API."""
@@ -72,26 +96,9 @@ class Broker:
             return None
         try:
             response = self._api.get_quotes([symbol])
-            # Handle both response formats: {'quotes': [...]} and {'result': {'q': [...]}}
-            quotes_list = None
-            if response:
-                if "quotes" in response:
-                    quotes_list = response["quotes"]
-                elif "result" in response and "q" in response["result"]:
-                    quotes_list = response["result"]["q"]
-
-            if quotes_list:
-                for q in quotes_list:
-                    if q.get("c") == symbol:
-                        # Start with all raw API data, then add mapped convenience fields
-                        result = dict(q)
-                        result["symbol"] = symbol
-                        result["price"] = q.get("ltp")
-                        result["bid"] = q.get("bbp")
-                        result["ask"] = q.get("bap")
-                        result["change"] = q.get("chg")
-                        result["change_percent"] = q.get("pcp")
-                        return result
+            for q in self._parse_quotes_response(response):
+                if q.get("c") == symbol:
+                    return self._map_quote_fields(q)
         except Exception as e:
             logger.error(f"Failed to get quote for {symbol}: {e}")
         return None
@@ -102,7 +109,6 @@ class Broker:
             logger.warning("get_quotes: API not initialized")
             return {}
 
-        # Check DB cache first (5 minute TTL)
         cache_key = "quotes:" + ",".join(sorted(symbols))
         cached = await self._db.cache_get(cache_key)
         if cached is not None:
@@ -112,36 +118,18 @@ class Broker:
         try:
             logger.info(f"get_quotes: Requesting {len(symbols)} symbols from API")
             response = self._api.get_quotes(symbols)
-            logger.info(f"get_quotes: Response keys={list(response.keys()) if response else None}")
             result = {}
-            # Handle both response formats: {'quotes': [...]} and {'result': {'q': [...]}}
-            quotes_list = None
-            if response:
-                if "quotes" in response:
-                    quotes_list = response["quotes"]
-                elif "result" in response and "q" in response["result"]:
-                    quotes_list = response["result"]["q"]
-
+            quotes_list = self._parse_quotes_response(response)
             if quotes_list:
                 logger.info(f"get_quotes: Found {len(quotes_list)} quotes in response")
                 for q in quotes_list:
-                    symbol = q.get("c")
-                    if symbol:
-                        # Start with all raw API data, then add mapped convenience fields
-                        quote = dict(q)
-                        quote["symbol"] = symbol
-                        quote["price"] = q.get("ltp")
-                        quote["bid"] = q.get("bbp")
-                        quote["ask"] = q.get("bap")
-                        quote["change"] = q.get("chg")
-                        quote["change_percent"] = q.get("pcp")
-                        result[symbol] = quote
+                    if q.get("c"):
+                        result[q["c"]] = self._map_quote_fields(q)
             else:
                 logger.warning(
                     f"get_quotes: No quotes in response. Keys: {list(response.keys()) if response else None}"
                 )
 
-            # Cache the result (5 minutes = 300 seconds)
             await self._db.cache_set(cache_key, json.dumps(result), ttl_seconds=300)
             return result
         except Exception as e:

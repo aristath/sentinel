@@ -193,6 +193,39 @@ class BaseDatabase:
         await self.conn.commit()
         return cursor.lastrowid or 0
 
+    def _build_trades_where(
+        self,
+        symbol: str | None = None,
+        side: str | None = None,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> tuple[str, list]:
+        """Build WHERE clause for trades queries.
+
+        Returns:
+            Tuple of (where_clause, params)
+        """
+        where = "WHERE 1=1"
+        params: list = []
+
+        if symbol:
+            where += " AND symbol = ?"
+            params.append(symbol)
+
+        if side:
+            where += " AND side = ?"
+            params.append(side)
+
+        if start_date:
+            where += " AND executed_at >= ?"
+            params.append(start_date)
+
+        if end_date:
+            where += " AND executed_at <= ?"
+            params.append(end_date + "T23:59:59")
+
+        return where, params
+
     async def get_trades(
         self,
         symbol: Optional[str] = None,
@@ -218,32 +251,13 @@ class BaseDatabase:
         """
         import json
 
-        query = "SELECT * FROM trades WHERE 1=1"
-        params = []
-
-        if symbol:
-            query += " AND symbol = ?"
-            params.append(symbol)
-
-        if side:
-            query += " AND side = ?"
-            params.append(side)
-
-        if start_date:
-            query += " AND executed_at >= ?"
-            params.append(start_date)
-
-        if end_date:
-            query += " AND executed_at <= ?"
-            params.append(end_date + "T23:59:59")  # Include full end date
-
-        query += " ORDER BY executed_at DESC LIMIT ? OFFSET ?"
+        where, params = self._build_trades_where(symbol, side, start_date, end_date)
+        query = f"SELECT * FROM trades {where} ORDER BY executed_at DESC LIMIT ? OFFSET ?"  # noqa: S608
         params.extend([limit, offset])
 
         cursor = await self.conn.execute(query, params)
         rows = await cursor.fetchall()
 
-        # Parse raw_data JSON for each trade
         result = []
         for row in rows:
             trade = dict(row)
@@ -275,26 +289,8 @@ class BaseDatabase:
         Returns:
             Total count of matching trades
         """
-        query = "SELECT COUNT(*) FROM trades WHERE 1=1"
-        params = []
-
-        if symbol:
-            query += " AND symbol = ?"
-            params.append(symbol)
-
-        if side:
-            query += " AND side = ?"
-            params.append(side)
-
-        if start_date:
-            query += " AND executed_at >= ?"
-            params.append(start_date)
-
-        if end_date:
-            query += " AND executed_at <= ?"
-            params.append(end_date + "T23:59:59")
-
-        cursor = await self.conn.execute(query, params)
+        where, params = self._build_trades_where(symbol, side, start_date, end_date)
+        cursor = await self.conn.execute(f"SELECT COUNT(*) FROM trades {where}", params)  # noqa: S608
         row = await cursor.fetchone()
         return row[0] if row else 0
 
@@ -313,6 +309,42 @@ class BaseDatabase:
         )
         rows = await cursor.fetchall()
         return {row["commission_currency"]: row["total"] or 0.0 for row in rows}
+
+    # -------------------------------------------------------------------------
+    # Scores
+    # -------------------------------------------------------------------------
+
+    async def get_score(self, symbol: str) -> float | None:
+        """Get the score for a single security.
+
+        Args:
+            symbol: Security symbol
+
+        Returns:
+            Score value, or None if not found
+        """
+        cursor = await self.conn.execute("SELECT score FROM scores WHERE symbol = ?", (symbol,))
+        row = await cursor.fetchone()
+        return row["score"] if row else None
+
+    async def get_scores(self, symbols: list[str]) -> dict[str, float]:
+        """Get scores for multiple securities.
+
+        Args:
+            symbols: List of security symbols
+
+        Returns:
+            Dict mapping symbol to score (only includes symbols that have scores)
+        """
+        if not symbols:
+            return {}
+        placeholders = ",".join("?" * len(symbols))
+        cursor = await self.conn.execute(
+            f"SELECT symbol, score FROM scores WHERE symbol IN ({placeholders})",  # noqa: S608
+            symbols,
+        )
+        rows = await cursor.fetchall()
+        return {row["symbol"]: row["score"] for row in rows}
 
     # -------------------------------------------------------------------------
     # Cash Flows

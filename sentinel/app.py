@@ -27,6 +27,7 @@ from sentinel.backtester import (
 )
 from sentinel.broker import Broker
 from sentinel.cache import Cache
+from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.jobs import get_status, reschedule, run_now
 from sentinel.jobs import init as init_jobs
@@ -36,6 +37,7 @@ from sentinel.portfolio import Portfolio
 from sentinel.price_validator import PriceValidator, get_price_anomaly_warning
 from sentinel.security import Security
 from sentinel.settings import Settings
+from sentinel.utils.fees import FeeCalculator
 from sentinel.version import VERSION
 
 logger = logging.getLogger(__name__)
@@ -62,8 +64,6 @@ async def lifespan(app: FastAPI):
     await broker.connect()
 
     # Sync exchange rates on startup
-    from sentinel.currency import Currency
-
     currency = Currency()
     await currency.sync_rates()
     logger.info("Exchange rates synced")
@@ -76,7 +76,7 @@ async def lifespan(app: FastAPI):
     from sentinel.ml_monitor import MLMonitor
     from sentinel.ml_retrainer import MLRetrainer
     from sentinel.planner import Planner
-    from sentinel.regime_detector import RegimeDetector
+    from sentinel.regime_hmm import RegimeDetector
 
     portfolio = Portfolio()
     analyzer = Analyzer()
@@ -248,8 +248,6 @@ async def refresh_led_display():
 @app.get("/api/exchange-rates")
 async def get_exchange_rates():
     """Get all exchange rates to EUR."""
-    from sentinel.currency import Currency
-
     currency = Currency()
     return await currency.get_rates()
 
@@ -257,8 +255,6 @@ async def get_exchange_rates():
 @app.post("/api/exchange-rates/sync")
 async def sync_exchange_rates():
     """Sync exchange rates from Tradernet API."""
-    from sentinel.currency import Currency
-
     currency = Currency()
     rates = await currency.sync_rates()
     return rates
@@ -267,8 +263,6 @@ async def sync_exchange_rates():
 @app.put("/api/exchange-rates/{curr}")
 async def set_exchange_rate(curr: str, data: dict):
     """Manually set exchange rate for a currency to EUR."""
-    from sentinel.currency import Currency
-
     currency = Currency()
     await currency.set_rate(curr, data.get("rate", 1.0))
     return {"status": "ok"}
@@ -343,7 +337,7 @@ async def get_categories():
     from sentinel.config.categories import DEFAULT_GEOGRAPHIES, DEFAULT_INDUSTRIES
 
     db = Database()
-    existing = await db.get_distinct_categories()
+    existing = await db.get_categories()
 
     return {
         "geographies": sorted(set(DEFAULT_GEOGRAPHIES + existing["geographies"])),
@@ -359,8 +353,6 @@ async def get_categories():
 @app.get("/api/portfolio")
 async def get_portfolio():
     """Get current portfolio state."""
-    from sentinel.currency import Currency
-
     currency = Currency()
 
     portfolio = Portfolio()
@@ -370,36 +362,38 @@ async def get_portfolio():
 
     # Get security names and add EUR-converted values to each position
     db = Database()
+
+    # Batch-fetch all securities for name lookups
+    all_securities = await db.get_all_securities(active_only=False)
+    securities_map = {s["symbol"]: s for s in all_securities}
+
+    from sentinel.utils.positions import PositionCalculator
+
+    pos_calc = PositionCalculator(currency_converter=currency)
+
     for pos in positions:
         symbol = pos["symbol"]
         price = pos.get("current_price", 0)
         qty = pos.get("quantity", 0)
         avg_cost = pos.get("avg_cost", 0)
         pos_currency = pos.get("currency", "EUR")
-        value_local = price * qty
-        value_eur = await currency.to_eur(value_local, pos_currency)
-        pos["value_local"] = value_local
-        pos["value_eur"] = value_eur
 
-        # Calculate profit percentage
-        if avg_cost and avg_cost > 0:
-            pos["profit_pct"] = ((price - avg_cost) / avg_cost) * 100
-        else:
-            pos["profit_pct"] = 0
+        pos["value_local"] = await pos_calc.calculate_value_local(qty, price)
+        pos["value_eur"] = await pos_calc.calculate_value_eur(qty, price, pos_currency)
+
+        profit_pct, _ = pos_calc.calculate_profit(qty, price, avg_cost)
+        pos["profit_pct"] = profit_pct
 
         # Get security name
-        sec = await db.get_security(symbol)
+        sec = securities_map.get(symbol)
         if sec:
             pos["name"] = sec.get("name", symbol)
 
     # Get cash balances from portfolio (stored in DB)
-    portfolio_obj = Portfolio()
-    cash = await portfolio_obj.get_cash_balances()
+    cash = await portfolio.get_cash_balances()
 
     # Calculate total cash in EUR
-    total_cash_eur = 0
-    for curr, amount in cash.items():
-        total_cash_eur += await currency.to_eur(amount, curr)
+    total_cash_eur = await portfolio.total_cash_eur()
 
     # Calculate total value including cash
     total_eur = total + total_cash_eur
@@ -452,8 +446,6 @@ async def get_portfolio_pnl_history(period: str = "1Y"):
     from datetime import date as date_type
     from datetime import timedelta
 
-    from sentinel.currency import Currency
-
     db = Database()
     currency = Currency()
 
@@ -487,10 +479,6 @@ async def get_portfolio_pnl_history(period: str = "1Y"):
 
     if not snapshots:
         return {"snapshots": [], "summary": None}
-
-    # Get first snapshot's net_deposits for P&L calculation base
-    first_snapshot = snapshots[0]
-    base_net_deposits = first_snapshot.get("net_deposits_eur", 0) or 0
 
     # Build response with P&L percentages
     result_snapshots = []
@@ -529,198 +517,11 @@ async def get_portfolio_pnl_history(period: str = "1Y"):
 
 
 async def _backfill_portfolio_snapshots(db: Database, currency) -> None:
-    """
-    Reconstruct historical portfolio snapshots from trades, prices, and cash flows.
+    """Reconstruct historical portfolio snapshots."""
+    from sentinel.snapshot_service import SnapshotService
 
-    For each trading day from the first trade to today:
-    1. Reconstruct positions from cumulative trades up to that date
-    2. Get closing prices for that date (using historical FX rates)
-    3. Get cumulative deposits/withdrawals from cash_flows
-    4. Calculate: P&L = positions_value - net_deposits
-    """
-    from datetime import date as date_type
-    from datetime import timedelta
-
-    from sentinel.broker import Broker
-
-    logger.info("Backfilling portfolio snapshots...")
-
-    # Get all trades ordered by date
-    trades = await db.get_trades(limit=10000)
-    if not trades:
-        logger.info("No trades found, skipping backfill")
-        return
-
-    # Deduplicate trades by broker_trade_id
-    seen_ids = set()
-    unique_trades = []
-    for trade in trades:
-        trade_id = trade.get("broker_trade_id")
-        if trade_id and trade_id not in seen_ids:
-            seen_ids.add(trade_id)
-            unique_trades.append(trade)
-    trades = unique_trades
-
-    # Filter out FX pairs and options - only keep actual stock positions
-    def is_stock_symbol(symbol: str) -> bool:
-        if "/" in symbol:  # FX pairs like EUR/USD
-            return False
-        if symbol.startswith("+"):  # Options like +VXX.17MAY2024.C12.5
-            return False
-        if symbol.startswith("DGT"):  # Derivatives
-            return False
-        return True
-
-    stock_trades = [t for t in trades if is_stock_symbol(t["symbol"])]
-    logger.info(f"Processing {len(stock_trades)} stock trades (excluded {len(trades) - len(stock_trades)} FX/options)")
-
-    if not stock_trades:
-        logger.info("No stock trades found, skipping backfill")
-        return
-
-    # Get the earliest trade date
-    trades_sorted = sorted(stock_trades, key=lambda t: t["executed_at"])
-    first_trade_date = trades_sorted[0]["executed_at"][:10]
-
-    # Get all unique stock symbols from trades
-    symbols = list(set(t["symbol"] for t in stock_trades))
-    logger.info(f"Symbols to process: {len(symbols)}")
-
-    # Check which symbols are missing price data
-    all_prices_raw = await db.get_prices_bulk(symbols)
-    missing_symbols = [s for s in symbols if not all_prices_raw.get(s)]
-
-    # Fetch missing historical prices from broker
-    if missing_symbols:
-        logger.info(f"Fetching historical prices for {len(missing_symbols)} symbols: {missing_symbols}")
-        broker = Broker()
-        fetched_prices = await broker.get_historical_prices_bulk(missing_symbols, years=3)
-        for symbol, prices in fetched_prices.items():
-            if prices:
-                await db.replace_prices(symbol, prices)
-                all_prices_raw[symbol] = prices
-                logger.info(f"  Fetched {len(prices)} prices for {symbol}")
-
-    # Validate prices using PriceValidator
-    validator = PriceValidator()
-    price_lookup: dict[str, dict[str, float]] = {}
-    for symbol, raw_prices in all_prices_raw.items():
-        if not raw_prices:
-            price_lookup[symbol] = {}
-            continue
-        # Prices come from DB newest-first, validator expects oldest-first
-        validated = validator.validate_and_interpolate(list(reversed(raw_prices)))
-        price_lookup[symbol] = {p["date"]: p["close"] for p in validated}
-
-    # Get securities for currency info
-    securities = await db.get_all_securities(active_only=False)
-    sec_currency_map = {s["symbol"]: s.get("currency", "EUR") for s in securities}
-
-    # For symbols not in securities table, try to infer currency from symbol suffix
-    for symbol in symbols:
-        if symbol not in sec_currency_map:
-            if symbol.endswith(".US"):
-                sec_currency_map[symbol] = "USD"
-            elif symbol.endswith(".EU"):
-                sec_currency_map[symbol] = "EUR"
-            elif symbol.endswith(".GR"):
-                sec_currency_map[symbol] = "EUR"
-            elif symbol.endswith(".AS"):
-                sec_currency_map[symbol] = "HKD"
-            else:
-                sec_currency_map[symbol] = "EUR"
-
-    # Get all cash flows
-    cash_flows = await db.get_cash_flows()
-    cash_flows_sorted = sorted(cash_flows, key=lambda c: c["date"])
-
-    # Generate all dates from first trade to today
-    start_date = date_type.fromisoformat(first_trade_date)
-    end_date = date_type.today()
-    all_dates = []
-    current = start_date
-    while current <= end_date:
-        all_dates.append(current.isoformat())
-        current += timedelta(days=1)
-
-    # Prefetch historical FX rates for all dates and currencies
-    currencies_needed = list(set(sec_currency_map.values()))
-    logger.info(f"Prefetching FX rates for {len(all_dates)} dates, currencies: {currencies_needed}")
-    await currency.prefetch_rates_for_dates(currencies_needed, all_dates)
-
-    # Process each date
-    total_dates = len(all_dates)
-    for i, date_str in enumerate(all_dates):
-        if i % 100 == 0:
-            logger.info(f"Processing date {i + 1}/{total_dates}: {date_str}")
-
-        # Calculate cumulative positions and cost basis up to this date
-        positions: dict[str, float] = {}  # symbol -> quantity
-        cost_basis: dict[str, float] = {}  # symbol -> total cost in EUR
-
-        for trade in trades_sorted:
-            trade_date = trade["executed_at"][:10]
-            if trade_date > date_str:
-                break
-            symbol = trade["symbol"]
-            qty = trade["quantity"]
-            trade_value_local = qty * trade["price"]
-            sec_curr = sec_currency_map.get(symbol, "EUR")
-            # Use historical FX rate for the trade date
-            trade_value_eur = await currency.to_eur_for_date(trade_value_local, sec_curr, trade_date)
-
-            if trade["side"] == "BUY":
-                positions[symbol] = positions.get(symbol, 0) + qty
-                cost_basis[symbol] = cost_basis.get(symbol, 0) + trade_value_eur
-            else:  # SELL
-                prev_qty = positions.get(symbol, 0)
-                if prev_qty > 0:
-                    # Reduce cost basis proportionally
-                    avg_cost_per_unit = cost_basis.get(symbol, 0) / prev_qty
-                    cost_basis[symbol] = cost_basis.get(symbol, 0) - (qty * avg_cost_per_unit)
-                positions[symbol] = positions.get(symbol, 0) - qty
-
-        # Calculate positions value using closing price and historical FX rate
-        positions_value_eur = 0.0
-        for symbol, qty in positions.items():
-            if qty <= 0:
-                continue
-
-            # Get price for this date, or most recent before
-            symbol_prices = price_lookup.get(symbol, {})
-            price = symbol_prices.get(date_str)
-            if price is None:
-                available_dates = sorted(d for d in symbol_prices.keys() if d <= date_str)
-                if available_dates:
-                    price = symbol_prices[available_dates[-1]]
-
-            if price:
-                value_local = qty * price
-                sec_curr = sec_currency_map.get(symbol, "EUR")
-                # Use historical FX rate
-                value_eur = await currency.to_eur_for_date(value_local, sec_curr, date_str)
-                positions_value_eur += value_eur
-
-        # Total cost basis for all open positions
-        total_cost_basis_eur = sum(cost_basis.get(s, 0) for s, q in positions.items() if q > 0)
-
-        # P&L = positions_value - cost_basis (what you paid for what you currently hold)
-        total_value_eur = positions_value_eur
-        unrealized_pnl_eur = total_value_eur - total_cost_basis_eur
-
-        # Store cost basis as net_deposits for the chart (this is what we compare against)
-        net_deposits_eur = total_cost_basis_eur
-
-        await db.upsert_portfolio_snapshot(
-            date=date_str,
-            total_value_eur=round(total_value_eur, 2),
-            positions_value_eur=round(positions_value_eur, 2),
-            cash_eur=0.0,
-            net_deposits_eur=round(net_deposits_eur, 2),
-            unrealized_pnl_eur=round(unrealized_pnl_eur, 2),
-        )
-
-    logger.info("Portfolio snapshots backfill complete")
+    service = SnapshotService(db, currency)
+    await service.backfill()
 
 
 # -----------------------------------------------------------------------------
@@ -780,7 +581,7 @@ async def add_security(data: dict):
     prices_data = await broker.get_historical_prices_bulk([symbol], years=10)
     prices = prices_data.get(symbol, [])
     if prices:
-        await db.replace_prices(symbol, prices)
+        await db.save_prices(symbol, prices)
 
     return {"status": "ok", "symbol": symbol, "name": name, "prices_count": len(prices)}
 
@@ -876,7 +677,6 @@ async def get_unified_view(period: str = "1Y"):
     """
     import json
 
-    from sentinel.currency import Currency
     from sentinel.planner import Planner
 
     db = Database()
@@ -945,10 +745,8 @@ async def get_unified_view(period: str = "1Y"):
     validator = PriceValidator()
     all_prices_validated = {}
     for symbol, raw_prices in all_prices_raw.items():
-        # Prices come from DB newest-first, validator expects oldest-first
-        validated = validator.validate_and_interpolate(list(reversed(raw_prices)))
-        # Reverse back to newest-first for our processing
-        all_prices_validated[symbol] = list(reversed(validated))
+        # Prices come from DB newest-first; validate in descending order
+        all_prices_validated[symbol] = validator.validate_price_series_desc(raw_prices)
 
     # Build unified response
     result = []
@@ -1097,11 +895,8 @@ async def get_prices(symbol: str, days: int = 365):
     """Get historical prices for a security (validated)."""
     security = Security(symbol)
     raw_prices = await security.get_historical_prices(days)
-    # Prices come newest-first, validator expects oldest-first
     validator = PriceValidator()
-    validated = validator.validate_and_interpolate(list(reversed(raw_prices)))
-    # Return newest-first
-    return list(reversed(validated))
+    return validator.validate_price_series_desc(raw_prices)
 
 
 @app.post("/api/securities/{symbol}/sync-prices")
@@ -1205,8 +1000,6 @@ async def get_cashflows():
         net_deposits: deposits - withdrawals
         total_profit: Current portfolio value + cash - net_deposits
     """
-    from sentinel.currency import Currency
-
     db = Database()
     currency = Currency()
 
@@ -1385,7 +1178,7 @@ async def get_available_geographies():
     """Get available geographies from securities and allocation_targets only (no defaults)."""
     db = Database()
     # Only from securities + allocation_targets, NOT defaults
-    existing = await db.get_distinct_categories()
+    existing = await db.get_categories()
     targets = await db.get_allocation_targets()
     target_geos = {t["name"] for t in targets if t["type"] == "geography"}
     geographies = sorted(set(existing["geographies"]) | target_geos)
@@ -1397,7 +1190,7 @@ async def get_available_industries():
     """Get available industries from securities and allocation_targets only (no defaults)."""
     db = Database()
     # Only from securities + allocation_targets, NOT defaults
-    existing = await db.get_distinct_categories()
+    existing = await db.get_categories()
     targets = await db.get_allocation_targets()
     target_inds = {t["name"] for t in targets if t["type"] == "industry"}
     industries = sorted(set(existing["industries"]) | target_inds)
@@ -1480,17 +1273,15 @@ async def get_recommendations(min_value: Optional[float] = None):
 
     # Calculate summary with transaction fees
     current_cash = await portfolio.total_cash_eur()
-    fixed_fee = await settings.get("transaction_fee_fixed", 2.0)
-    pct_fee = await settings.get("transaction_fee_percent", 0.2) / 100
+    fee_calc = FeeCalculator()
+    trades = [{"action": r.action, "value_eur": abs(r.value_delta_eur)} for r in recommendations]
+    fee_summary = await fee_calc.calculate_batch(trades)
 
-    total_sell_value = sum(abs(r.value_delta_eur) for r in recommendations if r.action == "sell")
-    total_buy_value = sum(r.value_delta_eur for r in recommendations if r.action == "buy")
-    num_sells = sum(1 for r in recommendations if r.action == "sell")
-    num_buys = sum(1 for r in recommendations if r.action == "buy")
-
-    sell_fees = num_sells * fixed_fee + total_sell_value * pct_fee
-    buy_fees = num_buys * fixed_fee + total_buy_value * pct_fee
-    total_fees = sell_fees + buy_fees
+    total_sell_value = fee_summary["total_sell_value"]
+    total_buy_value = fee_summary["total_buy_value"]
+    total_fees = fee_summary["total_fees"]
+    sell_fees = fee_summary["sell_fees"]
+    buy_fees = fee_summary["buy_fees"]
 
     # Cash after plan: start + sells - sell_fees - buys - buy_fees
     cash_after_plan = current_cash + total_sell_value - sell_fees - total_buy_value - buy_fees
@@ -1872,7 +1663,7 @@ async def cancel_backtest():
 @app.get("/api/analytics/regime/{symbol}")
 async def get_regime_status(symbol: str):
     """Get current regime for a security."""
-    from sentinel.regime_detector import RegimeDetector
+    from sentinel.regime_hmm import RegimeDetector
 
     detector = RegimeDetector()
     regime = await detector.detect_current_regime(symbol)
@@ -1883,7 +1674,7 @@ async def get_regime_status(symbol: str):
 @app.get("/api/analytics/regimes")
 async def get_all_regimes():
     """Get current regimes for all active securities."""
-    from sentinel.regime_detector import RegimeDetector
+    from sentinel.regime_hmm import RegimeDetector
 
     db = Database()
     detector = RegimeDetector()
@@ -1954,7 +1745,7 @@ async def get_backup_status():
 async def get_pulse_labels():
     """Return geographies and industries from active securities for Pulse classification."""
     db = Database()
-    return await db.get_active_categories()
+    return await db.get_categories(active_only=True)
 
 
 @app.get("/api/version")

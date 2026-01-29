@@ -1,6 +1,6 @@
 """Tests for regime detection and ML prediction dampening."""
 
-from sentinel.ml_regime import apply_regime_dampening, calculate_regime_score
+from sentinel.regime_quote import apply_regime_dampening, calculate_regime_score
 
 
 class TestCalculateRegimeScore:

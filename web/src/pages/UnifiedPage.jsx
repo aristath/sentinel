@@ -9,13 +9,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Stack,
   Group,
-  Grid,
   SegmentedControl,
   Select,
   TextInput,
   Text,
-  Loader,
-  Center,
   Badge,
   Card,
   Button,
@@ -25,11 +22,12 @@ import { SecurityTable } from '../components/SecurityTable';
 import { AddSecurityModal } from '../components/AddSecurityModal';
 import { DeleteSecurityModal } from '../components/DeleteSecurityModal';
 import { SecurityAllocationCard } from '../components/SecurityAllocationCard';
-import { GeographyRadarCard } from '../components/GeographyRadarCard';
-import { IndustryRadarCard } from '../components/IndustryRadarCard';
+import { AllocationRadarCard } from '../components/AllocationRadarCard';
 import { JobsCard } from '../components/JobsCard';
 import { MarketsOpenCard } from '../components/MarketsOpenCard';
 import { PortfolioPnLChart } from '../components/PortfolioPnLChart';
+import LoadingState from '../components/LoadingState';
+import ErrorState from '../components/ErrorState';
 import { getUnifiedView, updateSecurity, addSecurity, deleteSecurity, getPortfolio, getRecommendations, getCashFlows, getPortfolioPnLHistory } from '../api/client';
 
 import { formatEur, formatCurrencySymbol } from '../utils/formatting';
@@ -267,19 +265,11 @@ function UnifiedPage() {
   }, [securities]);
 
   if (isLoading) {
-    return (
-      <Center h={400}>
-        <Loader size="lg" />
-      </Center>
-    );
+    return <LoadingState message="Loading securities..." />;
   }
 
   if (error) {
-    return (
-      <Card shadow="sm" padding="lg" withBorder>
-        <Text c="red">Error loading securities: {error.message}</Text>
-      </Card>
-    );
+    return <ErrorState message={`Error loading securities: ${error.message}`} />;
   }
 
   return (
@@ -292,11 +282,13 @@ function UnifiedPage() {
             securities={securities}
             recommendations={recommendations}
           />
-          <GeographyRadarCard
+          <AllocationRadarCard
+            type="geography"
             securities={securities}
             recommendations={recommendations}
           />
-          <IndustryRadarCard
+          <AllocationRadarCard
+            type="industry"
             securities={securities}
             recommendations={recommendations}
           />

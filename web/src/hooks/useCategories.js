@@ -10,20 +10,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query';
-
-const API_BASE = '/api';
-
-/**
- * Fetch categories from the backend API.
- * @returns {Promise<{geographies: string[], industries: string[]}>}
- */
-async function fetchCategories() {
-  const response = await fetch(`${API_BASE}/meta/categories`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch categories');
-  }
-  return response.json();
-}
+import { getCategories } from '../api/client';
 
 /**
  * Hook to fetch and cache categories.
@@ -33,30 +20,10 @@ async function fetchCategories() {
 export function useCategories() {
   return useQuery({
     queryKey: ['categories'],
-    queryFn: fetchCategories,
+    queryFn: getCategories,
     staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     gcTime: 30 * 60 * 1000, // Keep in cache for 30 minutes
   });
-}
-
-/**
- * Get geography options formatted for Mantine TagsInput.
- *
- * @param {string[]} geographies - Array of geography values
- * @returns {string[]} Options for TagsInput component
- */
-export function getGeographyOptions(geographies = []) {
-  return geographies;
-}
-
-/**
- * Get industry options formatted for Mantine TagsInput.
- *
- * @param {string[]} industries - Array of industry values
- * @returns {string[]} Options for TagsInput component
- */
-export function getIndustryOptions(industries = []) {
-  return industries;
 }
 
 /**

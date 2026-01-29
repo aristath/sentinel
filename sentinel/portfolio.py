@@ -16,6 +16,8 @@ from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.security import Security
 from sentinel.settings import Settings
+from sentinel.utils.positions import PositionCalculator
+from sentinel.utils.strings import parse_csv_field
 
 
 class Portfolio:
@@ -73,22 +75,16 @@ class Portfolio:
         """Get total portfolio value in specified currency (default EUR)."""
         positions = await self._db.get_all_positions()
 
-        # Get cash balances (from memory or DB)
-        cash_balances = await self.get_cash_balances()
-
         # Sum cash in all currencies, converted to EUR
-        total = 0.0
-        for curr, amount in cash_balances.items():
-            total += await self._currency.to_eur(amount, curr)
+        total = await self.total_cash_eur()
 
         # Sum position values, converted to EUR
+        pos_calc = PositionCalculator(currency_converter=self._currency)
         for pos in positions:
-            price = pos.get("current_price", 0)
-            qty = pos.get("quantity", 0)
-            pos_currency = pos.get("currency", "EUR")
-            value_in_local = price * qty
-            value_in_eur = await self._currency.to_eur(value_in_local, pos_currency)
-            total += value_in_eur
+            value_eur = await pos_calc.calculate_value_eur(
+                pos.get("quantity", 0), pos.get("current_price", 0), pos.get("currency", "EUR")
+            )
+            total += value_eur
 
         return total
 
@@ -153,25 +149,27 @@ class Portfolio:
         by_geography = {}
         by_industry = {}
 
+        # Batch-fetch all securities to avoid N+1 queries
+        all_securities = await self._db.get_all_securities(active_only=False)
+        securities_map = {s["symbol"]: s for s in all_securities}
+
+        pos_calc = PositionCalculator(currency_converter=self._currency)
         for pos in positions:
             symbol = pos["symbol"]
-            price = pos.get("current_price", 0)
             qty = pos.get("quantity", 0)
+            price = pos.get("current_price", 0)
             pos_currency = pos.get("currency", "EUR")
 
-            # Convert to EUR
-            value_local = price * qty
-            value_eur = await self._currency.to_eur(value_local, pos_currency)
+            value_eur = await pos_calc.calculate_value_eur(qty, price, pos_currency)
             pct = value_eur / total
 
             by_security[symbol] = pct
 
             # Get security metadata
-            sec_data = await self._db.get_security(symbol)
+            sec_data = securities_map.get(symbol)
             if sec_data:
                 # Handle comma-separated geographies (split equally)
-                geo_str = sec_data.get("geography", "") or ""
-                geos = [g.strip() for g in geo_str.split(",") if g.strip()]
+                geos = parse_csv_field(sec_data.get("geography"))
                 if not geos:
                     geos = ["Unknown"]
                 geo_weight = pct / len(geos)
@@ -179,8 +177,7 @@ class Portfolio:
                     by_geography[geo] = by_geography.get(geo, 0) + geo_weight
 
                 # Handle comma-separated industries (split equally)
-                ind_str = sec_data.get("industry", "") or ""
-                inds = [i.strip() for i in ind_str.split(",") if i.strip()]
+                inds = parse_csv_field(sec_data.get("industry"))
                 if not inds:
                     inds = ["Unknown"]
                 ind_weight = pct / len(inds)

@@ -19,42 +19,7 @@ import { useDebouncedCallback } from '@mantine/hooks';
 import { IconClock, IconActivity, IconHistory, IconPlayerPlay } from '@tabler/icons-react';
 import { getJobSchedules, updateJobSchedule, runJob, getSchedulerStatus, getJobHistory } from '../api/client';
 import { IntervalPicker } from './IntervalPicker';
-
-function formatTime(isoString) {
-  if (!isoString) return 'Never';
-  const date = new Date(isoString);
-  return date.toLocaleString();
-}
-
-function formatRelativeTime(isoString) {
-  if (!isoString) return 'Never';
-  const date = new Date(isoString);
-  const now = new Date();
-  const diff = date - now;
-
-  if (diff < 0) {
-    // In the past
-    const mins = Math.abs(Math.round(diff / 60000));
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return formatTime(isoString);
-  }
-
-  // In the future
-  const mins = Math.round(diff / 60000);
-  if (mins < 60) return `in ${mins}m`;
-  const hours = Math.round(mins / 60);
-  if (hours < 24) return `in ${hours}h`;
-  return formatTime(isoString);
-}
-
-function formatDuration(ms) {
-  if (!ms) return '-';
-  if (ms < 1000) return `${ms}ms`;
-  if (ms < 60000) return `${(ms / 1000).toFixed(1)}s`;
-  return `${(ms / 60000).toFixed(1)}m`;
-}
+import { formatTime, formatRelativeTime, formatDuration } from '../utils/dateFormatting';
 
 function JobScheduleRow({ job, onUpdate, onRun, isUpdating }) {
   const debouncedUpdateInterval = useDebouncedCallback((val) => {

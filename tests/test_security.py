@@ -328,7 +328,7 @@ class TestMarketData:
     async def test_sync_prices(self):
         """sync_prices() fetches from broker and stores in database."""
         db = MagicMock()
-        db.replace_prices = AsyncMock()
+        db.save_prices = AsyncMock()
         broker = MagicMock()
         broker.get_historical_prices_bulk = AsyncMock(
             return_value={"AAPL.US": [{"date": "2024-01-01", "close": 150.00}] * 100}
@@ -338,7 +338,7 @@ class TestMarketData:
         count = await security.sync_prices(days=365)
 
         assert count == 100
-        db.replace_prices.assert_called_once()
+        db.save_prices.assert_called_once()
 
 
 class TestTradingBuy:
@@ -844,25 +844,20 @@ class TestScoring:
 
     @pytest.mark.asyncio
     async def test_get_score_returns_score(self):
-        """get_score() returns the calculated score."""
+        """get_score() delegates to db.get_score()."""
         db = MagicMock()
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone = AsyncMock(return_value={"score": 0.75})
-        db.conn = MagicMock()
-        db.conn.execute = AsyncMock(return_value=mock_cursor)
+        db.get_score = AsyncMock(return_value=0.75)
 
         security = Security("AAPL.US", db=db)
         score = await security.get_score()
         assert score == 0.75
+        db.get_score.assert_awaited_once_with("AAPL.US")
 
     @pytest.mark.asyncio
     async def test_get_score_returns_none_when_not_scored(self):
         """get_score() returns None when no score exists."""
         db = MagicMock()
-        mock_cursor = MagicMock()
-        mock_cursor.fetchone = AsyncMock(return_value=None)
-        db.conn = MagicMock()
-        db.conn.execute = AsyncMock(return_value=mock_cursor)
+        db.get_score = AsyncMock(return_value=None)
 
         security = Security("AAPL.US", db=db)
         score = await security.get_score()

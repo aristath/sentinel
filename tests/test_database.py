@@ -327,8 +327,8 @@ class TestPrices:
         assert result[0]["close"] == 105
 
     @pytest.mark.asyncio
-    async def test_replace_prices(self, temp_db):
-        """Replace prices merges new data with existing (upsert)."""
+    async def test_save_prices_merges(self, temp_db):
+        """save_prices merges new data with existing (upsert)."""
         await temp_db.save_prices(
             "TEST",
             [
@@ -338,7 +338,7 @@ class TestPrices:
         )
 
         # Upsert: update existing date, add new date
-        await temp_db.replace_prices(
+        await temp_db.save_prices(
             "TEST",
             [
                 {"date": "2024-01-02", "close": 105},  # Update existing
@@ -558,3 +558,119 @@ class TestSchemaInitialization:
 
         for table in ml_tables:
             assert table in tables, f"Missing ML table: {table}"
+
+
+class TestCategories:
+    """Tests for get_categories() which returns geography/industry values from securities."""
+
+    @pytest.mark.asyncio
+    async def test_get_categories_all(self, temp_db):
+        """get_categories() with no filter returns both geographies and industries."""
+        await temp_db.upsert_security("SYM1", geography="Europe", industry="Technology", active=1)
+        await temp_db.upsert_security("SYM2", geography="US", industry="Finance", active=1)
+
+        result = await temp_db.get_categories()
+
+        assert "Europe" in result["geographies"]
+        assert "US" in result["geographies"]
+        assert "Technology" in result["industries"]
+        assert "Finance" in result["industries"]
+
+    @pytest.mark.asyncio
+    async def test_get_categories_active_only(self, temp_db):
+        """get_categories(active_only=True) returns only categories from active securities."""
+        await temp_db.upsert_security("ACTIVE", geography="Europe", industry="Technology", active=1)
+        await temp_db.upsert_security("INACTIVE", geography="Asia", industry="Energy", active=0)
+
+        result = await temp_db.get_categories(active_only=True)
+
+        assert "Europe" in result["geographies"]
+        assert "Technology" in result["industries"]
+        assert "Asia" not in result["geographies"]
+        assert "Energy" not in result["industries"]
+
+    @pytest.mark.asyncio
+    async def test_get_categories_csv_splitting(self, temp_db):
+        """get_categories() splits CSV geography/industry values into separate entries."""
+        await temp_db.upsert_security("SYM1", geography="US, Europe", industry="Technology", active=1)
+
+        result = await temp_db.get_categories()
+
+        assert "US" in result["geographies"]
+        assert "Europe" in result["geographies"]
+
+
+class TestBuildTradesWhere:
+    """Tests for _build_trades_where() helper method."""
+
+    def test_build_trades_where_no_filters(self, temp_db):
+        """No filters returns base WHERE clause."""
+        where, params = temp_db._build_trades_where()
+        assert where == "WHERE 1=1"
+        assert params == []
+
+    def test_build_trades_where_symbol(self, temp_db):
+        """Symbol filter adds AND symbol = ? clause."""
+        where, params = temp_db._build_trades_where(symbol="TEST")
+        assert "AND symbol = ?" in where
+        assert "TEST" in params
+
+    def test_build_trades_where_all_filters(self, temp_db):
+        """All filters produce all expected AND conditions."""
+        where, params = temp_db._build_trades_where(
+            symbol="TEST",
+            side="BUY",
+            start_date="2024-01-01",
+            end_date="2024-01-15",
+        )
+        assert "AND symbol = ?" in where
+        assert "AND side = ?" in where
+        assert "AND executed_at >= ?" in where
+        assert "AND executed_at <= ?" in where
+        assert "TEST" in params
+        assert "BUY" in params
+        assert "2024-01-01" in params
+
+    def test_build_trades_where_end_date_appends_time(self, temp_db):
+        """end_date parameter has T23:59:59 appended to include the full day."""
+        where, params = temp_db._build_trades_where(end_date="2024-01-15")
+        assert "2024-01-15T23:59:59" in params
+
+
+class TestScores:
+    """Tests for score retrieval methods."""
+
+    @pytest.mark.asyncio
+    async def test_get_score_existing(self, temp_db):
+        """get_score() returns the score float for an existing symbol."""
+        await temp_db.conn.execute(
+            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, datetime('now'))",
+            ("TEST", 0.75),
+        )
+        await temp_db.conn.commit()
+
+        result = await temp_db.get_score("TEST")
+        assert result == 0.75
+
+    @pytest.mark.asyncio
+    async def test_get_score_nonexistent(self, temp_db):
+        """get_score() returns None for a symbol with no score."""
+        result = await temp_db.get_score("NONEXISTENT")
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_scores_multiple(self, temp_db):
+        """get_scores() returns a dict mapping symbol to score for multiple symbols."""
+        await temp_db.conn.execute(
+            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, datetime('now'))",
+            ("SYM1", 0.5),
+        )
+        await temp_db.conn.execute(
+            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, datetime('now'))",
+            ("SYM2", 0.8),
+        )
+        await temp_db.conn.commit()
+
+        result = await temp_db.get_scores(["SYM1", "SYM2"])
+        assert result["SYM1"] == 0.5
+        assert result["SYM2"] == 0.8

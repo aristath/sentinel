@@ -15,9 +15,9 @@ logger = logging.getLogger(__name__)
 class MLMonitor:
     """Monitor ML prediction performance per symbol."""
 
-    def __init__(self):
-        self.db = Database()
-        self.settings = Settings()
+    def __init__(self, db=None, settings=None):
+        self.db = db or Database()
+        self.settings = settings or Settings()
 
     async def track_performance(self) -> Dict:
         """
@@ -26,9 +26,8 @@ class MLMonitor:
         Process:
         1. Get predictions from 14+ days ago (so we have actual returns)
         2. Group by symbol
-        3. For each symbol: calculate error metrics (MAE, RMSE, bias)
-        4. Store per-symbol metrics in performance tracking table
-        5. Check for per-symbol drift
+        3. For each symbol: delegate to track_symbol_performance()
+        4. Aggregate results
 
         Returns:
             {
@@ -49,15 +48,15 @@ class MLMonitor:
         end_date = (datetime.now() - timedelta(days=horizon_days)).isoformat()
 
         query = """
-            SELECT symbol, predicted_at, predicted_return
+            SELECT DISTINCT symbol
             FROM ml_predictions
             WHERE predicted_at >= ? AND predicted_at <= ?
-            ORDER BY symbol, predicted_at
+            ORDER BY symbol
         """
         cursor = await self.db.conn.execute(query, (start_date, end_date))
-        predictions = list(await cursor.fetchall())
+        rows = list(await cursor.fetchall())
 
-        if len(predictions) == 0:
+        if len(rows) == 0:
             logger.info("No predictions to evaluate yet")
             return {
                 "status": "success",
@@ -67,47 +66,22 @@ class MLMonitor:
                 "message": "No predictions to evaluate yet",
             }
 
-        # Group predictions by symbol
-        symbol_predictions: Dict[str, List] = {}
-        for pred_row in predictions:
-            symbol = pred_row["symbol"]
-            if symbol not in symbol_predictions:
-                symbol_predictions[symbol] = []
-            symbol_predictions[symbol].append(pred_row)
+        symbols = [row["symbol"] for row in rows]
 
-        # Track metrics per symbol
-        tracked_at = datetime.now().isoformat()
+        # Track metrics per symbol by delegating to track_symbol_performance
         per_symbol_metrics = {}
         drift_detected = []
         total_evaluated = 0
 
-        for symbol, preds in symbol_predictions.items():
-            metrics = await self._evaluate_symbol(symbol, preds, horizon_days)
+        for symbol in symbols:
+            metrics = await self.track_symbol_performance(symbol)
 
-            if metrics and metrics["predictions_evaluated"] > 0:
+            if metrics and metrics.get("predictions_evaluated", 0) > 0:
                 per_symbol_metrics[symbol] = metrics
                 total_evaluated += metrics["predictions_evaluated"]
 
-                # Store metrics
-                await self._store_symbol_metrics(symbol, tracked_at, metrics)
-
-                # Check drift for this symbol
-                is_drifting = await self._check_symbol_drift(
-                    symbol, metrics["mean_absolute_error"], metrics["root_mean_squared_error"]
-                )
-
-                if is_drifting:
+                if metrics.get("drift_detected"):
                     drift_detected.append(symbol)
-                    logger.warning(f"{symbol}: Drift detected! MAE={metrics['mean_absolute_error']:.4f}")
-
-                    # Update drift flag
-                    await self.db.conn.execute(
-                        """UPDATE ml_performance_tracking
-                           SET drift_detected = 1
-                           WHERE symbol = ? AND tracked_at = ?""",
-                        (symbol, tracked_at),
-                    )
-                    await self.db.conn.commit()
 
         logger.info(f"Performance tracked for {len(per_symbol_metrics)} symbols, {total_evaluated} predictions")
         if drift_detected:

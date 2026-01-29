@@ -25,11 +25,21 @@ class Currency:
     """Handles currency conversions using Tradernet rates."""
 
     CURRENCIES = RATE_FETCH_CURRENCIES
+    _instance: "Currency | None" = None
+    _db: "Database"
+    _settings: "Settings"
+    _rates_cache: dict | None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._db = Database()
+            cls._instance._settings = Settings()
+            cls._instance._rates_cache = None
+        return cls._instance
 
     def __init__(self):
-        self._db = Database()
-        self._settings = Settings()
-        self._rates_cache: Optional[dict] = None
+        pass  # All init done in __new__
 
     async def sync_rates(self) -> dict:
         """Fetch current exchange rates from Tradernet API."""

@@ -153,7 +153,6 @@ class FeatureExtractor:
             db: Optional Database instance for market context lookups
         """
         self.db = db
-        self.feature_names = FEATURE_NAMES  # For backward compatibility
         self._market_cache: Dict[str, pd.DataFrame] = {}
         self._aggregate_cache: Dict[str, pd.DataFrame] = {}
 
@@ -335,13 +334,6 @@ class FeatureExtractor:
         except Exception as e:
             logger.debug(f"Return calculation failed for {periods} periods: {e}")
             return 0.0
-
-    def get_default_features(self) -> Dict[str, float]:
-        """Return default feature values when data insufficient."""
-        return DEFAULT_FEATURES.copy()
-
-    # Backward compatibility alias
-    _get_default_features = get_default_features
 
     async def _extract_aggregate_features(
         self,

@@ -44,7 +44,7 @@ async def sync_prices(db, broker, cache) -> None:
 
     for symbol, data in prices.items():
         if data and len(data) > 0:
-            await db.replace_prices(symbol, data)
+            await db.save_prices(symbol, data)
             synced += 1
 
     logger.info(f"Price sync complete: {synced}/{len(symbols)} securities updated")

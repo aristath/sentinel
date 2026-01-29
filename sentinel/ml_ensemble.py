@@ -20,6 +20,20 @@ from sentinel.ml_features import FEATURE_NAMES, NUM_FEATURES
 logger = logging.getLogger(__name__)
 
 
+def _compute_regression_metrics(predictions: np.ndarray, labels: np.ndarray) -> tuple[float, float, float]:
+    """Compute MAE, RMSE, and R² for regression predictions.
+
+    Returns:
+        Tuple of (mae, rmse, r2)
+    """
+    mae = float(np.mean(np.abs(predictions - labels)))
+    rmse = float(np.sqrt(np.mean((predictions - labels) ** 2)))
+    ss_res = np.sum((labels - predictions) ** 2)
+    ss_tot = np.sum((labels - np.mean(labels)) ** 2)
+    r2 = float(1 - (ss_res / ss_tot)) if ss_tot > 0 else 0.0
+    return mae, rmse, r2
+
+
 # =============================================================================
 # NumPy Neural Network Implementation
 # =============================================================================
@@ -520,19 +534,13 @@ class NeuralNetReturnPredictor:
         self.model.eval_mode()
         val_predictions = self.model.forward(X_val_scaled).flatten()
 
-        val_mae = np.mean(np.abs(val_predictions - y_val))
-        val_rmse = np.sqrt(np.mean((val_predictions - y_val) ** 2))
-
-        # Calculate R²
-        ss_res = np.sum((y_val - val_predictions) ** 2)
-        ss_tot = np.sum((y_val - np.mean(y_val)) ** 2)
-        val_r2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+        val_mae, val_rmse, val_r2 = _compute_regression_metrics(val_predictions, y_val)
 
         return {
             "history": history,
-            "val_mae": float(val_mae),
-            "val_rmse": float(val_rmse),
-            "val_r2": float(val_r2),
+            "val_mae": val_mae,
+            "val_rmse": val_rmse,
+            "val_r2": val_r2,
             "epochs_trained": len(history["loss"]),
         }
 
@@ -737,13 +745,7 @@ class XGBoostReturnPredictor:
 
         # Calculate metrics on validation set
         val_predictions = self.model.predict(X_val_scaled)
-        val_mae = np.mean(np.abs(val_predictions - y_val))
-        val_rmse = np.sqrt(np.mean((val_predictions - y_val) ** 2))
-
-        # Calculate R²
-        ss_res = np.sum((y_val - val_predictions) ** 2)
-        ss_tot = np.sum((y_val - np.mean(y_val)) ** 2)
-        val_r2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+        val_mae, val_rmse, val_r2 = _compute_regression_metrics(val_predictions, y_val)
 
         # Extract feature importance
         self.feature_importance = self._extract_feature_importance()
@@ -908,13 +910,7 @@ class EnsembleBlender:
 
         ensemble_preds = self.nn_weight * nn_preds + self.xgb_weight * xgb_preds
 
-        ensemble_mae = np.mean(np.abs(ensemble_preds - y_val_arr))
-        ensemble_rmse = np.sqrt(np.mean((ensemble_preds - y_val_arr) ** 2))
-
-        # Calculate R²
-        ss_res = np.sum((y_val_arr - ensemble_preds) ** 2)
-        ss_tot = np.sum((y_val_arr - np.mean(y_val_arr)) ** 2)
-        ensemble_r2 = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
+        ensemble_mae, ensemble_rmse, ensemble_r2 = _compute_regression_metrics(ensemble_preds, y_val_arr)
 
         logger.info(f"Ensemble validation: MAE={ensemble_mae:.4f}, RMSE={ensemble_rmse:.4f}, R²={ensemble_r2:.4f}")
 

@@ -125,7 +125,7 @@ class Security:
         prices_data = await self._broker.get_historical_prices_bulk([self.symbol], years=years)
         prices = prices_data.get(self.symbol, [])
         if prices:
-            await self._db.replace_prices(self.symbol, prices)
+            await self._db.save_prices(self.symbol, prices)
         return len(prices)
 
     async def get_historical_prices(self, days: int | None = None) -> list[dict]:
@@ -321,9 +321,7 @@ class Security:
 
     async def get_score(self) -> Optional[float]:
         """Get the calculated score for this security."""
-        cursor = await self._db.conn.execute("SELECT score FROM scores WHERE symbol = ?", (self.symbol,))
-        row = await cursor.fetchone()
-        return row["score"] if row else None
+        return await self._db.get_score(self.symbol)
 
     async def set_score(self, score: float, components: dict | None = None) -> None:
         """Set the calculated score for this security."""

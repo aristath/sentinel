@@ -32,6 +32,7 @@ from sentinel.analyzer import Analyzer
 from sentinel.broker import Broker
 from sentinel.database import Database
 from sentinel.database.simulation import SimulationDatabase
+from sentinel.price_validator import PriceValidator
 
 
 class RebalanceFrequency:
@@ -405,6 +406,7 @@ class BacktestBroker:
         self._simulation_date: str = ""
         # Cache validated prices per symbol: {symbol: {date: close_price}}
         self._validated_prices: dict[str, dict[str, float]] = {}
+        self._price_validator = PriceValidator()
 
     def set_simulation_date(self, date_str: str):
         """Set the current simulation date for price lookups."""
@@ -472,8 +474,6 @@ class BacktestBroker:
         This matches how the production app handles price data - it validates
         and interpolates corrupted prices before use.
         """
-        from sentinel.price_validator import PriceValidator
-
         cursor = await self._db.conn.execute(
             """SELECT date, open, high, low, close, volume
                FROM prices WHERE symbol = ?
@@ -490,8 +490,7 @@ class BacktestBroker:
         raw_prices = [dict(row) for row in rows]
 
         # Validate and interpolate using the app's PriceValidator
-        validator = PriceValidator()
-        validated = validator.validate_and_interpolate(raw_prices)
+        validated = self._price_validator.validate_and_interpolate(raw_prices)
 
         # Cache as date -> close price mapping
         self._validated_prices[symbol] = {p["date"]: p["close"] for p in validated if p.get("close")}
@@ -856,6 +855,8 @@ class Backtester:
             broker_trade_id=broker_trade_id,
             symbol=symbol,
             side=action.upper(),
+            quantity=quantity,
+            price=price,
             executed_at=self._simulation_date,
             raw_data={
                 "id": broker_trade_id,

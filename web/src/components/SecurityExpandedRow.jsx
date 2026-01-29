@@ -7,7 +7,7 @@
  * - Controls (buy/sell toggles, multiplier, geography/industry)
  * - ML Prediction settings
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Group,
   Stack,
@@ -28,101 +28,42 @@ import { IconTrash, IconAlertTriangle, IconBrain, IconPlayerPlay, IconRefresh } 
 import { SecurityChart } from './SecurityChart';
 import { catppuccin } from '../theme';
 import { formatCurrencySymbol as formatCurrency, formatPercent } from '../utils/formatting';
-import { useCategories, getGeographyOptions, getIndustryOptions, parseCommaSeparated } from '../hooks/useCategories';
+import { useCategories, parseCommaSeparated } from '../hooks/useCategories';
+import { useMLTraining } from '../hooks/useMLTraining';
 
 export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [localMultiplier, setLocalMultiplier] = useState(null);
   const [localBlendRatio, setLocalBlendRatio] = useState(null);
-  const [mlTraining, setMlTraining] = useState(false);
-  const [mlProgress, setMlProgress] = useState(0);
-  const [mlMessage, setMlMessage] = useState('');
-  const [mlError, setMlError] = useState(null);
-  const [mlStatus, setMlStatus] = useState(null);
-  const eventSourceRef = useRef(null);
   const { data: categories } = useCategories();
+
+  const {
+    status: mlStatus,
+    train: handleTrainMl,
+    isTraining: mlTraining,
+    progress: mlProgress,
+    message: mlMessage,
+    error: mlError,
+    setError: setMlError,
+    deleteTraining,
+  } = useMLTraining(security?.symbol, { enabled: security?.ml_enabled === 1 });
 
   // Reset local state when security changes
   useEffect(() => {
     setLocalMultiplier(null);
     setLocalBlendRatio(null);
     setMlError(null);
-  }, [security?.symbol]);
-
-  // Fetch ML training status on mount and when ml_enabled changes
-  useEffect(() => {
-    if (security?.ml_enabled) {
-      fetch(`/api/ml/training-status/${security.symbol}`)
-        .then(res => res.json())
-        .then(setMlStatus)
-        .catch(() => {});
-    }
-  }, [security?.symbol, security?.ml_enabled]);
-
-  // Cleanup event source on unmount
-  useEffect(() => {
-    return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-    };
-  }, []);
+  }, [security?.symbol, setMlError]);
 
   if (!security) return null;
 
-  const handleTrainMl = async () => {
-    setMlTraining(true);
-    setMlProgress(0);
-    setMlMessage('Starting...');
-    setMlError(null);
-
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-
-    const eventSource = new EventSource(`/api/ml/train/${security.symbol}/stream`);
-    eventSourceRef.current = eventSource;
-
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-
-      if (data.error) {
-        setMlError(data.error);
-        setMlTraining(false);
-        eventSource.close();
-        return;
-      }
-
-      setMlProgress(data.progress || 0);
-      setMlMessage(data.message || '');
-
-      if (data.complete) {
-        setMlTraining(false);
-        setMlStatus({ model_exists: true, model_info: data.metrics });
-        eventSource.close();
-      }
-    };
-
-    eventSource.onerror = () => {
-      setMlError('Connection lost');
-      setMlTraining(false);
-      eventSource.close();
-    };
-  };
-
-  const handleDeleteMlData = async () => {
+  const handleDeleteMlData = () => {
     if (!confirm(`Delete all ML training data for ${security.symbol}?`)) return;
-
-    try {
-      await fetch(`/api/ml/training-data/${security.symbol}`, { method: 'DELETE' });
-      setMlStatus({ model_exists: false, sample_count: 0 });
-    } catch (e) {
-      setMlError('Failed to delete training data');
-    }
+    deleteTraining();
   };
 
-  const geographyOptions = getGeographyOptions(categories?.geographies || []);
-  const industryOptions = getIndustryOptions(categories?.industries || []);
+  const geographyOptions = categories?.geographies || [];
+  const industryOptions = categories?.industries || [];
 
   const handleUpdate = async (field, value) => {
     setIsUpdating(true);

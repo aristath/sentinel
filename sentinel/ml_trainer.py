@@ -9,7 +9,7 @@ import pandas as pd
 
 from sentinel.analyzer import Analyzer
 from sentinel.database import Database
-from sentinel.ml_features import FeatureExtractor
+from sentinel.ml_features import FEATURE_NAMES, FeatureExtractor
 from sentinel.price_validator import PriceValidator
 from sentinel.settings import Settings
 
@@ -19,11 +19,12 @@ logger = logging.getLogger(__name__)
 class TrainingDataGenerator:
     """Generate ML training data from historical price data."""
 
-    def __init__(self):
-        self.db = Database()
+    def __init__(self, db=None, settings=None):
+        self.db = db or Database()
         self.feature_extractor = FeatureExtractor(db=self.db)
-        self.settings = Settings()
-        self.analyzer = Analyzer()
+        self.settings = settings or Settings()
+        self.analyzer = Analyzer(db=self.db)
+        self.price_validator = PriceValidator()
 
     async def generate_training_data(
         self,
@@ -116,6 +117,51 @@ class TrainingDataGenerator:
 
         return df
 
+    async def _create_sample_at_index(
+        self,
+        symbol: str,
+        price_data,
+        i: int,
+        prediction_horizon_days: int,
+        security_data: dict | None,
+    ) -> dict | None:
+        """Create a single training sample at index i in price_data.
+
+        Returns sample dict or None if creation fails.
+        """
+        sample_date = price_data.iloc[i]["date"]
+        window_data = price_data.iloc[: i + 1].copy()
+
+        try:
+            features = await self.feature_extractor.extract_features(
+                symbol=symbol,
+                date=sample_date,
+                price_data=window_data,
+                sentiment_score=None,
+                security_data=security_data,
+            )
+
+            current_price = price_data.iloc[i]["close"]
+            future_price = price_data.iloc[i + prediction_horizon_days]["close"]
+
+            if pd.isna(current_price) or pd.isna(future_price) or current_price <= 0:
+                return None
+
+            future_return = (future_price / current_price) - 1.0
+
+            return {
+                "sample_id": str(uuid.uuid4()),
+                "symbol": symbol,
+                "sample_date": sample_date,
+                **features,
+                "future_return": future_return,
+                "prediction_horizon_days": prediction_horizon_days,
+                "created_at": datetime.now().isoformat(),
+            }
+        except Exception as e:
+            logger.debug(f"{symbol} at {sample_date}: Feature extraction failed: {e}")
+            return None
+
     async def _create_samples_for_symbol(
         self,
         symbol: str,
@@ -138,46 +184,9 @@ class TrainingDataGenerator:
 
         # Rolling windows (step = 7 days for weekly samples)
         for i in range(200, len(price_data) - prediction_horizon_days, 7):
-            sample_date = price_data.iloc[i]["date"]
-
-            # Extract features at this point in time
-            window_data = price_data.iloc[: i + 1].copy()  # Only data up to this point
-
-            try:
-                # Extract features (per-security with aggregate market context)
-                features = await self.feature_extractor.extract_features(
-                    symbol=symbol,
-                    date=sample_date,
-                    price_data=window_data,
-                    sentiment_score=None,
-                    security_data=security_data,
-                )
-
-                # Calculate label (future return)
-                current_price = price_data.iloc[i]["close"]
-                future_price = price_data.iloc[i + prediction_horizon_days]["close"]
-
-                if pd.isna(current_price) or pd.isna(future_price) or current_price <= 0:
-                    continue
-
-                future_return = (future_price / current_price) - 1.0
-
-                # Create sample
-                sample = {
-                    "sample_id": str(uuid.uuid4()),
-                    "symbol": symbol,
-                    "sample_date": sample_date,
-                    **features,
-                    "future_return": future_return,
-                    "prediction_horizon_days": prediction_horizon_days,
-                    "created_at": datetime.now().isoformat(),
-                }
-
+            sample = await self._create_sample_at_index(symbol, price_data, i, prediction_horizon_days, security_data)
+            if sample:
                 samples.append(sample)
-
-            except Exception as e:
-                logger.debug(f"{symbol} at {sample_date}: Feature extraction failed: {e}")
-                continue
 
         return samples
 
@@ -208,8 +217,7 @@ class TrainingDataGenerator:
                         price[col] = 0.0
 
         # Validate and interpolate abnormal prices (spikes, crashes, etc.)
-        validator = PriceValidator()
-        validated_prices = validator.validate_and_interpolate(price_list)
+        validated_prices = self.price_validator.validate_and_interpolate(price_list)
 
         df = pd.DataFrame(validated_prices, columns=["date", "open", "high", "low", "close", "volume"])
 
@@ -227,35 +235,11 @@ class TrainingDataGenerator:
 
         logger.info(f"Storing {len(df)} samples in database...")
 
-        # 20 features per security (14 core + 6 aggregate market context)
-        db_columns = [
-            "sample_id",
-            "symbol",
-            "sample_date",
-            "return_1d",
-            "return_5d",
-            "return_20d",
-            "return_60d",
-            "price_normalized",
-            "volatility_10d",
-            "volatility_30d",
-            "atr_14d",
-            "volume_normalized",
-            "volume_trend",
-            "rsi_14",
-            "macd",
-            "bollinger_position",
-            "sentiment_score",
-            "country_agg_momentum",
-            "country_agg_rsi",
-            "country_agg_volatility",
-            "industry_agg_momentum",
-            "industry_agg_rsi",
-            "industry_agg_volatility",
-            "future_return",
-            "prediction_horizon_days",
-            "created_at",
-        ]
+        db_columns = (
+            ["sample_id", "symbol", "sample_date"]
+            + list(FEATURE_NAMES)
+            + ["future_return", "prediction_horizon_days", "created_at"]
+        )
 
         # Batch insert
         batch_size = 30
@@ -381,41 +365,11 @@ class TrainingDataGenerator:
             sample_end_idx = len(price_data) - prediction_horizon_days
 
             for i in range(sample_start_idx, sample_end_idx, 7):
-                sample_date = price_data.iloc[i]["date"]
-                window_data = price_data.iloc[: i + 1].copy()
-
-                try:
-                    # Extract features (per-security with aggregate market context)
-                    features = await self.feature_extractor.extract_features(
-                        symbol=symbol,
-                        date=sample_date,
-                        price_data=window_data,
-                        sentiment_score=None,
-                        security_data=security_data,
-                    )
-
-                    current_price = price_data.iloc[i]["close"]
-                    future_price = price_data.iloc[i + prediction_horizon_days]["close"]
-
-                    if pd.isna(current_price) or pd.isna(future_price) or current_price <= 0:
-                        continue
-
-                    future_return = (future_price / current_price) - 1.0
-
-                    sample = {
-                        "sample_id": str(uuid.uuid4()),
-                        "symbol": symbol,
-                        "sample_date": sample_date,
-                        **features,
-                        "future_return": future_return,
-                        "prediction_horizon_days": prediction_horizon_days,
-                        "created_at": datetime.now().isoformat(),
-                    }
+                sample = await self._create_sample_at_index(
+                    symbol, price_data, i, prediction_horizon_days, security_data
+                )
+                if sample:
                     all_samples.append(sample)
-
-                except Exception as e:
-                    logger.debug(f"{symbol}: Sample creation failed: {e}")
-                    continue
 
         df = pd.DataFrame(all_samples)
 

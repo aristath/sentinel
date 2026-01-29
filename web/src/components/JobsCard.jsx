@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Card, Group, Text, Badge, Loader, Tooltip } from '@mantine/core';
 import { IconCheck, IconX } from '@tabler/icons-react';
 import { getSchedulerStatus, runJob } from '../api/client';
+import { formatTimeUntil } from '../utils/dateFormatting';
 
 function formatJobName(jobType) {
   if (!jobType) return '';
@@ -16,31 +17,12 @@ function formatJobName(jobType) {
   return parts[parts.length - 1];
 }
 
-function formatRelativeTime(isoString) {
-  if (!isoString) return null;
-
-  const date = new Date(isoString);
-  const now = new Date();
-  const diff = date - now;
-
-  // In the future
-  if (diff > 0) {
-    const mins = Math.round(diff / 60000);
-    if (mins < 60) return `${mins}m`;
-    const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours}h`;
-    return `${Math.round(hours / 24)}d`;
-  }
-
-  return null;
-}
-
 export function JobsCard() {
   const [runningJob, setRunningJob] = useState(null);
   const queryClient = useQueryClient();
 
   const { data: statusData } = useQuery({
-    queryKey: ['jobs-status'],
+    queryKey: ['scheduler'],
     queryFn: getSchedulerStatus,
     refetchInterval: 2000,
   });
@@ -49,7 +31,7 @@ export function JobsCard() {
     setRunningJob(jobType);
     try {
       await runJob(jobType);
-      queryClient.invalidateQueries({ queryKey: ['jobs-status'] });
+      queryClient.invalidateQueries({ queryKey: ['scheduler'] });
       queryClient.invalidateQueries({ queryKey: ['jobSchedules'] });
       queryClient.invalidateQueries({ queryKey: ['jobHistory'] });
     } finally {
@@ -97,7 +79,7 @@ export function JobsCard() {
 
         {/* Upcoming jobs */}
         {upcoming.slice(0, 3).map((job, i) => {
-          const timeUntil = formatRelativeTime(job.next_run);
+          const timeUntil = formatTimeUntil(job.next_run);
           return (
             <Tooltip key={`upcoming-${job.job_type}-${i}`} label="Click to run now">
               <Badge

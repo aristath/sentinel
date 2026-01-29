@@ -13,6 +13,7 @@ import pytest
 from sentinel.utils.fees import FeeCalculator
 from sentinel.utils.positions import PositionCalculator
 from sentinel.utils.scoring import adjust_score_for_conviction
+from sentinel.utils.strings import parse_csv_field
 
 # =============================================================================
 # Fee Calculator Tests
@@ -499,3 +500,33 @@ class TestEdgeCases:
         fee = await calc.calculate(100.0)
         # Should work without errors
         assert fee > 0
+
+
+# =============================================================================
+# CSV Field Parsing Tests
+# =============================================================================
+
+
+class TestParseCsvField:
+    """Tests for parse_csv_field utility function."""
+
+    def test_normal_csv(self):
+        assert parse_csv_field("US, Europe") == ["US", "Europe"]
+
+    def test_empty_string(self):
+        assert parse_csv_field("") == []
+
+    def test_none(self):
+        assert parse_csv_field(None) == []
+
+    def test_single_value(self):
+        assert parse_csv_field("single") == ["single"]
+
+    def test_extra_whitespace(self):
+        assert parse_csv_field("  US ,  Europe , Asia  ") == ["US", "Europe", "Asia"]
+
+    def test_empty_entries(self):
+        assert parse_csv_field("US,,Europe,") == ["US", "Europe"]
+
+    def test_whitespace_only_entries(self):
+        assert parse_csv_field(",  ,  ") == []

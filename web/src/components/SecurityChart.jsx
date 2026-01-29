@@ -4,8 +4,9 @@
  * Responsive SVG-based price chart with cost-basis coloring and future projection.
  * Data is expected to be pre-validated by the backend (invalid peaks removed).
  */
-import { useEffect, useRef, useState } from 'react';
 import { catppuccin } from '../theme';
+import { buildSmoothPath } from '../utils/chartUtils';
+import { useResponsiveWidth } from '../hooks/useResponsiveWidth';
 
 /**
  * Renders a responsive price chart with optional cost-basis coloring and future projections
@@ -28,25 +29,7 @@ export function SecurityChart({
   hasPosition = false,
   height = 120,
 }) {
-  const containerRef = useRef(null);
-  const [width, setWidth] = useState(300);
-
-  // Observe container size changes
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const newWidth = entry.contentRect.width;
-        if (newWidth > 0) {
-          setWidth(newWidth);
-        }
-      }
-    });
-
-    resizeObserver.observe(containerRef.current);
-    return () => resizeObserver.disconnect();
-  }, []);
+  const [containerRef, width] = useResponsiveWidth(300);
 
   // Render chart
   const renderChart = () => {
@@ -159,28 +142,6 @@ export function SecurityChart({
       const isPositive = values[values.length - 1] > values[0];
       segments = [{ points, color: isPositive ? catppuccin.blue : catppuccin.overlay1 }];
     }
-
-    // Build SVG path string using quadratic curves
-    const buildSmoothPath = (pts) => {
-      if (pts.length < 2) return '';
-
-      let d = `M ${pts[0].x},${pts[0].y}`;
-
-      if (pts.length === 2) {
-        d += ` L ${pts[1].x},${pts[1].y}`;
-      } else {
-        for (let i = 1; i < pts.length - 1; i++) {
-          const xc = (pts[i].x + pts[i + 1].x) / 2;
-          const yc = (pts[i].y + pts[i + 1].y) / 2;
-          d += ` Q ${pts[i].x},${pts[i].y} ${xc},${yc}`;
-        }
-        const last = pts[pts.length - 1];
-        const prev = pts[pts.length - 2];
-        d += ` Q ${prev.x},${prev.y} ${last.x},${last.y}`;
-      }
-
-      return d;
-    };
 
     const lastPoint = points[points.length - 1];
 

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Modal, TextInput, TagsInput, Stack, Button, Group, Text } from '@mantine/core';
-import { useCategories, getGeographyOptions, getIndustryOptions } from '../hooks/useCategories';
+import { useCategories } from '../hooks/useCategories';
 
 export function AddSecurityModal({ opened, onClose, onAdd }) {
   const [symbol, setSymbol] = useState('');
@@ -10,8 +10,8 @@ export function AddSecurityModal({ opened, onClose, onAdd }) {
   const [error, setError] = useState(null);
 
   const { data: categories } = useCategories();
-  const geographyOptions = getGeographyOptions(categories?.geographies || []);
-  const industryOptions = getIndustryOptions(categories?.industries || []);
+  const geographyOptions = categories?.geographies || [];
+  const industryOptions = categories?.industries || [];
 
   const handleSubmit = async () => {
     if (!symbol.trim()) {

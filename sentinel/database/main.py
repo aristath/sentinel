@@ -160,25 +160,6 @@ class Database(BaseDatabase):
             )
         await self.conn.commit()
 
-    async def replace_prices(self, symbol: str, prices: list[dict]) -> None:
-        """Merge historical prices for a security (upsert - keeps existing data for missing dates)."""
-        for price in prices:
-            await self.conn.execute(
-                """INSERT OR REPLACE INTO prices
-                   (symbol, date, open, high, low, close, volume)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    symbol,
-                    price["date"],
-                    price.get("open"),
-                    price.get("high"),
-                    price.get("low"),
-                    price["close"],
-                    price.get("volume"),
-                ),
-            )
-        await self.conn.commit()
-
     async def get_prices_bulk(self, symbols: list[str], days: int | None = None) -> dict[str, list[dict]]:
         """Get historical prices for multiple securities in a single query.
 
@@ -335,11 +316,13 @@ class Database(BaseDatabase):
     # Categories
     # -------------------------------------------------------------------------
 
-    async def get_distinct_categories(self) -> dict:
-        """
-        Get distinct geographies and industries from existing securities.
+    async def get_categories(self, active_only: bool = False) -> dict:
+        """Get distinct geographies and industries from securities.
 
         Values may be stored as comma-separated strings, so we split and dedupe.
+
+        Args:
+            active_only: If True, only include active securities
 
         Returns:
             Dict with 'geographies' and 'industries' lists
@@ -347,41 +330,10 @@ class Database(BaseDatabase):
         geographies = set()
         industries = set()
 
-        # Get all geography values and split comma-separated entries
-        cursor = await self.conn.execute(
-            "SELECT DISTINCT geography FROM securities WHERE geography IS NOT NULL AND geography != ''"
-        )
-        rows = await cursor.fetchall()
-        for row in rows:
-            for val in row["geography"].split(","):
-                val = val.strip()
-                if val:
-                    geographies.add(val)
-
-        # Get all industry values and split comma-separated entries
-        cursor = await self.conn.execute(
-            "SELECT DISTINCT industry FROM securities WHERE industry IS NOT NULL AND industry != ''"
-        )
-        rows = await cursor.fetchall()
-        for row in rows:
-            for val in row["industry"].split(","):
-                val = val.strip()
-                if val:
-                    industries.add(val)
-
-        return {
-            "geographies": list(geographies),
-            "industries": list(industries),
-        }
-
-    async def get_active_categories(self) -> dict:
-        """Get distinct geographies and industries from active securities only."""
-        geographies = set()
-        industries = set()
+        active_filter = " AND active = 1" if active_only else ""
 
         cursor = await self.conn.execute(
-            "SELECT DISTINCT geography FROM securities "
-            "WHERE active = 1 AND geography IS NOT NULL AND geography != ''"
+            f"SELECT DISTINCT geography FROM securities WHERE geography IS NOT NULL AND geography != ''{active_filter}"  # noqa: S608
         )
         for row in await cursor.fetchall():
             for val in row["geography"].split(","):
@@ -390,8 +342,7 @@ class Database(BaseDatabase):
                     geographies.add(val)
 
         cursor = await self.conn.execute(
-            "SELECT DISTINCT industry FROM securities "
-            "WHERE active = 1 AND industry IS NOT NULL AND industry != ''"
+            f"SELECT DISTINCT industry FROM securities WHERE industry IS NOT NULL AND industry != ''{active_filter}"  # noqa: S608
         )
         for row in await cursor.fetchall():
             for val in row["industry"].split(","):
@@ -915,6 +866,9 @@ class Database(BaseDatabase):
                 )
                 logger.info("Added sync:cashflows job schedule")
 
+        # Migration: deduplicate trades and enforce UNIQUE on broker_trade_id
+        await self._migrate_trades_unique_constraint()
+
         # Migration: add commission columns to trades table if missing
         cursor = await self.conn.execute("PRAGMA table_info(trades)")
         trade_columns = {row[1] for row in await cursor.fetchall()}
@@ -968,6 +922,76 @@ class Database(BaseDatabase):
             await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_side ON trades(side)")
             await self.conn.commit()
             logger.info("trades table migration complete")
+
+    async def _migrate_trades_unique_constraint(self) -> None:
+        """Ensure broker_trade_id has a UNIQUE constraint and deduplicate existing rows."""
+        # Check the actual CREATE TABLE statement for UNIQUE on broker_trade_id
+        cursor = await self.conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='trades'")
+        row = await cursor.fetchone()
+        if not row:
+            return
+
+        create_sql = row[0] or ""
+        if "broker_trade_id TEXT UNIQUE" in create_sql:
+            return  # Already correct
+
+        logger.info("Fixing trades table: adding UNIQUE constraint on broker_trade_id...")
+
+        # Count duplicates before fix
+        cursor = await self.conn.execute(
+            "SELECT COUNT(*) as total, COUNT(DISTINCT broker_trade_id) as unique_ids FROM trades"
+        )
+        counts = await cursor.fetchone()
+        total = counts[0] or 0
+        unique = counts[1] or 0
+        logger.info(f"  Before: {total} rows, {unique} unique broker_trade_ids ({total - unique} duplicates)")
+
+        # Rebuild table with UNIQUE constraint, keeping only one row per broker_trade_id
+        await self.conn.execute("""
+            CREATE TABLE trades_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                broker_trade_id TEXT UNIQUE NOT NULL,
+                symbol TEXT NOT NULL,
+                side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL')),
+                quantity REAL NOT NULL,
+                price REAL NOT NULL,
+                commission REAL DEFAULT 0,
+                commission_currency TEXT DEFAULT 'EUR',
+                executed_at TEXT NOT NULL,
+                raw_data TEXT,
+                FOREIGN KEY (symbol) REFERENCES securities(symbol)
+            )
+        """)
+
+        # Copy deduplicated data (keep the row with the highest id for each broker_trade_id)
+        await self.conn.execute("""
+            INSERT INTO trades_new
+                (broker_trade_id, symbol, side, quantity, price, commission,
+                 commission_currency, executed_at, raw_data)
+            SELECT broker_trade_id, symbol, side, quantity, price, commission,
+                   commission_currency, executed_at, raw_data
+            FROM trades
+            WHERE id IN (
+                SELECT MAX(id) FROM trades GROUP BY broker_trade_id
+            )
+        """)
+
+        await self.conn.execute("DROP TABLE trades")
+        await self.conn.execute("ALTER TABLE trades_new RENAME TO trades")
+
+        # Recreate indexes
+        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_broker_id ON trades(broker_trade_id)")
+        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
+        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_executed_at ON trades(executed_at)")
+        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_side ON trades(side)")
+
+        await self.conn.commit()
+
+        # Verify
+        cursor = await self.conn.execute("SELECT COUNT(*) FROM trades")
+        new_count = (await cursor.fetchone())[0]
+        logger.info(f"  After: {new_count} rows (removed {total - new_count} duplicates)")
+        logger.info("  trades table UNIQUE constraint migration complete")
 
     async def _migrate_job_schedules(self) -> None:
         """Migrate job_schedules table to remove deprecated columns."""

@@ -6,10 +6,12 @@ Identifies bull, bear, and sideways market conditions.
 import base64
 import json
 import pickle
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import numpy as np
+import pandas as pd
+import ta
 from hmmlearn import hmm
 
 from sentinel.database import Database
@@ -70,13 +72,11 @@ class RegimeDetector:
             ]
         )
 
-        # Feature 3: RSI-like momentum
-        gains = np.where(returns > 0, returns, 0)
-        losses = np.where(returns < 0, -returns, 0)
-        avg_gain = np.array([np.mean(gains[max(0, i - 14) : i + 1]) for i in range(len(returns))])
-        avg_loss = np.array([np.mean(losses[max(0, i - 14) : i + 1]) for i in range(len(returns))])
-        rs = avg_gain / (avg_loss + 1e-10)
-        rsi = 100 - (100 / (1 + rs))
+        # Feature 3: RSI momentum
+        rsi_indicator = ta.momentum.RSIIndicator(close=pd.Series(closes), window=14)
+        rsi = rsi_indicator.rsi().fillna(50).values
+        # Align with returns (which has len(closes) - 1 elements)
+        rsi = rsi[1:]
 
         # Combine features
         features = np.column_stack([returns, vol, rsi])
@@ -135,7 +135,7 @@ class RegimeDetector:
 
     async def get_regime_history(self, symbol: str, days: int = 90) -> list[dict]:
         """Get historical regime states."""
-        date_threshold = (datetime.utcnow() - timedelta(days=days)).isoformat()
+        date_threshold = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
 
         cursor = await self._db.conn.execute(
             """SELECT date, regime, regime_name, confidence
@@ -161,13 +161,13 @@ class RegimeDetector:
         model_bytes = pickle.dumps(model)
         model_b64 = base64.b64encode(model_bytes).decode("utf-8")
 
-        model_id = f"hmm_{datetime.utcnow().isoformat()}"
+        model_id = f"hmm_{datetime.now(timezone.utc).isoformat()}"
 
         await self._db.conn.execute(
             """INSERT INTO regime_models
                (model_id, symbols, n_states, trained_at, model_params)
                VALUES (?, ?, ?, ?, ?)""",
-            (model_id, json.dumps(symbols), self.n_states, datetime.utcnow().isoformat(), model_b64),
+            (model_id, json.dumps(symbols), self.n_states, datetime.now(timezone.utc).isoformat(), model_b64),
         )
         await self._db.conn.commit()
 
@@ -190,6 +190,6 @@ class RegimeDetector:
             """INSERT OR REPLACE INTO regime_states
                (symbol, date, regime, regime_name, confidence)
                VALUES (?, ?, ?, ?, ?)""",
-            (symbol, datetime.utcnow().date().isoformat(), regime, regime_name, confidence),
+            (symbol, datetime.now(timezone.utc).date().isoformat(), regime, regime_name, confidence),
         )
         await self._db.conn.commit()

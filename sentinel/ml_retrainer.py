@@ -19,15 +19,17 @@ logger = logging.getLogger(__name__)
 class MLRetrainer:
     """Per-symbol ML retraining pipeline."""
 
-    def __init__(self, progress_callback=None):
+    def __init__(self, progress_callback=None, db=None, settings=None):
         """Initialize retrainer.
 
         Args:
             progress_callback: Optional callback(current, total, symbol) for progress updates
+            db: Optional Database instance (defaults to new Database())
+            settings: Optional Settings instance (defaults to new Settings())
         """
-        self.db = Database()
-        self.settings = Settings()
-        self.trainer = TrainingDataGenerator()
+        self.db = db or Database()
+        self.settings = settings or Settings()
+        self.trainer = TrainingDataGenerator(db=self.db, settings=self.settings)
         self.progress_callback = progress_callback
 
     async def retrain(self) -> Dict:

@@ -166,6 +166,15 @@ export const getTrades = (params = {}) => {
 };
 export const syncTrades = () => request('/trades/sync', { method: 'POST' });
 
+// ML Training (per-symbol)
+export const getMLTrainingStatus = (symbol) =>
+  request(`/ml/training-status/${encodeURIComponent(symbol)}`);
+export const deleteMLTrainingData = (symbol) =>
+  request(`/ml/training-data/${encodeURIComponent(symbol)}`, { method: 'DELETE' });
+// Note: trainSymbol uses SSE streaming and is handled in useMLTraining hook
+export const getMLTrainStreamUrl = (symbol) =>
+  `${API_BASE}/ml/train/${encodeURIComponent(symbol)}/stream`;
+
 // ML Reset
 export const resetAndRetrain = () =>
   request('/ml/reset-and-retrain', { method: 'POST' });
@@ -178,3 +187,6 @@ export const syncCashFlows = () => request('/cashflows/sync', { method: 'POST' }
 // Portfolio P&L History
 export const getPortfolioPnLHistory = (period = '1Y') =>
   request(`/portfolio/pnl-history?period=${period}`);
+
+// Categories
+export const getCategories = () => request('/meta/categories');

@@ -289,6 +289,22 @@ class PriceValidator:
 
         return result
 
+    def validate_price_series_desc(self, prices: list[dict]) -> list[dict]:
+        """Validate a price series in descending order (newest first).
+
+        Handles the reverse-validate-reverse pattern: reverses to chronological order,
+        validates, and returns in the original descending order.
+
+        Args:
+            prices: Price list in descending order (newest first)
+
+        Returns:
+            Validated price list in descending order
+        """
+        if not prices:
+            return prices
+        return list(reversed(self.validate_and_interpolate(list(reversed(prices)))))
+
     def _find_interpolation_context(
         self, index: int, prices: list[dict], result: list[dict]
     ) -> tuple[list[dict], list[dict]]:

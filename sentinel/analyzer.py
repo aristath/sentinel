@@ -674,7 +674,7 @@ class Analyzer:
         use_regime = await settings.get("use_regime_adjustment", False)
 
         if use_regime:
-            from sentinel.regime_detector import RegimeDetector
+            from sentinel.regime_hmm import RegimeDetector
 
             detector = RegimeDetector()
             regime_data = await detector.detect_current_regime(symbol)

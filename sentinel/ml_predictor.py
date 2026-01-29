@@ -13,9 +13,8 @@ from sentinel.ml_ensemble import EnsembleBlender
 from sentinel.ml_features import (
     DEFAULT_FEATURES,
     features_to_array,
-    validate_features,
 )
-from sentinel.ml_regime import get_regime_adjusted_return
+from sentinel.regime_quote import get_regime_adjusted_return
 from sentinel.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -24,14 +23,14 @@ logger = logging.getLogger(__name__)
 class MLPredictor:
     """Production ML predictor with per-symbol model caching and blending."""
 
-    def __init__(self):
+    def __init__(self, db=None, settings=None):
         # Cache models per symbol: {symbol: EnsembleBlender}
         self._models: Dict[str, EnsembleBlender] = {}
         self._load_times: Dict[str, float] = {}
         self._cache_duration = 3600  # 1 hour
 
-        self.db = Database()
-        self.settings = Settings()
+        self.db = db or Database()
+        self.settings = settings or Settings()
 
     async def predict_and_blend(
         self,
@@ -85,11 +84,6 @@ class MLPredictor:
         if features is None:
             logger.debug(f"{symbol}: No features provided, using defaults")
             features = DEFAULT_FEATURES.copy()
-
-        # Validate and clean features
-        features, warnings = validate_features(features)
-        for warning in warnings:
-            logger.warning(f"{symbol}: {warning}")
 
         # Convert to array using centralized function (ensures correct order)
         feature_array = features_to_array(features).reshape(1, -1)

@@ -31,6 +31,7 @@ import {
 } from 'recharts';
 import dayjs from 'dayjs';
 import { catppuccin } from '../theme';
+import { formatCurrency, formatPercent } from '../utils/formatting';
 
 export function BacktestModal({ opened, onClose }) {
   // Configuration state
@@ -171,21 +172,6 @@ export function BacktestModal({ opened, onClose }) {
     }
     onClose();
   }, [status, cancelBacktest, onClose]);
-
-  const formatCurrency = (value) => {
-    if (value == null) return '-';
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'EUR',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(value);
-  };
-
-  const formatPercent = (value) => {
-    if (value == null) return '-';
-    return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`;
-  };
 
   // Prepare chart data (sample every N points to avoid overcrowding)
   const getChartData = () => {
@@ -402,7 +388,7 @@ export function BacktestModal({ opened, onClose }) {
 
           {portfolioValue > 0 && phase === 'simulate' && (
             <Text size="lg">
-              Portfolio Value: {formatCurrency(portfolioValue)}
+              Portfolio Value: {formatCurrency(portfolioValue, 'EUR', 0)}
             </Text>
           )}
 
@@ -441,11 +427,11 @@ export function BacktestModal({ opened, onClose }) {
           <SimpleGrid cols={2} spacing="sm">
             <Paper p="sm" withBorder>
               <Text size="sm" c="dimmed">Total Invested</Text>
-              <Text size="lg" fw={500}>{formatCurrency(result.total_deposits)}</Text>
+              <Text size="lg" fw={500}>{formatCurrency(result.total_deposits, 'EUR', 0)}</Text>
             </Paper>
             <Paper p="sm" withBorder>
               <Text size="sm" c="dimmed">Final Value</Text>
-              <Text size="lg" fw={500}>{formatCurrency(result.final_value)}</Text>
+              <Text size="lg" fw={500}>{formatCurrency(result.final_value, 'EUR', 0)}</Text>
             </Paper>
             <Paper p="sm" withBorder>
               <Text size="sm" c="dimmed">Total Return</Text>
@@ -454,7 +440,7 @@ export function BacktestModal({ opened, onClose }) {
                 fw={500}
                 c={result.total_return >= 0 ? 'teal' : 'red'}
               >
-                {formatCurrency(result.total_return)} ({formatPercent(result.total_return_pct)})
+                {formatCurrency(result.total_return, 'EUR', 0)} ({formatPercent(result.total_return_pct, true, 2)})
               </Text>
             </Paper>
             <Paper p="sm" withBorder>
@@ -464,7 +450,7 @@ export function BacktestModal({ opened, onClose }) {
                 fw={500}
                 c={result.cagr >= 0 ? 'teal' : 'red'}
               >
-                {formatPercent(result.cagr)}
+                {formatPercent(result.cagr, true, 2)}
               </Text>
             </Paper>
             <Paper p="sm" withBorder>
@@ -497,7 +483,7 @@ export function BacktestModal({ opened, onClose }) {
                   tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`}
                 />
                 <Tooltip
-                  formatter={(value) => [formatCurrency(value), 'Value']}
+                  formatter={(value) => [formatCurrency(value, 'EUR', 0), 'Value']}
                   labelFormatter={(label) => dayjs(label).format('MMM D, YYYY')}
                 />
                 <Line
@@ -533,14 +519,14 @@ export function BacktestModal({ opened, onClose }) {
                           <Text size="sm" fw={500}>{sp.symbol}</Text>
                           <Text size="sm" c="dimmed">{sp.name}</Text>
                         </Table.Td>
-                        <Table.Td>{formatCurrency(sp.total_invested)}</Table.Td>
-                        <Table.Td>{formatCurrency(sp.final_value)}</Table.Td>
+                        <Table.Td>{formatCurrency(sp.total_invested, 'EUR', 0)}</Table.Td>
+                        <Table.Td>{formatCurrency(sp.final_value, 'EUR', 0)}</Table.Td>
                         <Table.Td>
                           <Badge
                             color={sp.total_return >= 0 ? 'teal' : 'red'}
                             variant="light"
                           >
-                            {formatPercent(sp.return_pct)}
+                            {formatPercent(sp.return_pct, true, 2)}
                           </Badge>
                         </Table.Td>
                         <Table.Td>
