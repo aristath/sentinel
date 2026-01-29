@@ -374,6 +374,36 @@ class Database(BaseDatabase):
             "industries": list(industries),
         }
 
+    async def get_active_categories(self) -> dict:
+        """Get distinct geographies and industries from active securities only."""
+        geographies = set()
+        industries = set()
+
+        cursor = await self.conn.execute(
+            "SELECT DISTINCT geography FROM securities "
+            "WHERE active = 1 AND geography IS NOT NULL AND geography != ''"
+        )
+        for row in await cursor.fetchall():
+            for val in row["geography"].split(","):
+                val = val.strip()
+                if val:
+                    geographies.add(val)
+
+        cursor = await self.conn.execute(
+            "SELECT DISTINCT industry FROM securities "
+            "WHERE active = 1 AND industry IS NOT NULL AND industry != ''"
+        )
+        for row in await cursor.fetchall():
+            for val in row["industry"].split(","):
+                val = val.strip()
+                if val:
+                    industries.add(val)
+
+        return {
+            "geographies": sorted(geographies),
+            "industries": sorted(industries),
+        }
+
     # -------------------------------------------------------------------------
     # Job History
     # -------------------------------------------------------------------------

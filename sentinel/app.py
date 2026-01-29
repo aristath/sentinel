@@ -1950,6 +1950,13 @@ async def get_backup_status():
 # -----------------------------------------------------------------------------
 
 
+@app.get("/api/pulse/labels")
+async def get_pulse_labels():
+    """Return geographies and industries from active securities for Pulse classification."""
+    db = Database()
+    return await db.get_active_categories()
+
+
 @app.get("/api/version")
 async def version():
     """Return the application version."""
