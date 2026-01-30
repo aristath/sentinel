@@ -64,6 +64,10 @@ class Security:
         return self._data.get("industry") if self._data else None
 
     @property
+    def aliases(self) -> Optional[str]:
+        return self._data.get("aliases") if self._data else None
+
+    @property
     def min_lot(self) -> int:
         return self._data.get("min_lot", 1) if self._data else 1
 

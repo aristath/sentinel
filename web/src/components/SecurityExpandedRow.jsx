@@ -80,6 +80,7 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
     geography,
     industry,
     min_lot,
+    aliases,
     allow_buy,
     allow_sell,
     user_multiplier,
@@ -253,6 +254,16 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
               value={parseCommaSeparated(industry)}
               onChange={(v) => handleUpdate('industry', v)}
               placeholder="Select or type"
+              clearable
+              disabled={isUpdating}
+            />
+
+            <TagsInput
+              label="Aliases"
+              size="xs"
+              value={parseCommaSeparated(aliases)}
+              onChange={(v) => handleUpdate('aliases', v)}
+              placeholder="News search names"
               clearable
               disabled={isUpdating}
             />

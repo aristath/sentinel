@@ -619,6 +619,21 @@ async def delete_security(symbol: str, sell_position: bool = True):
     return {"status": "ok", "sold_quantity": quantity if sell_position else 0}
 
 
+@app.get("/api/securities/aliases")
+async def get_all_aliases():
+    """Get aliases for all securities (for companion news/sentiment app)."""
+    db = Database()
+    securities = await db.get_all_securities(active_only=True)
+    return [
+        {
+            "symbol": sec["symbol"],
+            "name": sec.get("name"),
+            "aliases": sec.get("aliases"),
+        }
+        for sec in securities
+    ]
+
+
 @app.get("/api/securities/{symbol}")
 async def get_security(symbol: str):
     """Get a specific security."""
@@ -632,6 +647,7 @@ async def get_security(symbol: str):
         "currency": security.currency,
         "geography": security.geography,
         "industry": security.industry,
+        "aliases": security.aliases,
         "quantity": security.quantity,
         "current_price": security.current_price,
         "score": await security.get_score(),
@@ -650,6 +666,7 @@ async def update_security(symbol: str, data: dict):
     allowed_fields = [
         "geography",
         "industry",
+        "aliases",
         "allow_buy",
         "allow_sell",
         "user_multiplier",
@@ -855,6 +872,7 @@ async def get_unified_view(period: str = "1Y"):
                 "user_multiplier": sec.get("user_multiplier", 1.0),
                 "ml_enabled": sec.get("ml_enabled", 0),
                 "ml_blend_ratio": sec.get("ml_blend_ratio", 0.5),
+                "aliases": sec.get("aliases"),
                 # Position data
                 "has_position": has_position,
                 "quantity": quantity,

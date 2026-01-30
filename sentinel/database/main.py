@@ -684,6 +684,7 @@ class Database(BaseDatabase):
             ("ml_blend_ratio", "ALTER TABLE securities ADD COLUMN ml_blend_ratio REAL DEFAULT 0.5"),
             ("quote_data", "ALTER TABLE securities ADD COLUMN quote_data TEXT"),
             ("quote_updated_at", "ALTER TABLE securities ADD COLUMN quote_updated_at INTEGER"),
+            ("aliases", "ALTER TABLE securities ADD COLUMN aliases TEXT"),
         ]
 
         for col_name, sql in migrations:
@@ -1075,6 +1076,7 @@ CREATE TABLE IF NOT EXISTS securities (
     user_multiplier REAL DEFAULT 1.0,  -- User conviction multiplier (0.5 = bearish, 1.0 = neutral, 2.0 = bullish)
     ml_enabled INTEGER DEFAULT 0,  -- Per-security ML toggle (0 = disabled, 1 = enabled)
     ml_blend_ratio REAL DEFAULT 0.5,  -- ML/wavelet blend (0.0 = pure wavelet, 1.0 = pure ML)
+    aliases TEXT,  -- Comma-separated alternative names for news/sentiment search
     data TEXT,  -- Raw Tradernet API response (JSON)
     last_synced TEXT,
     quote_data TEXT,  -- Raw quote data from Tradernet API (JSON)

@@ -105,6 +105,9 @@ export const updateSecurity = (symbol, data) => {
   if (Array.isArray(processedData.industry)) {
     processedData.industry = processedData.industry.join(', ');
   }
+  if (Array.isArray(processedData.aliases)) {
+    processedData.aliases = processedData.aliases.join(', ');
+  }
   return request(`/securities/${encodeURIComponent(symbol)}`, {
     method: 'PUT',
     body: JSON.stringify(processedData),
