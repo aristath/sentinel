@@ -13,10 +13,12 @@ import (
 
 func main() {
 	apiURL := flag.String("api-url", "http://localhost:8000", "Sentinel API URL")
+	maxWidth := flag.Int("max-width", 0, "Max columns (0 = no limit)")
+	maxHeight := flag.Int("max-height", 0, "Max rows (0 = no limit)")
 	flag.Parse()
 
 	client := api.NewClient(*apiURL)
-	m := ui.NewModel(client, *apiURL)
+	m := ui.NewModel(client, *apiURL, *maxWidth, *maxHeight)
 
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := p.Run(); err != nil {

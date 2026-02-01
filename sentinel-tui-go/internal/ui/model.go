@@ -4,13 +4,10 @@ import (
 	"sort"
 	"time"
 
-	"github.com/charmbracelet/bubbles/table"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/harmonica"
 
 	"sentinel-tui-go/internal/api"
-	"sentinel-tui-go/internal/theme"
 )
 
 type Model struct {
@@ -26,23 +23,20 @@ type Model struct {
 	securities      []api.Security
 
 	// UI state
-	themeIndex int
-	showTable  bool
-	width      int
-	height     int
-	ready      bool
+	width     int
+	height    int
+	maxWidth  int
+	maxHeight int
+	ready     bool
 
-	// Animation
-	heroTarget   float64
-	heroValue    float64
-	heroVelocity float64
-	spring       harmonica.Spring
-	animating    bool
+	// Auto-scroll
+	scrolling    bool
+	scrollAccum  float64
+	contentLines int // line count of one content block
+	contentDirty bool
 
 	// Components
-	viewport      viewport.Model
-	table         table.Model
-	sparklineView string
+	viewport viewport.Model
 }
 
 // Messages
@@ -72,18 +66,29 @@ type securitiesMsg struct {
 	err        error
 }
 
+// Scroll: 30fps tick with fractional accumulator for smooth pacing.
+const scrollLinesPerSec = 5.0
+const scrollInterval = 33 * time.Millisecond
+
 type tickMsg time.Time
 
-func NewModel(client *api.Client, apiURL string) Model {
+const refreshInterval = 10 * time.Second
+
+type refreshMsg struct{}
+
+func NewModel(client *api.Client, apiURL string, maxWidth, maxHeight int) Model {
 	return Model{
-		client: client,
-		apiURL: apiURL,
-		spring: harmonica.NewSpring(harmonica.FPS(60), 6.0, 1.0),
+		client:    client,
+		apiURL:    apiURL,
+		maxWidth:  maxWidth,
+		maxHeight: maxHeight,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(fetchAll(m.client)...)
+	cmds := fetchAll(m.client)
+	cmds = append(cmds, scheduleRefresh())
+	return tea.Batch(cmds...)
 }
 
 // Commands
@@ -139,10 +144,13 @@ func fetchSecurities(c *api.Client) tea.Cmd {
 }
 
 func tickCmd() tea.Cmd {
-	return tea.Tick(time.Second/60, func(t time.Time) tea.Msg {
+	return tea.Tick(scrollInterval, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
 }
 
-// keep compiler happy — theme is used in view.go/update.go
-var _ = theme.Themes
+func scheduleRefresh() tea.Cmd {
+	return tea.Tick(refreshInterval, func(t time.Time) tea.Msg {
+		return refreshMsg{}
+	})
+}
