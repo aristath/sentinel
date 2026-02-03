@@ -238,6 +238,10 @@ async def get_unified_view(
     # Get all securities
     securities = await deps.db.get_all_securities(active_only=True)
 
+    # Short-circuit if no securities exist
+    if not securities:
+        return []
+
     # Get portfolio for position info
     from sentinel.portfolio import Portfolio
 
