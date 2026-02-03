@@ -333,16 +333,9 @@ async def get_markets_status():
 
 @app.get("/api/meta/categories")
 async def get_categories():
-    """Get combined default + existing categories from database."""
-    from sentinel.config.categories import DEFAULT_GEOGRAPHIES, DEFAULT_INDUSTRIES
-
+    """Get distinct categories from securities in the database."""
     db = Database()
-    existing = await db.get_categories()
-
-    return {
-        "geographies": sorted(set(DEFAULT_GEOGRAPHIES + existing["geographies"])),
-        "industries": sorted(set(DEFAULT_INDUSTRIES + existing["industries"])),
-    }
+    return await db.get_categories()
 
 
 # -----------------------------------------------------------------------------
