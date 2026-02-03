@@ -10,8 +10,9 @@ def singleton(cls: type[T]) -> type[T]:
     """
     Singleton decorator for classes.
 
-    Ensures only one instance of the class exists.
-    Thread-safe for async usage (relies on GIL for sync).
+    Ensures only one instance of the class exists within a single thread.
+    Safe for single-threaded async usage, but NOT thread-safe for concurrent
+    access from multiple threads (lacks proper locking mechanisms).
 
     Usage:
         @singleton
