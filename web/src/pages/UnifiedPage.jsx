@@ -18,6 +18,7 @@ import {
   Card,
   Button,
   ActionIcon,
+  Table,
 } from '@mantine/core';
 import { IconPlus, IconArrowRight, IconCash, IconWallet, IconListCheck, IconTrendingUp, IconPencil, IconX } from '@tabler/icons-react';
 import { SecurityTable } from '../components/SecurityTable';
@@ -30,7 +31,7 @@ import { MarketsOpenCard } from '../components/MarketsOpenCard';
 import { PortfolioPnLChart } from '../components/PortfolioPnLChart';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
-import { getUnifiedView, updateSecurity, addSecurity, deleteSecurity, getPortfolio, getRecommendations, getCashFlows, getPortfolioPnLHistory, getSettings, updateSetting } from '../api/client';
+import { getUnifiedView, getSecurities, updateSecurity, addSecurity, deleteSecurity, getPortfolio, getRecommendations, getCashFlows, getPortfolioPnLHistory, getSettings, updateSetting } from '../api/client';
 
 import { formatEur, formatCurrencySymbol } from '../utils/formatting';
 import './UnifiedPage.css';
@@ -79,6 +80,17 @@ function UnifiedPage() {
     queryFn: () => getUnifiedView(period),
     refetchInterval: 60000, // Refresh every minute
   });
+
+  const { data: allSecurities } = useQuery({
+    queryKey: ['securities'],
+    queryFn: getSecurities,
+    refetchInterval: 60000,
+  });
+
+  const inactiveSecurities = useMemo(() => {
+    if (!allSecurities) return [];
+    return allSecurities.filter((s) => !s.active);
+  }, [allSecurities]);
 
   const { data: portfolio } = useQuery({
     queryKey: ['portfolio'],
@@ -563,6 +575,34 @@ function UnifiedPage() {
                 onUpdate={handleUpdate}
                 onDelete={handleDeleteClick}
               />
+            </Card>
+          )}
+
+          {/* Inactive Securities Table */}
+          {inactiveSecurities.length > 0 && (
+            <Card shadow="sm" padding="md" withBorder className="unified__inactive-table">
+              <Text size="sm" fw={500} mb="sm">
+                Inactive Securities
+                <Badge variant="light" color="gray" size="sm" ml="xs">{inactiveSecurities.length}</Badge>
+              </Text>
+              <Table.ScrollContainer minWidth={400}>
+                <Table highlightOnHover>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th><Text fw={600} size="sm">Symbol</Text></Table.Th>
+                      <Table.Th><Text fw={600} size="sm">Name</Text></Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {inactiveSecurities.map((sec) => (
+                      <Table.Tr key={sec.symbol}>
+                        <Table.Td><Text size="sm" fw={500}>{sec.symbol}</Text></Table.Td>
+                        <Table.Td><Text size="sm" c="dimmed">{sec.name || '-'}</Text></Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
             </Card>
           )}
         </Stack>
