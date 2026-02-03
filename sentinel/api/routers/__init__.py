@@ -9,6 +9,8 @@ from sentinel.api.routers.securities import prices_router, scores_router, unifie
 from sentinel.api.routers.securities import router as securities_router
 from sentinel.api.routers.settings import led_router
 from sentinel.api.routers.settings import router as settings_router
+from sentinel.api.routers.trading import cashflows_router, trading_actions_router
+from sentinel.api.routers.trading import router as trading_router
 
 __all__ = [
     "settings_router",
@@ -20,4 +22,7 @@ __all__ = [
     "prices_router",
     "scores_router",
     "unified_router",
+    "trading_router",
+    "cashflows_router",
+    "trading_actions_router",
 ]

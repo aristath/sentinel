@@ -21,6 +21,7 @@ from fastapi.staticfiles import StaticFiles
 # API routers
 from sentinel.api.routers import (
     allocation_router,
+    cashflows_router,
     led_router,
     portfolio_router,
     prices_router,
@@ -28,6 +29,8 @@ from sentinel.api.routers import (
     securities_router,
     settings_router,
     targets_router,
+    trading_actions_router,
+    trading_router,
     unified_router,
 )
 from sentinel.api.routers.settings import set_led_controller
@@ -208,6 +211,9 @@ app.include_router(securities_router, prefix="/api")
 app.include_router(prices_router, prefix="/api")
 app.include_router(scores_router, prefix="/api")
 app.include_router(unified_router, prefix="/api")
+app.include_router(trading_router, prefix="/api")
+app.include_router(cashflows_router, prefix="/api")
+app.include_router(trading_actions_router, prefix="/api")
 
 # -----------------------------------------------------------------------------
 # The following routes have been moved to sentinel/api/routers/:
@@ -565,167 +571,33 @@ async def get_categories():
     count = await analyzer.update_scores()
     return {"calculated": count}
 
+    # -----------------------------------------------------------------------------
+    # Trading API
+    # -----------------------------------------------------------------------------
 
-# -----------------------------------------------------------------------------
-# Trading API
-# -----------------------------------------------------------------------------
+    # MOVED to sentinel/api/routers/trading.py
+    # @app.get("/api/trades")
+    # async def get_trades(...): ...
 
+    # MOVED to sentinel/api/routers/trading.py
+    # @app.post("/api/trades/sync")
+    # async def sync_trades_endpoint(): ...
 
-@app.get("/api/trades")
-async def get_trades(
-    symbol: Optional[str] = None,
-    side: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    limit: int = 100,
-    offset: int = 0,
-):
-    """
-    Get trade history with optional filters.
+    # MOVED to sentinel/api/routers/trading.py
+    # @app.get("/api/cashflows")
+    # async def get_cashflows(): ...
 
-    Query params:
-        symbol: Filter by security symbol
-        side: Filter by 'BUY' or 'SELL'
-        start_date: Filter trades on or after (YYYY-MM-DD)
-        end_date: Filter trades on or before (YYYY-MM-DD)
-        limit: Max trades to return (default 100)
-        offset: Number to skip for pagination
+    # MOVED to sentinel/api/routers/trading.py
+    # @app.post("/api/cashflows/sync")
+    # async def sync_cashflows_endpoint(): ...
 
-    Returns:
-        trades: List of trade objects
-        count: Number of trades in this response
-        total: Total number of trades matching filters (for pagination)
-    """
-    db = Database()
-    trades = await db.get_trades(
-        symbol=symbol,
-        side=side,
-        start_date=start_date,
-        end_date=end_date,
-        limit=limit,
-        offset=offset,
-    )
+    # MOVED to sentinel/api/routers/trading.py
+    # @app.post("/api/securities/{symbol}/buy")
+    # async def buy_security(symbol: str, quantity: int): ...
 
-    # Get total count for pagination (without limit/offset)
-    total = await db.get_trades_count(
-        symbol=symbol,
-        side=side,
-        start_date=start_date,
-        end_date=end_date,
-    )
-
-    return {"trades": trades, "count": len(trades), "total": total}
-
-
-@app.post("/api/trades/sync")
-async def sync_trades_endpoint():
-    """Trigger manual sync of trades from broker."""
-    from sentinel.jobs import run_now
-
-    result = await run_now("sync:trades")
-    return result
-
-
-@app.get("/api/cashflows")
-async def get_cashflows():
-    """
-    Get aggregated cash flow summary from database.
-
-    Returns:
-        deposits: Total deposits in EUR
-        withdrawals: Total withdrawals in EUR (positive number)
-        dividends: Total dividends received in EUR
-        taxes: Total taxes paid in EUR (positive number)
-        fees: Total trading fees in EUR (positive number)
-        net_deposits: deposits - withdrawals
-        total_profit: Current portfolio value + cash - net_deposits
-    """
-    db = Database()
-    currency = Currency()
-
-    # Get aggregated cash flows from database
-    summary = await db.get_cash_flow_summary()
-
-    # Convert each type/currency combination to EUR
-    deposits_eur = 0.0
-    withdrawals_eur = 0.0
-    dividends_eur = 0.0
-    taxes_eur = 0.0
-
-    for type_id, currencies in summary.items():
-        for curr, total in currencies.items():
-            amount_eur = await currency.to_eur(total, curr)
-
-            if type_id == "card":
-                deposits_eur += amount_eur
-            elif type_id == "card_payout":
-                withdrawals_eur += abs(amount_eur)
-            elif type_id == "dividend":
-                dividends_eur += amount_eur
-            elif type_id == "tax":
-                taxes_eur += abs(amount_eur)
-
-    # Get trading fees efficiently (aggregated query)
-    fees_by_currency = await db.get_total_fees()
-    fees_eur = 0.0
-    for curr, total in fees_by_currency.items():
-        fees_eur += await currency.to_eur(total, curr)
-
-    # Get portfolio value for total profit calculation
-    portfolio_obj = Portfolio()
-    total_value = await portfolio_obj.total_value()
-    cash_balances = await portfolio_obj.get_cash_balances()
-
-    # Calculate total cash in EUR
-    total_cash_eur = 0.0
-    for curr, amount in cash_balances.items():
-        total_cash_eur += await currency.to_eur(amount, curr)
-
-    net_deposits = deposits_eur - withdrawals_eur
-    # Total profit = current value - what we put in (net deposits)
-    # Note: dividends and fees are already reflected in cash balance
-    total_profit = (total_value + total_cash_eur) - net_deposits
-
-    return {
-        "deposits": round(deposits_eur, 2),
-        "withdrawals": round(withdrawals_eur, 2),
-        "dividends": round(dividends_eur, 2),
-        "taxes": round(taxes_eur, 2),
-        "fees": round(fees_eur, 2),
-        "net_deposits": round(net_deposits, 2),
-        "total_profit": round(total_profit, 2),
-    }
-
-
-@app.post("/api/cashflows/sync")
-async def sync_cashflows_endpoint():
-    """Trigger manual sync of cash flows from broker."""
-    from sentinel.jobs import run_now
-
-    result = await run_now("sync:cashflows")
-    return result
-
-
-@app.post("/api/securities/{symbol}/buy")
-async def buy_security(symbol: str, quantity: int):
-    """Buy a security."""
-    security = Security(symbol)
-    await security.load()
-    order_id = await security.buy(quantity)
-    if not order_id:
-        raise HTTPException(status_code=400, detail="Buy order failed")
-    return {"order_id": order_id}
-
-
-@app.post("/api/securities/{symbol}/sell")
-async def sell_security(symbol: str, quantity: int):
-    """Sell a security."""
-    security = Security(symbol)
-    await security.load()
-    order_id = await security.sell(quantity)
-    if not order_id:
-        raise HTTPException(status_code=400, detail="Sell order failed")
-    return {"order_id": order_id}
+    # MOVED to sentinel/api/routers/trading.py
+    # @app.post("/api/securities/{symbol}/sell")
+    # async def sell_security(symbol: str, quantity: int): ...
 
     # -----------------------------------------------------------------------------
     # Allocation Targets API
