@@ -6,7 +6,6 @@ These tests verify:
 """
 
 import pytest
-import pytest_asyncio
 
 from sentinel.currency import Currency
 from sentinel.currency_exchange import CurrencyExchangeService
@@ -29,8 +28,8 @@ def clear_singletons():
         CurrencyExchangeService._clear()  # type: ignore
 
 
-@pytest_asyncio.fixture
-async def currency_with_rates():
+@pytest.fixture
+def currency_with_rates():
     """Create a Currency instance with mock rates."""
     currency = Currency()
     # Set up test rates (currency -> EUR conversion rates)
@@ -43,8 +42,8 @@ async def currency_with_rates():
     return currency
 
 
-@pytest_asyncio.fixture
-async def exchange_service_with_rates():
+@pytest.fixture
+def exchange_service_with_rates():
     """Create a CurrencyExchangeService with mocked currency rates."""
     service = CurrencyExchangeService()
     service._currency._rates_cache = {
