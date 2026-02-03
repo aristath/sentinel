@@ -679,24 +679,19 @@ class Analyzer:
             detector = RegimeDetector()
             regime_data = await detector.detect_current_regime(symbol)
 
-            # Adjust component weights based on regime
-            if regime_data["regime_name"] == "Bull":
-                # Boost momentum, reduce mean reversion
-                expected_return = (
-                    0.30 * quality
-                    + 0.30 * mean_reversion  # Reduce from 40%
-                    + 0.30 * adjusted_momentum  # Increase from 20%
-                    + 0.10 * (consistency_bonus + 0.5)
-                )
-            elif regime_data["regime_name"] == "Bear":
-                # Boost quality, reduce momentum
-                expected_return = (
-                    0.40 * quality  # Increase from 30%
-                    + 0.40 * mean_reversion
-                    + 0.10 * adjusted_momentum  # Reduce from 20%
-                    + 0.10 * (consistency_bonus + 0.5)
-                )
-            # Sideways: keep default weights
+            # Regime-specific component weights (quality, mean_reversion, momentum, consistency)
+            REGIME_WEIGHTS = {
+                "Bull": (0.30, 0.30, 0.30, 0.10),  # Boost momentum
+                "Bear": (0.40, 0.40, 0.10, 0.10),  # Boost quality, reduce momentum
+                "Sideways": (0.30, 0.40, 0.20, 0.10),  # Default weights
+            }
+            w_quality, w_mr, w_mom, w_cons = REGIME_WEIGHTS.get(regime_data["regime_name"], REGIME_WEIGHTS["Sideways"])
+            expected_return = (
+                w_quality * quality
+                + w_mr * mean_reversion
+                + w_mom * adjusted_momentum
+                + w_cons * (consistency_bonus + 0.5)
+            )
 
         return expected_return
 

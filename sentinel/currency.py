@@ -17,29 +17,24 @@ import requests
 from sentinel.config.currencies import RATE_FETCH_CURRENCIES
 from sentinel.database import Database
 from sentinel.settings import Settings
+from sentinel.utils.decorators import singleton
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class Currency:
     """Handles currency conversions using Tradernet rates."""
 
     CURRENCIES = RATE_FETCH_CURRENCIES
-    _instance: "Currency | None" = None
     _db: "Database"
     _settings: "Settings"
     _rates_cache: dict | None
 
-    def __new__(cls):
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._db = Database()
-            cls._instance._settings = Settings()
-            cls._instance._rates_cache = None
-        return cls._instance
-
     def __init__(self):
-        pass  # All init done in __new__
+        self._db = Database()
+        self._settings = Settings()
+        self._rates_cache = None
 
     async def sync_rates(self) -> dict:
         """Fetch current exchange rates from Tradernet API."""
@@ -105,6 +100,32 @@ class Currency:
             return amount
         rate = await self.get_rate(currency)
         return amount * rate
+
+    async def get_cross_rate(self, from_currency: str, to_currency: str) -> float:
+        """
+        Get exchange rate between any two currencies (cross rate via EUR).
+
+        Args:
+            from_currency: Source currency code
+            to_currency: Target currency code
+
+        Returns:
+            Exchange rate (how many units of to_currency per 1 from_currency)
+        """
+        from_curr = from_currency.upper()
+        to_curr = to_currency.upper()
+
+        if from_curr == to_curr:
+            return 1.0
+
+        rates = await self.get_rates()
+        from_eur = rates.get(from_curr, 1.0 if from_curr == "EUR" else None)
+        to_eur = rates.get(to_curr, 1.0 if to_curr == "EUR" else None)
+
+        if from_eur is None or to_eur is None:
+            raise ValueError(f"No rate available for {from_curr} or {to_curr}")
+
+        return from_eur / to_eur
 
     async def set_rate(self, currency: str, rate: float) -> None:
         """Manually set exchange rate for a currency."""

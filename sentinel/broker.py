@@ -15,29 +15,23 @@ from typing import Optional
 
 from sentinel.database import Database
 from sentinel.settings import Settings
+from sentinel.utils.decorators import singleton
 
 logger = logging.getLogger(__name__)
 
 
+@singleton
 class Broker:
     """Single source of truth for broker operations."""
 
-    _instance: Optional["Broker"] = None
     _api = None
     _trading = None
     _settings: "Settings"
     _db: "Database"
 
-    def __new__(cls):
-        """Singleton pattern - one broker connection."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._settings = Settings()
-            cls._instance._db = Database()
-        return cls._instance
-
     def __init__(self):
-        pass  # All init done in __new__
+        self._settings = Settings()
+        self._db = Database()
 
     def _parse_quotes_response(self, response: dict) -> list[dict]:
         """Extract quotes list from API response (handles both response formats)."""

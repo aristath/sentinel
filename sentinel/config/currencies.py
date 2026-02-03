@@ -53,15 +53,6 @@ DIRECT_PAIRS = {
     ("HKD", "USD"): ("HKD/USD", "SELL"),  # sell HKD → get USD
 }
 
-# Symbols for rate lookups (MONEY market)
-RATE_SYMBOLS = {
-    ("EUR", "USD"): "EUR/USD",
-    ("EUR", "GBP"): "EUR/GBP",
-    ("GBP", "USD"): "GBP/USD",
-    ("HKD", "EUR"): "HKD/EUR",
-    ("HKD", "USD"): "HKD/USD",
-}
-
 # Default exchange rates (fallbacks when API fails)
 DEFAULT_RATES = {
     "EUR": 1.0,

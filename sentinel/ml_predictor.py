@@ -194,14 +194,13 @@ class MLPredictor:
 
             await self.db.conn.execute(
                 """INSERT INTO ml_predictions
-                   (prediction_id, symbol, model_version, predicted_at,
+                   (prediction_id, symbol, predicted_at,
                     features, predicted_return, ml_score, wavelet_score,
                     blend_ratio, final_score, inference_time_ms)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     prediction_id,
                     symbol,
-                    None,  # model_version no longer used
                     datetime.now().isoformat(),
                     json.dumps(features),
                     predicted_return,

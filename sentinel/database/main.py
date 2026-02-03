@@ -669,28 +669,30 @@ class Database(BaseDatabase):
         await self._apply_migrations()
         await self.conn.commit()
 
+    async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
+        """Add a column to a table if it doesn't already exist."""
+        cursor = await self.conn.execute(f"PRAGMA table_info({table})")
+        columns = {row[1] for row in await cursor.fetchall()}
+        if column not in columns:
+            await self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
     async def _apply_migrations(self) -> None:
         """Apply schema migrations for existing tables."""
-        # Get existing columns in securities table
-        cursor = await self.conn.execute("PRAGMA table_info(securities)")
-        columns = {row[1] for row in await cursor.fetchall()}
-
-        # Add missing columns
+        # Add missing columns to securities table
         migrations = [
-            ("market_id", "ALTER TABLE securities ADD COLUMN market_id TEXT"),
-            ("data", "ALTER TABLE securities ADD COLUMN data TEXT"),
-            ("last_synced", "ALTER TABLE securities ADD COLUMN last_synced TEXT"),
-            ("user_multiplier", "ALTER TABLE securities ADD COLUMN user_multiplier REAL DEFAULT 1.0"),
-            ("ml_enabled", "ALTER TABLE securities ADD COLUMN ml_enabled INTEGER DEFAULT 0"),
-            ("ml_blend_ratio", "ALTER TABLE securities ADD COLUMN ml_blend_ratio REAL DEFAULT 0.5"),
-            ("quote_data", "ALTER TABLE securities ADD COLUMN quote_data TEXT"),
-            ("quote_updated_at", "ALTER TABLE securities ADD COLUMN quote_updated_at INTEGER"),
-            ("aliases", "ALTER TABLE securities ADD COLUMN aliases TEXT"),
+            ("market_id", "TEXT"),
+            ("data", "TEXT"),
+            ("last_synced", "TEXT"),
+            ("user_multiplier", "REAL DEFAULT 1.0"),
+            ("ml_enabled", "INTEGER DEFAULT 0"),
+            ("ml_blend_ratio", "REAL DEFAULT 0.5"),
+            ("quote_data", "TEXT"),
+            ("quote_updated_at", "INTEGER"),
+            ("aliases", "TEXT"),
         ]
 
-        for col_name, sql in migrations:
-            if col_name not in columns:
-                await self.conn.execute(sql)
+        for col_name, definition in migrations:
+            await self._add_column_if_missing("securities", col_name, definition)
 
         # Create advanced analytics tables
         await self.conn.executescript("""
@@ -760,7 +762,6 @@ class Database(BaseDatabase):
         CREATE TABLE IF NOT EXISTS ml_predictions (
             prediction_id TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
-            model_version TEXT,
             predicted_at TEXT,
             features TEXT,
             predicted_return REAL,

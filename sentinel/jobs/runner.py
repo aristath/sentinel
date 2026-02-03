@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Callable
+from typing import Any, Callable
 
 from apscheduler.executors.asyncio import AsyncIOExecutor
 from apscheduler.jobstores.memory import MemoryJobStore
@@ -13,9 +13,6 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from sentinel.jobs import tasks
-
-if TYPE_CHECKING:
-    pass
 
 logger = logging.getLogger(__name__)
 

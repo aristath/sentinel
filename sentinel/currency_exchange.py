@@ -11,7 +11,9 @@ from typing import List, Optional
 
 from sentinel.broker import Broker
 from sentinel.config.currencies import DIRECT_PAIRS
+from sentinel.currency import Currency
 from sentinel.database import Database
+from sentinel.utils.decorators import singleton
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +28,7 @@ class ConversionStep:
     action: str  # "BUY" or "SELL"
 
 
+@singleton
 class CurrencyExchangeService:
     """Handles currency conversions via Tradernet FX pairs.
 
@@ -35,21 +38,10 @@ class CurrencyExchangeService:
 
     DIRECT_PAIRS = DIRECT_PAIRS
 
-    _instance: Optional["CurrencyExchangeService"] = None
-
-    def __new__(cls):
-        """Singleton pattern."""
-        if cls._instance is None:
-            cls._instance = super().__new__(cls)
-            cls._instance._initialized = False
-        return cls._instance
-
     def __init__(self):
-        if self._initialized:
-            return
-        self._initialized = True
         self._broker = Broker()
         self._db = Database()
+        self._currency = Currency()
 
     def get_conversion_path(self, from_currency: str, to_currency: str) -> List[ConversionStep]:
         """Get the conversion path between two currencies.
@@ -110,27 +102,10 @@ class CurrencyExchangeService:
             Exchange rate (how many units of to_currency per 1 from_currency),
             or None if rate cannot be fetched
         """
-        from_curr = from_currency.upper()
-        to_curr = to_currency.upper()
-
-        if from_curr == to_curr:
-            return 1.0
-
         try:
-            from sentinel.currency import Currency
-
-            currency = Currency()
-            rates = await currency.get_rates()
-
-            from_eur = rates.get(from_curr)
-            to_eur = rates.get(to_curr)
-            if from_eur and to_eur:
-                return from_eur / to_eur
-
-            logger.error(f"No rate available for {from_curr} or {to_curr}")
-            return None
+            return await self._currency.get_cross_rate(from_currency, to_currency)
         except Exception as e:
-            logger.error(f"Failed to get rate {from_curr}/{to_curr}: {e}")
+            logger.error(f"Failed to get rate {from_currency}/{to_currency}: {e}")
             return None
 
     async def exchange(self, from_currency: str, to_currency: str, amount: float) -> Optional[dict]:
