@@ -67,7 +67,7 @@ class PortfolioAnalyzer:
         await self._db.cache_set(
             "planner:current_allocations",
             json.dumps(allocations),
-            ttl=300,
+            ttl_seconds=300,
         )
 
         return allocations
