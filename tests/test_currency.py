@@ -262,9 +262,12 @@ class TestCurrencyExchangeServiceGetRate:
         # Indirect: USD -> GBP -> HKD
         rate_usd_gbp = await service.get_rate("USD", "GBP")
         rate_gbp_hkd = await service.get_rate("GBP", "HKD")
-        rate_indirect = rate_usd_gbp * rate_gbp_hkd
 
+        # Ensure intermediate rates are available before multiplication
         assert rate_direct is not None
-        assert rate_indirect is not None
+        assert rate_usd_gbp is not None
+        assert rate_gbp_hkd is not None
+
+        rate_indirect = rate_usd_gbp * rate_gbp_hkd
         # Should be approximately equal
         assert abs(rate_direct - rate_indirect) < 0.01
