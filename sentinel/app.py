@@ -17,6 +17,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
+# API routers
+from sentinel.api.routers import led_router, settings_router
+from sentinel.api.routers.settings import set_led_controller
 from sentinel.backtester import (
     BacktestConfig,
     Backtester,
@@ -112,6 +115,7 @@ async def lifespan(app: FastAPI):
     from sentinel.led import LEDController
 
     _led_controller = LEDController()
+    set_led_controller(_led_controller)
     _led_task = asyncio.create_task(_led_controller.start())
 
     yield
@@ -184,60 +188,86 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include API routers
+app.include_router(settings_router, prefix="/api")
+app.include_router(led_router, prefix="/api")
+
+# -----------------------------------------------------------------------------
+# The following routes have been moved to sentinel/api/routers/:
+# - Settings API -> settings_router
+# - LED Display API -> led_router
+# -----------------------------------------------------------------------------
+
+# -----------------------------------------------------------------------------
+# Settings API (MOVED to sentinel/api/routers/settings.py)
+# -----------------------------------------------------------------------------
+# NOTE: The following handlers are now in settings_router:
+# - GET /api/settings
+# - PUT /api/settings/{key}
+# NOTE: The following handlers are now in led_router:
+# - GET /api/led/status
+# - PUT /api/led/enabled
+# - POST /api/led/refresh
+
 
 # -----------------------------------------------------------------------------
 # Settings API
 # -----------------------------------------------------------------------------
 
 
-@app.get("/api/settings")
-async def get_settings():
-    """Get all settings."""
-    settings = Settings()
-    return await settings.all()
+# MOVED to sentinel/api/routers/settings.py
+# @app.get("/api/settings")
+# async def get_settings():
+#     """Get all settings."""
+#     settings = Settings()
+#     return await settings.all()
 
 
-@app.put("/api/settings/{key}")
-async def set_setting(key: str, value: dict):
-    """Set a setting value."""
-    settings = Settings()
-    await settings.set(key, value.get("value"))
-    return {"status": "ok"}
+# MOVED to sentinel/api/routers/settings.py
+# @app.put("/api/settings/{key}")
+# async def set_setting(key: str, value: dict):
+#     """Set a setting value."""
+#     settings = Settings()
+#     await settings.set(key, value.get("value"))
+#     return {"status": "ok"}
 
 
 # -----------------------------------------------------------------------------
-# LED Display API
+# LED Display API (MOVED to sentinel/api/routers/settings.py)
 # -----------------------------------------------------------------------------
 
 
-@app.get("/api/led/status")
-async def get_led_status():
-    """Get LED display status and settings."""
-    settings = Settings()
-    enabled = await settings.get("led_display_enabled", False)
-    return {
-        "enabled": enabled,
-        "running": _led_controller.is_running if _led_controller else False,
-        "trade_count": _led_controller.trade_count if _led_controller else 0,
-    }
+# MOVED to sentinel/api/routers/settings.py
+# @app.get("/api/led/status")
+# async def get_led_status():
+#     """Get LED display status and settings."""
+#     settings = Settings()
+#     enabled = await settings.get("led_display_enabled", False)
+#     return {
+#         "enabled": enabled,
+#         "running": _led_controller.is_running if _led_controller else False,
+#         "trade_count": _led_controller.trade_count if _led_controller else 0,
+#     }
 
 
-@app.put("/api/led/enabled")
-async def set_led_enabled(data: dict):
-    """Enable or disable LED display."""
-    settings = Settings()
-    enabled = data.get("enabled", False)
-    await settings.set("led_display_enabled", enabled)
-    return {"enabled": enabled}
+# MOVED to sentinel/api/routers/settings.py
+# @app.put("/api/led/enabled")
+# async def set_led_enabled(data: dict):
+#     """Enable or disable LED display."""
+#     settings = Settings()
+#     enabled = data.get("enabled", False)
+#     await settings.set("led_display_enabled", enabled)
+#     return {"enabled": enabled}
 
 
-@app.post("/api/led/refresh")
-async def refresh_led_display():
-    """Force an immediate LED display refresh."""
-    if not _led_controller or not _led_controller.is_running:
-        return {"status": "not_running"}
-    await _led_controller.force_refresh()
-    return {"status": "refreshed", "trade_count": _led_controller.trade_count}
+# MOVED to sentinel/api/routers/settings.py
+# @app.post("/api/led/refresh")
+# async def refresh_led_display():
+#     """Force an immediate LED display refresh."""
+#     if not _led_controller or not _led_controller.is_running:
+#         return {"status": "not_running"}
+#     await _led_controller.force_refresh()
+#     return {"status": "refreshed", "trade_count": _led_controller.trade_count}
 
 
 # -----------------------------------------------------------------------------
