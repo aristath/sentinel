@@ -6,15 +6,15 @@ import (
 	"math"
 	"strings"
 
+	catppuccin "github.com/catppuccin/go"
+
 	"charm.land/lipgloss/v2"
 )
 
+var mocha = catppuccin.Mocha
+
 // Theme holds the semantic color palette for the entire TUI.
 type Theme struct {
-	Base    color.Color
-	Surface color.Color
-	Overlay color.Color
-	Border  color.Color
 	Muted   color.Color
 	Text    color.Color
 	Subtext color.Color
@@ -26,21 +26,17 @@ type Theme struct {
 	Info    color.Color
 }
 
-// Default theme uses Charmbracelet's CharmTone palette from Crush.
+// Default theme: Catppuccin Mocha.
 var Default = Theme{
-	Base:    lipgloss.Color("#201F26"), // Pepper
-	Surface: lipgloss.Color("#2D2C35"), // BBQ
-	Overlay: lipgloss.Color("#3A3943"), // Charcoal
-	Border:  lipgloss.Color("#4D4C57"), // Iron
-	Muted:   lipgloss.Color("#858392"), // Squid
-	Text:    lipgloss.Color("#DFDBDD"), // Ash
-	Subtext: lipgloss.Color("#BFBCC8"), // Smoke
-	Primary: lipgloss.Color("#6B50FF"), // Charple
-	Accent:  lipgloss.Color("#FF60FF"), // Dolly
-	Success: lipgloss.Color("#00FFB2"), // Julep
-	Warning: lipgloss.Color("#FFD300"),
-	Error:   lipgloss.Color("#E94090"),
-	Info:    lipgloss.Color("#00CED1"),
+	Muted:   mocha.Overlay0(),
+	Text:    mocha.Text(),
+	Subtext: mocha.Subtext0(),
+	Primary: mocha.Blue(),
+	Accent:  mocha.Mauve(),
+	Success: mocha.Green(),
+	Warning: mocha.Peach(),
+	Error:   mocha.Red(),
+	Info:    mocha.Sky(),
 }
 
 // GradientText applies a horizontal color gradient across each line of text.

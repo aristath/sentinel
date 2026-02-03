@@ -8,11 +8,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	figure "github.com/common-nighthawk/go-figure"
 
 	"sentinel-tui-go/internal/api"
 	"sentinel-tui-go/internal/bigtext"
-	"sentinel-tui-go/internal/fonts"
 	"sentinel-tui-go/internal/theme"
 )
 
@@ -26,51 +24,50 @@ func (m Model) View() tea.View {
 }
 
 func (m Model) viewMain() string {
-	t := theme.Default
-
 	page := lipgloss.NewStyle().
 		Width(m.width).
-		Height(m.height).
-		Background(t.Base)
-
+		Height(m.height)
 	return page.Render(m.viewport.View())
 }
 
+// contentWidth returns the usable content width after outer padding.
+func (m Model) contentWidth() int {
+	return m.width - 4
+}
+
 func (m *Model) rebuildContent() {
+	t := theme.Default
 	pad := lipgloss.NewStyle().Padding(0, 2)
+	w := m.contentWidth()
 
 	hero := pad.Render(m.viewHero())
 	actions := pad.Render(m.viewActions())
 	cards := pad.Render(m.viewCards())
 
+	sep := pad.Render(lipgloss.NewStyle().Foreground(t.Primary).Render(
+		strings.Repeat("═", w)))
+
 	oneBlock := strings.Join([]string{
-		strings.Repeat("\n", 50),
+		strings.Repeat("\n", m.height),
 		hero,
-		"",
+		"", "",
+		sep,
+		"", "",
 		actions,
-		"",
+		"", "",
+		sep,
+		"", "",
 		cards,
 	}, "\n")
 
 	oneBlock = strings.TrimRight(oneBlock, "\n")
 	m.contentLines = strings.Count(oneBlock, "\n") + 1
-
-	// Duplicate the block so the scroll wraps seamlessly.
 	m.viewport.SetContent(oneBlock + "\n" + oneBlock)
-}
-
-// renderFiglet renders text using the double_blocky font.
-func renderFiglet(text string) string {
-	fr := fonts.LoadFont("double_blocky")
-	if fr == nil {
-		return text
-	}
-	fig := figure.NewFigureWithFont(text, fr, false)
-	return strings.Join(fig.Slicify(), "\n")
 }
 
 func (m Model) viewHero() string {
 	t := theme.Default
+	w := m.contentWidth()
 
 	if m.portfolio == nil && !m.connected {
 		return lipgloss.NewStyle().
@@ -87,36 +84,52 @@ func (m Model) viewHero() string {
 	if m.portfolio != nil {
 		cash = m.portfolio.TotalCashEUR
 	}
+
 	var pnlPct float64
 	if m.pnlHistory != nil {
 		pnlPct = m.pnlHistory.Summary.PnLPercent
 	}
 
 	pnlSign := "+"
+	pnlColor := t.Success
 	if pnlPct < 0 {
 		pnlSign = ""
+		pnlColor = t.Error
 	}
 
-	valFig := bigtext.RenderExtraBold(formatEUR(value))
-	pnlFig := renderFiglet(fmt.Sprintf("%s%.1f%%", pnlSign, pnlPct))
-	cashFig := renderFiglet(formatWithSeparators(cash))
+	// Portfolio value — hero number
+	valText := bigtext.RenderBold(formatEUR(value))
+	valBlock := theme.GradientText(valText, t.Primary, t.Accent)
 
-	valBlock := theme.GradientText(valFig, t.Primary, t.Accent)
-	valSep := theme.GradientText(strings.Repeat("█", m.width-6), t.Primary, t.Accent)
-	pnlBlock := lipgloss.NewStyle().Foreground(t.Info).Render(pnlFig)
-	cashBlock := lipgloss.NewStyle().Foreground(t.Info).Render(cashFig)
+	// P&L and cash as compact block text
+	pnlText := bigtext.Render(fmt.Sprintf("%s%.1f%%", pnlSign, pnlPct))
+	pnlBlock := lipgloss.NewStyle().Foreground(pnlColor).Render(pnlText)
+	pnlLabel := lipgloss.NewStyle().Foreground(t.Muted).Render("  PNL")
 
-	// PnL left, cash right-aligned on the same row
-	rowWidth := m.width - 6
+	cashText := bigtext.Render(formatWithSeparators(cash))
+	cashBlock := lipgloss.NewStyle().Foreground(t.Subtext).Render(cashText)
+	cashLabel := lipgloss.NewStyle().Foreground(t.Muted).Render("CASH  ")
+
+	pnlCol := lipgloss.JoinVertical(lipgloss.Left, pnlBlock, pnlLabel)
+	cashCol := lipgloss.JoinVertical(lipgloss.Right, cashBlock, cashLabel)
+
+	gap := w - lipgloss.Width(pnlCol) - lipgloss.Width(cashCol)
+	if gap < 0 {
+		gap = 0
+	}
 	infoRow := lipgloss.JoinHorizontal(lipgloss.Top,
-		pnlBlock,
-		lipgloss.NewStyle().Width(rowWidth-lipgloss.Width(pnlBlock)-lipgloss.Width(cashBlock)).Render(""),
-		cashBlock,
+		pnlCol,
+		lipgloss.NewStyle().Width(gap).Render(""),
+		cashCol,
 	)
 
-	infoSep := theme.GradientText(strings.Repeat("/", m.width-6), t.Primary, t.Accent)
-
-	return lipgloss.JoinVertical(lipgloss.Left, valBlock, "", valSep, "", infoRow, "", infoSep)
+	return lipgloss.JoinVertical(lipgloss.Left,
+		"",
+		valBlock,
+		"",
+		infoRow,
+		"",
+	)
 }
 
 func (m Model) viewActions() string {
@@ -125,55 +138,47 @@ func (m Model) viewActions() string {
 	if len(m.recommendations) == 0 {
 		return lipgloss.NewStyle().
 			Foreground(t.Muted).
-			Render(renderFiglet("No recommendations"))
+			Render(bigtext.Render("NO RECOMMENDATIONS"))
 	}
 
-	// Pre-render symbols to find max width for alignment.
-	type recRow struct {
-		symBlock   string
-		amtBlock   string
-		color      color.Color
-	}
-	var rows []recRow
-	maxSymWidth := 0
+	title := lipgloss.NewStyle().Foreground(t.Primary).
+		Render(bigtext.Render("RECOMMENDATIONS"))
 
+	var rows []string
 	for _, rec := range m.recommendations {
 		action := strings.ToUpper(rec.Action)
 		cost := rec.Price * float64(rec.Quantity)
 
 		sign := "+"
-		color := t.Success
+		c := t.Success
 		if action == "SELL" {
 			sign = "-"
-			color = t.Warning
+			c = t.Warning
 		}
 
-		symFig := renderFiglet(rec.Symbol)
-		amtFig := renderFiglet(fmt.Sprintf("%s%s", sign, formatWithSeparators(cost)))
+		symText := bigtext.Render(rec.Symbol)
+		symBlock := lipgloss.NewStyle().Foreground(c).Render(symText)
 
-		w := lipgloss.Width(symFig)
-		if w > maxSymWidth {
-			maxSymWidth = w
-		}
-		rows = append(rows, recRow{symFig, amtFig, color})
+		actionLabel := lipgloss.NewStyle().Foreground(c).Bold(true).
+			Render(fmt.Sprintf("  %s  %s%s", action, sign, formatWithSeparators(cost)))
+
+		row := lipgloss.JoinHorizontal(lipgloss.Top, symBlock, actionLabel)
+		rows = append(rows, row)
 	}
 
-	title := lipgloss.NewStyle().Foreground(t.Info).Render(renderFiglet("Recommendations"))
 	lines := []string{title, ""}
-	for _, row := range rows {
-		sym := lipgloss.NewStyle().Width(maxSymWidth).Foreground(row.color).Render(row.symBlock)
-		amt := lipgloss.NewStyle().Foreground(row.color).Render(row.amtBlock)
-
-		line := lipgloss.JoinHorizontal(lipgloss.Top, sym, "  ", amt)
-		lines = append(lines, line)
-		lines = append(lines, "")
+	for i, row := range rows {
+		lines = append(lines, row)
+		if i < len(rows)-1 {
+			lines = append(lines, "")
+		}
 	}
-
 	return strings.Join(lines, "\n")
 }
 
 func (m Model) viewCards() string {
 	t := theme.Default
+	w := m.contentWidth()
 
 	var positions []api.Security
 	for _, sec := range m.securities {
@@ -185,20 +190,18 @@ func (m Model) viewCards() string {
 		return ""
 	}
 
-	title := lipgloss.NewStyle().Foreground(t.Info).Render(renderFiglet("Holdings"))
-	sep := theme.GradientText(strings.Repeat("/", m.width-6), t.Primary, t.Accent)
-	lines := []string{strings.Repeat("\n", 50), sep, "", title, ""}
+	title := lipgloss.NewStyle().Foreground(t.Primary).
+		Render(bigtext.Render("HOLDINGS"))
 
-	for _, sec := range positions {
-		// Symbol colored by profit
+	lines := []string{title, ""}
+
+	for i, sec := range positions {
 		symColor := t.Success
 		if sec.ProfitPct < 0 {
 			symColor = t.Error
 		}
-		symBlock := lipgloss.NewStyle().Foreground(symColor).Render(bigtext.RenderBoldLarge(sec.Symbol))
-
-		// Value + Profit row (figlet)
-		valBlock := lipgloss.NewStyle().Foreground(t.Text).Render(renderFiglet(formatWithSeparators(sec.ValueEUR)))
+		symBlock := lipgloss.NewStyle().Foreground(symColor).
+			Render(bigtext.Render(sec.Symbol))
 
 		profitSign := "+"
 		profitColor := t.Success
@@ -206,68 +209,68 @@ func (m Model) viewCards() string {
 			profitSign = ""
 			profitColor = t.Error
 		}
-		profitBlock := lipgloss.NewStyle().Foreground(profitColor).Render(renderFiglet(fmt.Sprintf("%s%.1f%%", profitSign, sec.ProfitPct)))
 
-		statsRow := lipgloss.JoinHorizontal(lipgloss.Top, valBlock, "  ", profitBlock)
+		statsText := fmt.Sprintf("  %s EUR  %s%.1f%%",
+			formatWithSeparators(sec.ValueEUR), profitSign, sec.ProfitPct)
+		statsBlock := lipgloss.NewStyle().Foreground(profitColor).Bold(true).
+			Render(statsText)
 
-		// Area chart from historical prices
+		headerRow := lipgloss.JoinHorizontal(lipgloss.Top, symBlock, statsBlock)
+
 		var chartBlock string
 		if len(sec.Prices) > 0 {
 			prices := make([]float64, len(sec.Prices))
-			for i, p := range sec.Prices {
-				prices[i] = p.Close
+			for j, p := range sec.Prices {
+				prices[j] = p.Close
 			}
-			chartBlock = RenderAreaChart(prices, sec.AvgCost, m.width-6, 10, t.Success, t.Error)
+			chartBlock = RenderAreaChart(prices, sec.AvgCost, w, 6, t.Success, t.Error)
 		}
 
-		// Score bars: full-width, no labels, below chart
-		barWidth := m.width - 6
-		classicBar := renderScoreBar(sec.WaveletScore, barWidth, t.Info, t.Border)
-		mlBar := renderScoreBar(sec.MlScore, barWidth, t.Warning, t.Border)
-		weightedBar := renderScoreBar(sec.ExpectedReturn, barWidth, t.Accent, t.Border)
-		predsRow := strings.Join([]string{classicBar, mlBar, weightedBar}, "\n")
+		// Score bars with labels
+		barWidth := w - 4
+		wavLabel := lipgloss.NewStyle().Foreground(t.Info).Render("WAV ")
+		mlLabel := lipgloss.NewStyle().Foreground(t.Warning).Render("ML  ")
+		expLabel := lipgloss.NewStyle().Foreground(t.Accent).Render("EXP ")
+		wavBar := wavLabel + renderScoreBar(sec.WaveletScore, barWidth, t.Info, t.Muted)
+		mlBar := mlLabel + renderScoreBar(sec.MlScore, barWidth, t.Warning, t.Muted)
+		expBar := expLabel + renderScoreBar(sec.ExpectedReturn, barWidth, t.Accent, t.Muted)
 
-		cardSep := theme.GradientText(strings.Repeat("/", m.width-6), t.Primary, t.Accent)
-
-		lines = append(lines, "", "", "", "", "", symBlock, "", statsRow, "")
+		var cardLines []string
+		cardLines = append(cardLines, "", headerRow, "")
 		if chartBlock != "" {
-			lines = append(lines, chartBlock, "")
+			cardLines = append(cardLines, chartBlock, "")
 		}
-		lines = append(lines, predsRow, "", "", "", "", "", cardSep, "")
+		cardLines = append(cardLines, wavBar, mlBar, expBar, "")
+
+		lines = append(lines, strings.Join(cardLines, "\n"))
+		if i < len(positions)-1 {
+			lines = append(lines, "", "", "")
+		}
 	}
 
 	return strings.Join(lines, "\n")
 }
 
-
-
 // renderScoreBar renders a center-anchored horizontal bar for a score in [-1, 1].
-// Positive scores fill rightward from center, negative fill leftward.
 func renderScoreBar(score float64, width int, c, emptyColor color.Color) string {
-	// Sub-character block elements for fractional fill (1/8 to 8/8).
 	fractionalBlocks := []rune{'▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'}
 
-	// Clamp score to [-1, 1].
 	score = math.Max(-1, math.Min(1, score))
-
 	if width < 2 {
 		width = 2
 	}
 	halfWidth := width / 2
 
-	// How many cells to fill (fractional).
 	fillCells := math.Abs(score) * float64(halfWidth)
 	fullCells := int(fillCells)
 	fraction := fillCells - float64(fullCells)
 
-	// Build the bar as a rune slice of '░' (empty).
 	bar := make([]rune, width)
 	for i := range bar {
 		bar[i] = '░'
 	}
 
 	if score >= 0 {
-		// Fill rightward from center.
 		for i := 0; i < fullCells && halfWidth+i < width; i++ {
 			bar[halfWidth+i] = '█'
 		}
@@ -279,7 +282,6 @@ func renderScoreBar(score float64, width int, c, emptyColor color.Color) string 
 			bar[halfWidth+fullCells] = fractionalBlocks[idx]
 		}
 	} else {
-		// Fill leftward from center.
 		for i := 0; i < fullCells && halfWidth-1-i >= 0; i++ {
 			bar[halfWidth-1-i] = '█'
 		}
@@ -292,7 +294,6 @@ func renderScoreBar(score float64, width int, c, emptyColor color.Color) string 
 		}
 	}
 
-	// Render: colored fill chars, empty-colored empty chars.
 	fillStyle := lipgloss.NewStyle().Foreground(c)
 	emptyStyle := lipgloss.NewStyle().Foreground(emptyColor)
 

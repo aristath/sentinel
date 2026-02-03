@@ -66,9 +66,9 @@ type securitiesMsg struct {
 	err        error
 }
 
-// Scroll: 30fps tick with fractional accumulator for smooth pacing.
-const scrollLinesPerSec = 5.0
-const scrollInterval = 33 * time.Millisecond
+// Scroll: ~43fps tick (matched to 43Hz display) with slow scroll for smooth kiosk viewing.
+const scrollLinesPerSec = 2.0
+const scrollInterval = 23 * time.Millisecond
 
 type tickMsg time.Time
 
