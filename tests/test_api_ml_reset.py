@@ -9,10 +9,10 @@ from fastapi import HTTPException
 @pytest.mark.asyncio
 async def test_endpoint_returns_started_status():
     """POST /api/ml/reset-and-retrain returns immediately with status."""
-    from sentinel.app import reset_and_retrain
+    from sentinel.api.routers.ml import reset_and_retrain
 
     with patch("sentinel.ml_reset.is_reset_in_progress", return_value=False):
-        with patch("sentinel.app.asyncio.create_task", side_effect=lambda coro: coro.close()):
+        with patch("sentinel.api.routers.ml.asyncio.create_task", side_effect=lambda coro: coro.close()):
             result = await reset_and_retrain()
 
     assert result["status"] == "started"
@@ -22,7 +22,7 @@ async def test_endpoint_returns_started_status():
 @pytest.mark.asyncio
 async def test_endpoint_triggers_background_task():
     """Verify background task is created for long-running operation."""
-    from sentinel.app import reset_and_retrain
+    from sentinel.api.routers.ml import reset_and_retrain
 
     captured_coro = None
 
@@ -34,7 +34,7 @@ async def test_endpoint_triggers_background_task():
         return mock_task
 
     with patch("sentinel.ml_reset.is_reset_in_progress", return_value=False):
-        with patch("sentinel.app.asyncio.create_task", side_effect=capture_task):
+        with patch("sentinel.api.routers.ml.asyncio.create_task", side_effect=capture_task):
             await reset_and_retrain()
 
     assert captured_coro is not None
@@ -44,7 +44,7 @@ async def test_endpoint_triggers_background_task():
 @pytest.mark.asyncio
 async def test_endpoint_rejects_concurrent_requests():
     """Verify endpoint returns 409 when reset is already in progress."""
-    from sentinel.app import reset_and_retrain
+    from sentinel.api.routers.ml import reset_and_retrain
 
     with patch("sentinel.ml_reset.is_reset_in_progress", return_value=True):
         with pytest.raises(HTTPException) as exc_info:
@@ -57,7 +57,7 @@ async def test_endpoint_rejects_concurrent_requests():
 @pytest.mark.asyncio
 async def test_run_reset_and_retrain_calls_manager():
     """Verify _run_reset_and_retrain calls MLResetManager.reset_all()."""
-    from sentinel.app import _run_reset_and_retrain
+    from sentinel.api.routers.ml import _run_reset_and_retrain
 
     mock_manager = MagicMock()
     mock_manager.reset_all = AsyncMock(
@@ -78,7 +78,7 @@ async def test_run_reset_and_retrain_calls_manager():
 @pytest.mark.asyncio
 async def test_run_reset_and_retrain_clears_state_on_success():
     """Verify active reset state is cleared after successful completion."""
-    from sentinel.app import _run_reset_and_retrain
+    from sentinel.api.routers.ml import _run_reset_and_retrain
 
     mock_manager = MagicMock()
     mock_manager.reset_all = AsyncMock(return_value={"status": "completed"})
@@ -101,7 +101,7 @@ async def test_run_reset_and_retrain_clears_state_on_success():
 @pytest.mark.asyncio
 async def test_run_reset_and_retrain_clears_state_on_error():
     """Verify active reset state is cleared even if an error occurs."""
-    from sentinel.app import _run_reset_and_retrain
+    from sentinel.api.routers.ml import _run_reset_and_retrain
 
     mock_manager = MagicMock()
     mock_manager.reset_all = AsyncMock(side_effect=Exception("Test error"))
@@ -123,7 +123,7 @@ async def test_run_reset_and_retrain_clears_state_on_error():
 @pytest.mark.asyncio
 async def test_reset_status_endpoint_returns_status():
     """GET /api/ml/reset-status returns current status."""
-    from sentinel.app import get_ml_reset_status
+    from sentinel.api.routers.ml import get_ml_reset_status
 
     mock_status = {
         "running": True,
@@ -144,7 +144,7 @@ async def test_reset_status_endpoint_returns_status():
 @pytest.mark.asyncio
 async def test_reset_status_endpoint_not_running():
     """GET /api/ml/reset-status returns running=False when idle."""
-    from sentinel.app import get_ml_reset_status
+    from sentinel.api.routers.ml import get_ml_reset_status
 
     with patch("sentinel.ml_reset.get_reset_status", return_value={"running": False}):
         result = await get_ml_reset_status()
