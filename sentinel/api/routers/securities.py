@@ -230,17 +230,17 @@ async def get_unified_view(
 
     from sentinel.planner import Planner
 
-    # Get planner recommendations
-    planner = Planner()
-    recommendations = await planner.get_recommendations(min_trade_value=0)
-    rec_map = {r.symbol: r for r in recommendations}
-
-    # Get all securities
+    # Get all securities first to avoid unnecessary work if empty
     securities = await deps.db.get_all_securities(active_only=True)
 
     # Short-circuit if no securities exist
     if not securities:
         return []
+
+    # Get planner recommendations
+    planner = Planner()
+    recommendations = await planner.get_recommendations(min_trade_value=0)
+    rec_map = {r.symbol: r for r in recommendations}
 
     # Get portfolio for position info
     from sentinel.portfolio import Portfolio
