@@ -43,3 +43,5 @@ sentinel/data/
 
 # Go binaries
 TUI/sentinel-tui-go
+
+TUI/sentinel-tui

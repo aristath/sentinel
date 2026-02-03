@@ -224,86 +224,207 @@ async def get_unified_view(
     Args:
         period: Price history period - 1M, 1Y, 5Y, 10Y
 
-    Returns all securities with their positions, prices, scores, and recommendations.
+    Returns all securities with positions, prices, scores, allocations,
+    and recommendations.
     """
     import json
 
     from sentinel.planner import Planner
+    from sentinel.price_validator import PriceValidator, get_price_anomaly_warning
+    from sentinel.utils.scoring import adjust_score_for_conviction
 
-    # Get all securities first to avoid unnecessary work if empty
+    # Get all active securities
     securities = await deps.db.get_all_securities(active_only=True)
-
-    # Short-circuit if no securities exist
     if not securities:
         return []
 
-    # Get planner recommendations
+    all_symbols = [sec["symbol"] for sec in securities]
+
     planner = Planner()
-    recommendations = await planner.get_recommendations(min_trade_value=0)
-    rec_map = {r.symbol: r for r in recommendations}
 
-    # Get portfolio for position info
-    from sentinel.portfolio import Portfolio
+    # Fetch all data sources
+    positions = await deps.db.get_all_positions()
+    positions_map = {p["symbol"]: p for p in positions}
 
-    portfolio = Portfolio()
-    positions = await portfolio.positions()
-    pos_map = {p["symbol"]: p for p in positions}
+    cursor = await deps.db.conn.execute("SELECT * FROM scores")
+    scores = await cursor.fetchall()
+    scores_map = {s["symbol"]: dict(s) for s in scores}
 
-    # Get scores for all securities
-    query = "SELECT symbol, score, components FROM scores WHERE symbol IN ({})".format(",".join("?" * len(securities)))  # noqa: S608
-    cursor = await deps.db.conn.execute(query, tuple(s["symbol"] for s in securities))
-    score_rows = await cursor.fetchall()
-    score_map = {row["symbol"]: dict(row) for row in score_rows}
+    # Latest ML predictions per symbol (wavelet/ML score breakdown)
+    cursor = await deps.db.conn.execute(
+        """SELECT symbol, wavelet_score, ml_score, final_score
+           FROM ml_predictions
+           WHERE predicted_at = (
+               SELECT MAX(predicted_at) FROM ml_predictions p2
+               WHERE p2.symbol = ml_predictions.symbol
+           )"""
+    )
+    ml_preds = await cursor.fetchall()
+    ml_preds_map = {p["symbol"]: dict(p) for p in ml_preds}
 
-    # Build unified view
+    # Recommendations using settings default for min_trade_value
+    recommendations = await planner.get_recommendations()
+    recommendations_map = {r.symbol: r for r in recommendations}
+
+    # Ideal and current allocations
+    ideal = await planner.calculate_ideal_portfolio()
+    current_allocs = await planner.get_current_allocations()
+
+    # Live quotes
+    current_quotes = await deps.broker.get_quotes(all_symbols)
+
+    # Total portfolio value in EUR
+    total_value = 0.0
+    for pos in positions:
+        price = pos.get("current_price", 0)
+        qty = pos.get("quantity", 0)
+        pos_currency = pos.get("currency", "EUR")
+        total_value += await deps.currency.to_eur(price * qty, pos_currency)
+
+    # Post-plan total value (current + net effect of all recommendations)
+    post_plan_total_value = total_value
+    for rec in recommendations:
+        post_plan_total_value += rec.value_delta_eur
+
+    # Bulk-fetch and validate prices
+    days_map = {"1M": 30, "1Y": 365, "5Y": 1825, "10Y": 3650}
+    days = days_map.get(period, 365)
+    all_prices_raw = await deps.db.get_prices_bulk(all_symbols, days=days)
+
+    validator = PriceValidator()
+    all_prices_validated = {}
+    for symbol, raw_prices in all_prices_raw.items():
+        all_prices_validated[symbol] = validator.validate_price_series_desc(raw_prices)
+
+    # Build unified response
     result = []
     for sec in securities:
         symbol = sec["symbol"]
-        position = pos_map.get(symbol, {})
-        score_data = score_map.get(symbol, {})
-        rec = rec_map.get(symbol)
+        position = positions_map.get(symbol)
+        score_data = scores_map.get(symbol, {})
+        recommendation = recommendations_map.get(symbol)
+        prices = all_prices_validated.get(symbol, [])
 
-        # Get prices
-        security = Security(symbol)
-        prices = await security.get_historical_prices({"1M": 30, "1Y": 365, "5Y": 1825, "10Y": 3650}.get(period, 365))
+        # Position data
+        has_position = position is not None and position.get("quantity", 0) > 0
+        quantity = position.get("quantity", 0) if position else 0
+        avg_cost = position.get("avg_cost", 0) if position else 0
 
-        # Get recommendation info
-        rec_info = None
-        if rec:
-            rec_info = {
-                "action": rec.action,
-                "priority": rec.priority,
-                "value_delta_eur": rec.value_delta_eur,
-                "reason": rec.reason,
-            }
+        # Current price: prefer live quote, fallback to position, then historical
+        quote = current_quotes.get(symbol)
+        current_price = quote.get("price", 0) if quote else 0
+        if current_price <= 0 and position:
+            current_price = position.get("current_price", 0)
+        if current_price <= 0 and prices:
+            current_price = prices[0]["close"]
 
-        # Parse components
+        # Price anomaly warning
+        price_warning = None
+        if current_price > 0 and prices:
+            sorted_prices = sorted(prices, key=lambda p: p["date"])
+            historical_closes = [p["close"] for p in sorted_prices if p.get("close") and p["close"] > 0]
+            price_warning = get_price_anomaly_warning(current_price, historical_closes, symbol)
+
+        # Profit / loss
+        sec_currency = sec.get("currency", "EUR")
+        if has_position and avg_cost > 0:
+            profit_pct = ((current_price - avg_cost) / avg_cost) * 100
+            profit_value = (current_price - avg_cost) * quantity
+            profit_value_eur = await deps.currency.to_eur(profit_value, sec_currency)
+        else:
+            profit_pct = 0
+            profit_value = 0
+            profit_value_eur = 0
+
+        # EUR value
+        value_local = current_price * quantity
+        value_eur = await deps.currency.to_eur(value_local, sec_currency) if has_position else 0
+
+        # Allocations (as percentages)
+        current_alloc = current_allocs.get(symbol, 0) * 100
+        ideal_alloc = ideal.get(symbol, 0) * 100
+
+        if recommendation:
+            post_plan_value = value_eur + recommendation.value_delta_eur
+        else:
+            post_plan_value = value_eur
+        post_plan_alloc = (post_plan_value / post_plan_total_value * 100) if post_plan_total_value > 0 else 0
+
+        # Parse score components
         components = {}
         if score_data.get("components"):
             try:
-                components = json.loads(score_data["components"])
-            except json.JSONDecodeError:
-                # If components JSON is malformed, default to empty dict
-                # This prevents the entire response from failing due to bad data
+                components = (
+                    json.loads(score_data["components"])
+                    if isinstance(score_data["components"], str)
+                    else score_data["components"]
+                )
+            except (json.JSONDecodeError, TypeError, ValueError):
                 pass
+
+        # Expected return with user conviction adjustment
+        user_multiplier = sec.get("user_multiplier", 1.0) or 1.0
+        ml_pred = ml_preds_map.get(symbol, {})
+        ml_final_score = ml_pred.get("final_score")
+        fallback_score = components.get("expected_return", 0) or 0
+        base_expected_return = float(ml_final_score if ml_final_score is not None else fallback_score)
+        adjusted_expected_return = adjust_score_for_conviction(base_expected_return, user_multiplier)
+        conviction_boost = adjusted_expected_return - base_expected_return
+
+        # Recommendation info
+        rec_info = None
+        if recommendation:
+            rec_info = {
+                "action": recommendation.action,
+                "quantity": recommendation.quantity,
+                "value_delta_eur": recommendation.value_delta_eur,
+                "reason": recommendation.reason,
+                "priority": recommendation.priority,
+            }
 
         result.append(
             {
                 "symbol": symbol,
                 "name": sec.get("name", symbol),
-                "currency": sec.get("currency", "EUR"),
-                "geography": sec.get("geography", ""),
-                "industry": sec.get("industry", ""),
-                "score": score_data.get("score"),
-                "components": components,
-                "position": {
-                    "quantity": position.get("quantity", 0),
-                    "avg_cost": position.get("avg_cost", 0),
-                    "current_price": position.get("current_price"),
-                }
-                if position
-                else None,
-                "prices": prices,
+                "currency": sec_currency,
+                "geography": sec.get("geography"),
+                "industry": sec.get("industry"),
+                "min_lot": sec.get("min_lot", 1),
+                "active": sec.get("active", 1),
+                "allow_buy": sec.get("allow_buy", 1),
+                "allow_sell": sec.get("allow_sell", 1),
+                "user_multiplier": sec.get("user_multiplier", 1.0),
+                "ml_enabled": sec.get("ml_enabled", 0),
+                "ml_blend_ratio": sec.get("ml_blend_ratio", 0.5),
+                "aliases": sec.get("aliases"),
+                # Position data
+                "has_position": has_position,
+                "quantity": quantity,
+                "avg_cost": avg_cost,
+                "current_price": current_price,
+                "value_local": value_local,
+                "value_eur": value_eur,
+                "profit_pct": profit_pct,
+                "profit_value": profit_value,
+                "profit_value_eur": profit_value_eur,
+                # Price anomaly warning
+                "price_warning": price_warning,
+                # Allocations
+                "current_allocation": current_alloc,
+                "post_plan_allocation": post_plan_alloc,
+                "ideal_allocation": ideal_alloc,
+                "target_allocation": ideal_alloc,
+                # Score data (adjusted by user conviction)
+                "score": (score_data.get("score") or 0) + conviction_boost,
+                "expected_return": adjusted_expected_return,
+                "base_expected_return": base_expected_return,
+                "score_components": components,
+                # ML prediction breakdown
+                "wavelet_score": ml_preds_map.get(symbol, {}).get("wavelet_score"),
+                "ml_score": ml_preds_map.get(symbol, {}).get("ml_score"),
+                # Price history (simplified for charts, oldest first)
+                "prices": [{"date": p["date"], "close": p["close"]} for p in reversed(prices)],
+                # Recommendation
                 "recommendation": rec_info,
             }
         )
