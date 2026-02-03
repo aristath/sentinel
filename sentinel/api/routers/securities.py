@@ -279,6 +279,8 @@ async def get_unified_view(
             try:
                 components = json.loads(score_data["components"])
             except json.JSONDecodeError:
+                # If components JSON is malformed, default to empty dict
+                # This prevents the entire response from failing due to bad data
                 pass
 
         result.append(
