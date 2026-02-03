@@ -9,6 +9,7 @@ from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.portfolio import Portfolio
+from sentinel.services.portfolio import PortfolioService
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 allocation_router = APIRouter(prefix="/allocation", tags=["allocation"])
@@ -20,78 +21,26 @@ async def get_portfolio(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, Any]:
     """Get current portfolio state."""
-    portfolio = Portfolio()
-    positions = await portfolio.positions()
-    total = await portfolio.total_value()
-    allocations = await portfolio.get_allocations()
-
-    # Get security names and add EUR-converted values to each position
-    from sentinel.utils.positions import PositionCalculator
-
-    pos_calc = PositionCalculator(currency_converter=deps.currency)
-
-    # Batch-fetch all securities for name lookups
-    all_securities = await deps.db.get_all_securities(active_only=False)
-    securities_map = {s["symbol"]: s for s in all_securities}
-
-    for pos in positions:
-        symbol = pos["symbol"]
-        price = pos.get("current_price", 0)
-        qty = pos.get("quantity", 0)
-        avg_cost = pos.get("avg_cost", 0)
-        pos_currency = pos.get("currency", "EUR")
-
-        pos["value_local"] = await pos_calc.calculate_value_local(qty, price)
-        pos["value_eur"] = await pos_calc.calculate_value_eur(qty, price, pos_currency)
-
-        profit_pct, _ = pos_calc.calculate_profit(qty, price, avg_cost)
-        pos["profit_pct"] = profit_pct
-
-        # Get security name
-        sec = securities_map.get(symbol)
-        if sec:
-            pos["name"] = sec.get("name", symbol)
-
-    # Get cash balances from portfolio (stored in DB)
-    cash = await portfolio.get_cash_balances()
-
-    # Calculate total cash in EUR
-    total_cash_eur = await portfolio.total_cash_eur()
-
-    # Calculate total value including cash
-    total_eur = total + total_cash_eur
-
-    return {
-        "positions": positions,
-        "total_value": total,
-        "total_value_eur": total_eur,
-        "cash": cash,
-        "total_cash_eur": total_cash_eur,
-        "allocations": allocations,
-    }
+    service = PortfolioService(
+        db=deps.db,
+        portfolio=None,  # Uses singleton
+        currency=deps.currency,
+    )
+    return await service.get_portfolio_state()
 
 
 @router.post("/sync")
 async def sync_portfolio() -> dict[str, str]:
     """Sync portfolio from broker."""
-    portfolio = Portfolio()
-    await portfolio.sync()
-    return {"status": "ok"}
+    service = PortfolioService()
+    return await service.sync_portfolio()
 
 
 @router.get("/allocations")
 async def get_portfolio_allocations() -> dict[str, Any]:
     """Get current vs target allocations."""
-    portfolio = Portfolio()
-    current = await portfolio.get_allocations()
-    targets = await portfolio.get_target_allocations()
-    deviations = await portfolio.deviation_from_targets()
-
-    return {
-        "current": current,
-        "targets": targets,
-        "deviations": deviations,
-    }
+    service = PortfolioService()
+    return await service.get_allocation_comparison()
 
 
 async def _backfill_portfolio_snapshots(db, currency) -> None:

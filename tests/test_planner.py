@@ -1,16 +1,10 @@
-"""Tests for Planner class - negative balance deficit sells.
-
-These tests verify the intended behavior of the Planner's deficit sells:
-1. Sell recommendations when negative balances can't be covered by positive balances
-2. Priority ordering (lowest score, smallest first)
-3. No sells when positive balances can cover the deficit
-"""
+"""Tests for Planner components - negative balance deficit sells and feature caching."""
 
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from sentinel.planner import Planner
+from sentinel.planner import RebalanceEngine
 
 
 class TestDeficitSells:
@@ -25,13 +19,13 @@ class TestDeficitSells:
         # Negative EUR but plenty of USD to cover it
         portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -500.0, "USD": 1000.0})
 
-        planner = Planner(db=db)
-        planner._currency = MagicMock()
-        planner._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt * 0.85 if curr == "USD" else amt)
-        planner._db = db
-        planner._portfolio = portfolio
+        engine = RebalanceEngine(db=db, portfolio=portfolio)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt * 0.85 if curr == "USD" else amt)
+        engine._db = db
+        engine._portfolio = portfolio
 
-        sells = await planner._get_deficit_sells()
+        sells = await engine._get_deficit_sells()
 
         # USD (850 EUR) can cover EUR deficit (600 EUR with buffer), so no sells needed
         assert sells == []
@@ -58,16 +52,16 @@ class TestDeficitSells:
         )
         db.get_scores = AsyncMock(return_value={"AAPL.US": 0.5})
 
-        planner = Planner(db=db)
-        planner._currency = MagicMock()
-        planner._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt * 0.85 if curr == "USD" else amt)
-        planner._currency.get_rate = AsyncMock(return_value=0.85)
-        planner._portfolio = MagicMock()
-        planner._portfolio.total_value = AsyncMock(return_value=10000.0)
-        planner._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -5000.0, "USD": 100.0})
-        planner._db = db
+        engine = RebalanceEngine(db=db)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt * 0.85 if curr == "USD" else amt)
+        engine._currency.get_rate = AsyncMock(return_value=0.85)
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_value = AsyncMock(return_value=10000.0)
+        engine._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -5000.0, "USD": 100.0})
+        engine._db = db
 
-        sells = await planner._get_deficit_sells()
+        sells = await engine._get_deficit_sells()
 
         # USD (85 EUR) can't cover EUR deficit (5100 EUR with buffer), so sells needed
         assert len(sells) > 0
@@ -81,13 +75,13 @@ class TestDeficitSells:
         portfolio = MagicMock()
         portfolio.get_cash_balances = AsyncMock(return_value={"EUR": 1000.0, "USD": 500.0})
 
-        planner = Planner(db=db)
-        planner._currency = MagicMock()
-        planner._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt * 0.85 if curr == "USD" else amt)
-        planner._db = db
-        planner._portfolio = portfolio
+        engine = RebalanceEngine(db=db, portfolio=portfolio)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt * 0.85 if curr == "USD" else amt)
+        engine._db = db
+        engine._portfolio = portfolio
 
-        sells = await planner._get_deficit_sells()
+        sells = await engine._get_deficit_sells()
 
         assert sells == []
 
@@ -111,16 +105,16 @@ class TestDeficitSells:
         # LOW.EU has lower score
         db.get_scores = AsyncMock(return_value={"HIGH.EU": 0.8, "LOW.EU": 0.2})
 
-        planner = Planner(db=db)
-        planner._currency = MagicMock()
-        planner._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
-        planner._currency.get_rate = AsyncMock(return_value=1.0)
-        planner._portfolio = MagicMock()
-        planner._portfolio.total_value = AsyncMock(return_value=10000.0)
-        planner._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -1000.0})
-        planner._db = db
+        engine = RebalanceEngine(db=db)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_value = AsyncMock(return_value=10000.0)
+        engine._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -1000.0})
+        engine._db = db
 
-        sells = await planner._get_deficit_sells()
+        sells = await engine._get_deficit_sells()
 
         # Should sell LOW.EU first (lower score)
         assert len(sells) > 0
@@ -147,16 +141,16 @@ class TestDeficitSells:
         )
         db.get_scores = AsyncMock(return_value={"TEST.EU": 0.5})
 
-        planner = Planner(db=db)
-        planner._currency = MagicMock()
-        planner._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
-        planner._currency.get_rate = AsyncMock(return_value=1.0)
-        planner._portfolio = MagicMock()
-        planner._portfolio.total_value = AsyncMock(return_value=10000.0)
-        planner._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -500.0})
-        planner._db = db
+        engine = RebalanceEngine(db=db)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_value = AsyncMock(return_value=10000.0)
+        engine._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -500.0})
+        engine._db = db
 
-        sells = await planner._get_deficit_sells()
+        sells = await engine._get_deficit_sells()
 
         assert len(sells) > 0
         assert sells[0].priority == 1000
@@ -179,16 +173,16 @@ class TestDeficitSells:
         )
         db.get_scores = AsyncMock(return_value={"NOSELL.EU": 0.5, "CANSELL.EU": 0.5})
 
-        planner = Planner(db=db)
-        planner._currency = MagicMock()
-        planner._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
-        planner._currency.get_rate = AsyncMock(return_value=1.0)
-        planner._portfolio = MagicMock()
-        planner._portfolio.total_value = AsyncMock(return_value=10000.0)
-        planner._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -500.0})
-        planner._db = db
+        engine = RebalanceEngine(db=db)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_value = AsyncMock(return_value=10000.0)
+        engine._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": -500.0})
+        engine._db = db
 
-        sells = await planner._get_deficit_sells()
+        sells = await engine._get_deficit_sells()
 
         # Should only sell CANSELL.EU
         sell_symbols = [s.symbol for s in sells]
@@ -212,12 +206,12 @@ class TestDeficitSellsSimulatedCash:
         portfolio.get_cash_balances = AsyncMock(return_value={"EUR": 10000.0})
         portfolio.total_value = AsyncMock(return_value=50000.0)
 
-        planner = Planner(db=db, portfolio=portfolio)
-        planner._currency = MagicMock()
-        planner._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
-        planner._portfolio = portfolio
+        engine = RebalanceEngine(db=db, portfolio=portfolio)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._portfolio = portfolio
 
-        sells = await planner._get_deficit_sells()
+        sells = await engine._get_deficit_sells()
 
         # Portfolio returns positive cash, so no deficit sells needed
         assert sells == []
@@ -226,8 +220,8 @@ class TestDeficitSellsSimulatedCash:
 class TestFeatureCaching:
     """Tests for caching feature extraction results with 24h TTL."""
 
-    def _make_planner_with_mocks(self):
-        """Create a Planner with mocked dependencies for feature caching tests."""
+    def _make_engine_with_mocks(self):
+        """Create a RebalanceEngine with mocked dependencies for feature caching tests."""
         db = MagicMock()
         db.conn = MagicMock()
         db.cache_get = AsyncMock(return_value=None)
@@ -258,36 +252,37 @@ class TestFeatureCaching:
             ]
         )
         db.get_trades = AsyncMock(return_value=[])
+        db.get_recent_trades_for_symbol = AsyncMock(return_value=[])
 
-        planner = Planner(db=db)
-        planner._db = db
+        engine = RebalanceEngine(db=db)
+        engine._db = db
 
         # Mock portfolio
-        planner._portfolio = MagicMock()
-        planner._portfolio.total_value = AsyncMock(return_value=50000.0)
-        planner._portfolio.total_cash_eur = AsyncMock(return_value=5000.0)
-        planner._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": 5000.0})
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_value = AsyncMock(return_value=50000.0)
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=5000.0)
+        engine._portfolio.get_cash_balances = AsyncMock(return_value={"EUR": 5000.0})
 
         # Mock broker
-        planner._broker = MagicMock()
-        planner._broker.get_quotes = AsyncMock(
+        engine._broker = MagicMock()
+        engine._broker.get_quotes = AsyncMock(
             return_value={
                 "TEST.EU": {"price": 100.0},
             }
         )
 
         # Mock currency
-        planner._currency = MagicMock()
-        planner._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
-        planner._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
 
         # Mock settings
-        planner._settings = MagicMock()
-        planner._settings.get = AsyncMock(return_value=100.0)
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(return_value=100.0)
 
         # Mock feature extractor
-        planner._feature_extractor = MagicMock()
-        planner._feature_extractor.extract_features = AsyncMock(
+        engine._feature_extractor = MagicMock()
+        engine._feature_extractor.extract_features = AsyncMock(
             return_value={
                 "rsi_14": 55.0,
                 "macd_signal": 0.5,
@@ -296,8 +291,8 @@ class TestFeatureCaching:
         )
 
         # Mock ML predictor
-        planner._ml_predictor = MagicMock()
-        planner._ml_predictor.predict_and_blend = AsyncMock(
+        engine._ml_predictor = MagicMock()
+        engine._ml_predictor.predict_and_blend = AsyncMock(
             return_value={
                 "final_score": 0.6,
                 "ml_prediction": None,
@@ -305,7 +300,7 @@ class TestFeatureCaching:
             }
         )
 
-        return planner, db
+        return engine, db
 
     def _make_hist_rows(self, count=250):
         """Generate mock historical price rows (desc order)."""
@@ -327,7 +322,7 @@ class TestFeatureCaching:
     @pytest.mark.asyncio
     async def test_features_cached_after_first_computation(self):
         """On first call, extract_features is called and result is stored in cache."""
-        planner, db = self._make_planner_with_mocks()
+        engine, db = self._make_engine_with_mocks()
 
         hist_rows = self._make_hist_rows(250)
 
@@ -339,15 +334,14 @@ class TestFeatureCaching:
         # cache_get returns None (cache miss)
         db.cache_get = AsyncMock(return_value=None)
 
-        # Mock calculate_ideal_portfolio and get_current_allocations
-        planner.calculate_ideal_portfolio = AsyncMock(return_value={"TEST.EU": 0.5})
-        planner.get_current_allocations = AsyncMock(return_value={"TEST.EU": 0.4})
-        planner._get_deficit_sells = AsyncMock(return_value=[])
-
-        await planner.get_recommendations()
+        await engine.get_recommendations(
+            ideal={"TEST.EU": 0.5},
+            current={"TEST.EU": 0.4},
+            total_value=50000.0,
+        )
 
         # extract_features should have been called
-        planner._feature_extractor.extract_features.assert_called_once()
+        engine._feature_extractor.extract_features.assert_called_once()
 
         # cache_set should have been called with features key and 24h TTL
         feature_cache_calls = [c for c in db.cache_set.call_args_list if c.args[0].startswith("features:")]
@@ -360,7 +354,7 @@ class TestFeatureCaching:
         """When cache_get returns features, extract_features is NOT called."""
         import json
 
-        planner, db = self._make_planner_with_mocks()
+        engine, db = self._make_engine_with_mocks()
 
         hist_rows = self._make_hist_rows(250)
         cursor_mock = MagicMock()
@@ -378,18 +372,18 @@ class TestFeatureCaching:
 
         db.cache_get = AsyncMock(side_effect=mock_cache_get)
 
-        planner.calculate_ideal_portfolio = AsyncMock(return_value={"TEST.EU": 0.5})
-        planner.get_current_allocations = AsyncMock(return_value={"TEST.EU": 0.4})
-        planner._get_deficit_sells = AsyncMock(return_value=[])
-
-        await planner.get_recommendations()
+        await engine.get_recommendations(
+            ideal={"TEST.EU": 0.5},
+            current={"TEST.EU": 0.4},
+            total_value=50000.0,
+        )
 
         # extract_features should NOT have been called (cache hit)
-        planner._feature_extractor.extract_features.assert_not_called()
+        engine._feature_extractor.extract_features.assert_not_called()
 
         # predict_and_blend should have been called with the cached features
-        planner._ml_predictor.predict_and_blend.assert_called_once()
-        call_kwargs = planner._ml_predictor.predict_and_blend.call_args.kwargs
+        engine._ml_predictor.predict_and_blend.assert_called_once()
+        call_kwargs = engine._ml_predictor.predict_and_blend.call_args.kwargs
         assert call_kwargs["features"] == cached_features
 
     @pytest.mark.asyncio
@@ -397,7 +391,7 @@ class TestFeatureCaching:
         """Cache key uses current date so next trading day gets fresh features."""
         from datetime import datetime
 
-        planner, db = self._make_planner_with_mocks()
+        engine, db = self._make_engine_with_mocks()
 
         hist_rows = self._make_hist_rows(250)
         cursor_mock = MagicMock()
@@ -405,11 +399,11 @@ class TestFeatureCaching:
         db.conn.execute = AsyncMock(return_value=cursor_mock)
         db.cache_get = AsyncMock(return_value=None)
 
-        planner.calculate_ideal_portfolio = AsyncMock(return_value={"TEST.EU": 0.5})
-        planner.get_current_allocations = AsyncMock(return_value={"TEST.EU": 0.4})
-        planner._get_deficit_sells = AsyncMock(return_value=[])
-
-        await planner.get_recommendations()
+        await engine.get_recommendations(
+            ideal={"TEST.EU": 0.5},
+            current={"TEST.EU": 0.4},
+            total_value=50000.0,
+        )
 
         today = datetime.now().strftime("%Y-%m-%d")
         expected_key = f"features:TEST.EU:{today}"
@@ -422,7 +416,7 @@ class TestFeatureCaching:
     @pytest.mark.asyncio
     async def test_features_not_cached_when_insufficient_history(self):
         """When hist_rows < 200, extract_features and cache_set are not called."""
-        planner, db = self._make_planner_with_mocks()
+        engine, db = self._make_engine_with_mocks()
 
         # Only 50 rows — insufficient
         hist_rows = self._make_hist_rows(50)
@@ -431,14 +425,14 @@ class TestFeatureCaching:
         db.conn.execute = AsyncMock(return_value=cursor_mock)
         db.cache_get = AsyncMock(return_value=None)
 
-        planner.calculate_ideal_portfolio = AsyncMock(return_value={"TEST.EU": 0.5})
-        planner.get_current_allocations = AsyncMock(return_value={"TEST.EU": 0.4})
-        planner._get_deficit_sells = AsyncMock(return_value=[])
-
-        await planner.get_recommendations()
+        await engine.get_recommendations(
+            ideal={"TEST.EU": 0.5},
+            current={"TEST.EU": 0.4},
+            total_value=50000.0,
+        )
 
         # extract_features should NOT have been called
-        planner._feature_extractor.extract_features.assert_not_called()
+        engine._feature_extractor.extract_features.assert_not_called()
 
         # No features:* cache_set calls
         feature_set_calls = [c for c in db.cache_set.call_args_list if c.args[0].startswith("features:")]
@@ -447,7 +441,7 @@ class TestFeatureCaching:
     @pytest.mark.asyncio
     async def test_corrupted_cache_falls_through_to_extraction(self):
         """When cached value is corrupted JSON, extraction runs as fallback."""
-        planner, db = self._make_planner_with_mocks()
+        engine, db = self._make_engine_with_mocks()
 
         hist_rows = self._make_hist_rows(250)
         cursor_mock = MagicMock()
@@ -462,14 +456,14 @@ class TestFeatureCaching:
 
         db.cache_get = AsyncMock(side_effect=mock_cache_get)
 
-        planner.calculate_ideal_portfolio = AsyncMock(return_value={"TEST.EU": 0.5})
-        planner.get_current_allocations = AsyncMock(return_value={"TEST.EU": 0.4})
-        planner._get_deficit_sells = AsyncMock(return_value=[])
-
-        await planner.get_recommendations()
+        await engine.get_recommendations(
+            ideal={"TEST.EU": 0.5},
+            current={"TEST.EU": 0.4},
+            total_value=50000.0,
+        )
 
         # Despite cache hit with corrupted data, extraction should have run
-        planner._feature_extractor.extract_features.assert_called_once()
+        engine._feature_extractor.extract_features.assert_called_once()
 
         # And valid features should have been cached (overwriting the corrupt entry)
         feature_set_calls = [c for c in db.cache_set.call_args_list if c.args[0].startswith("features:")]

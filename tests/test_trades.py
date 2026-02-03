@@ -594,7 +594,7 @@ class TestCooloffIntegration:
     @pytest.mark.asyncio
     async def test_cooloff_uses_broker_trades(self, temp_db):
         """_check_cooloff_violation uses trades from new schema."""
-        from sentinel.planner import Planner
+        from sentinel.planner import RebalanceEngine
 
         # Setup: create a recent SELL trade
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
@@ -608,11 +608,11 @@ class TestCooloffIntegration:
             raw_data={"id": "recent_sell"},
         )
 
-        # Create planner with test db
-        planner = Planner(db=temp_db)
+        # Create rebalance engine with test db
+        engine = RebalanceEngine(db=temp_db)
 
         # Check cooloff for BUY (opposite of recent SELL) with 30 day cooloff
-        is_blocked, reason = await planner._check_cooloff_violation("AAPL.US", "buy", cooloff_days=30)
+        is_blocked, reason = await engine._check_cooloff_violation("AAPL.US", "buy", cooloff_days=30)
 
         assert is_blocked is True
         assert "days remaining" in reason
@@ -620,7 +620,7 @@ class TestCooloffIntegration:
     @pytest.mark.asyncio
     async def test_cooloff_allows_same_direction(self, temp_db):
         """Cooloff allows trades in same direction as last trade."""
-        from sentinel.planner import Planner
+        from sentinel.planner import RebalanceEngine
 
         yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%S")
         await temp_db.upsert_trade(
@@ -633,17 +633,17 @@ class TestCooloffIntegration:
             raw_data={"id": "recent_buy"},
         )
 
-        planner = Planner(db=temp_db)
+        engine = RebalanceEngine(db=temp_db)
 
         # BUY after BUY should be allowed
-        is_blocked, reason = await planner._check_cooloff_violation("AAPL.US", "buy", cooloff_days=30)
+        is_blocked, reason = await engine._check_cooloff_violation("AAPL.US", "buy", cooloff_days=30)
 
         assert is_blocked is False
 
     @pytest.mark.asyncio
     async def test_cooloff_allows_after_period(self, temp_db):
         """Cooloff allows opposite trades after cooloff period expires."""
-        from sentinel.planner import Planner
+        from sentinel.planner import RebalanceEngine
 
         # Trade from 60 days ago
         old_date = (datetime.now() - timedelta(days=60)).strftime("%Y-%m-%dT%H:%M:%S")
@@ -657,10 +657,10 @@ class TestCooloffIntegration:
             raw_data={"id": "old_sell"},
         )
 
-        planner = Planner(db=temp_db)
+        engine = RebalanceEngine(db=temp_db)
 
         # BUY should be allowed after 30-day cooloff
-        is_blocked, reason = await planner._check_cooloff_violation("AAPL.US", "buy", cooloff_days=30)
+        is_blocked, reason = await engine._check_cooloff_violation("AAPL.US", "buy", cooloff_days=30)
 
         assert is_blocked is False
 
