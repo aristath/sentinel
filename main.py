@@ -53,8 +53,10 @@ def main():
     parser.add_argument("--port", type=int, default=8000, help="Web server port")
     args = parser.parse_args()
 
-    # Initialize services
-    asyncio.run(init_services())
+    # Do not run init_services() here when starting the web server: uvicorn uses a
+    # different event loop, so a DB connection created here would be invalid in
+    # request handlers. The app's lifespan (sentinel.app) connects the DB in the
+    # same loop that serves requests.
 
     if args.scheduler_only:
         logger.info("Running scheduler only")
