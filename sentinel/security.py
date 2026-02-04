@@ -132,9 +132,13 @@ class Security:
             await self._db.save_prices(self.symbol, prices)
         return len(prices)
 
-    async def get_historical_prices(self, days: int | None = None) -> list[dict]:
+    async def get_historical_prices(
+        self,
+        days: int | None = None,
+        end_date: str | None = None,
+    ) -> list[dict]:
         """Get historical prices from database."""
-        return await self._db.get_prices(self.symbol, days)
+        return await self._db.get_prices(self.symbol, days=days, end_date=end_date)
 
     # -------------------------------------------------------------------------
     # Trading
@@ -146,7 +150,7 @@ class Security:
         if not trades:
             return False
         last_trade = trades[0]
-        executed_at = datetime.fromisoformat(last_trade["executed_at"])
+        executed_at = datetime.fromtimestamp(last_trade["executed_at"])
         cutoff = datetime.now() - timedelta(minutes=TRADE_COOLOFF_MINUTES)
         return executed_at > cutoff
 
@@ -330,11 +334,12 @@ class Security:
     async def set_score(self, score: float, components: dict | None = None) -> None:
         """Set the calculated score for this security."""
         import json
+        import time
 
         await self._db.conn.execute(
-            """INSERT OR REPLACE INTO scores (symbol, score, components, calculated_at)
-               VALUES (?, ?, ?, datetime('now'))""",
-            (self.symbol, score, json.dumps(components) if components else None),
+            """INSERT INTO scores (symbol, score, components, calculated_at)
+               VALUES (?, ?, ?, ?)""",
+            (self.symbol, score, json.dumps(components) if components else None, int(time.time())),
         )
         await self._db.conn.commit()
 
