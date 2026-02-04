@@ -370,8 +370,6 @@ class Database(BaseDatabase):
         retry_count: int,
     ) -> None:
         """Log a job execution to the job history."""
-        from datetime import datetime
-
         await self.conn.execute(
             """INSERT INTO job_history
                (job_id, job_type, status, error, duration_ms, executed_at, retry_count)
@@ -494,8 +492,6 @@ class Database(BaseDatabase):
 
     async def mark_job_completed(self, job_type: str) -> None:
         """Mark a job as completed (update last_run to now, reset failures)."""
-        from datetime import datetime
-
         now = int(datetime.now().timestamp())
         await self.conn.execute(
             "UPDATE job_schedules SET last_run = ?, consecutive_failures = 0 WHERE job_type = ?", (now, job_type)
@@ -504,8 +500,6 @@ class Database(BaseDatabase):
 
     async def mark_job_failed(self, job_type: str) -> None:
         """Mark a job as failed (increment failures, update last_run for backoff)."""
-        from datetime import datetime
-
         now = int(datetime.now().timestamp())
         await self.conn.execute(
             "UPDATE job_schedules SET last_run = ?, consecutive_failures = consecutive_failures + 1 WHERE job_type = ?",
@@ -529,8 +523,6 @@ class Database(BaseDatabase):
         category: Optional[str] = None,
     ) -> None:
         """Insert or update a job schedule."""
-        from datetime import datetime
-
         now = int(datetime.now().timestamp())
 
         existing = await self.get_job_schedule(job_type)
@@ -589,8 +581,6 @@ class Database(BaseDatabase):
         count = row[0] if row else 0
         if count > 0:
             return
-
-        from datetime import datetime
 
         now = int(datetime.now().timestamp())
 
@@ -763,7 +753,7 @@ class Database(BaseDatabase):
         CREATE TABLE IF NOT EXISTS ml_predictions (
             prediction_id TEXT PRIMARY KEY,
             symbol TEXT NOT NULL,
-            predicted_at TEXT,
+            predicted_at INTEGER NOT NULL,
             features TEXT,
             predicted_return REAL,
             ml_score REAL,
@@ -858,8 +848,6 @@ class Database(BaseDatabase):
             # Existing database - check if sync:cashflows is missing
             cursor = await self.conn.execute("SELECT 1 FROM job_schedules WHERE job_type = 'sync:cashflows'")
             if not await cursor.fetchone():
-                from datetime import datetime
-
                 now = int(datetime.now().timestamp())
                 await self.conn.execute(
                     """INSERT INTO job_schedules
@@ -873,8 +861,6 @@ class Database(BaseDatabase):
             # Check if sync:dividends is missing
             cursor = await self.conn.execute("SELECT 1 FROM job_schedules WHERE job_type = 'sync:dividends'")
             if not await cursor.fetchone():
-                from datetime import datetime
-
                 now = int(datetime.now().timestamp())
                 await self.conn.execute(
                     """INSERT INTO job_schedules
