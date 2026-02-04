@@ -37,13 +37,13 @@ async def verify_setup():
     try:
         db = await aiosqlite.connect("data/sentinel.db")
 
-        tables = ["regime_states", "regime_models", "correlation_matrices"]
+        tables = ["regime_states", "regime_models"]
 
         for table in tables:
             cursor = await db.execute(f"SELECT COUNT(*) FROM {table}")  # noqa: S608
             count = (await cursor.fetchone())[0]
             print(f"   ✓ {table}: {count} records")
-            if count == 0 and table in ["correlation_matrices", "regime_models"]:
+            if count == 0 and table == "regime_models":
                 all_good = False
                 print("     ⚠ No data - run first-time setup jobs!")
 
