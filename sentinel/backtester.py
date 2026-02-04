@@ -301,16 +301,23 @@ class BacktestDatabaseBuilder:
                 ),
             )
 
-        # Copy score if exists in real DB
+        # Copy latest score for this symbol from real DB (tie-break by id)
         cursor = await self.real_db.conn.execute(
-            "SELECT symbol, score, components, calculated_at FROM scores WHERE symbol = ?", (symbol,)
+            """SELECT symbol, score, components, calculated_at FROM scores
+               WHERE symbol = ? ORDER BY calculated_at DESC, id DESC LIMIT 1""",
+            (symbol,),
         )
         score_row = await cursor.fetchone()
         if score_row:
             await self.temp_db.conn.execute(
                 """INSERT OR REPLACE INTO scores (symbol, score, components, calculated_at)
                    VALUES (?, ?, ?, ?)""",
-                (score_row["symbol"], score_row["score"], score_row["components"], score_row["calculated_at"]),
+                (
+                    score_row["symbol"],
+                    score_row["score"],
+                    score_row["components"],
+                    score_row["calculated_at"],
+                ),
             )
 
         await self.temp_db.conn.commit()
