@@ -78,17 +78,22 @@ class SimulationDatabase(BaseDatabase):
     # Override: Prices with simulation date filtering
     # -------------------------------------------------------------------------
 
-    async def get_prices(self, symbol: str, days: int | None = None) -> list[dict]:
+    async def get_prices(
+        self,
+        symbol: str,
+        days: int | None = None,
+        end_date: str | None = None,
+    ) -> list[dict]:
         """
         Get prices for a symbol, filtered by simulation date if set.
 
         This ensures that during backtesting, we only use price data
         up to the current simulation date (no "future" data).
         """
-        if self._simulation_date:
-            # Filter to only include prices on or before simulation date
+        effective_end = end_date or self._simulation_date
+        if effective_end:
             query = "SELECT * FROM prices WHERE symbol = ? AND date <= ? ORDER BY date DESC"
-            params: list[str | int] = [symbol, self._simulation_date]
+            params: list[str | int] = [symbol, effective_end]
         else:
             query = "SELECT * FROM prices WHERE symbol = ? ORDER BY date DESC"
             params = [symbol]

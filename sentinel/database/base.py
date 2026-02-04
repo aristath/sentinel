@@ -150,7 +150,7 @@ class BaseDatabase:
         side: str,
         quantity: float,
         price: float,
-        executed_at: str,
+        executed_at: int,
         raw_data: dict,
         commission: float = 0,
         commission_currency: str = "EUR",
@@ -164,7 +164,7 @@ class BaseDatabase:
             side: 'BUY' or 'SELL'
             quantity: Number of shares/units
             price: Price per share/unit
-            executed_at: ISO format datetime string
+            executed_at: Unix timestamp (seconds since epoch)
             raw_data: Full trade data from broker API
             commission: Trading commission/fee
             commission_currency: Currency of the commission
@@ -202,9 +202,13 @@ class BaseDatabase:
     ) -> tuple[str, list]:
         """Build WHERE clause for trades queries.
 
+        start_date/end_date are YYYY-MM-DD strings; converted to unix timestamp bounds.
+
         Returns:
             Tuple of (where_clause, params)
         """
+        from datetime import datetime
+
         where = "WHERE 1=1"
         params: list = []
 
@@ -218,11 +222,13 @@ class BaseDatabase:
 
         if start_date:
             where += " AND executed_at >= ?"
-            params.append(start_date)
+            dt = datetime.strptime(start_date, "%Y-%m-%d")
+            params.append(int(dt.timestamp()))
 
         if end_date:
             where += " AND executed_at <= ?"
-            params.append(end_date + "T23:59:59")
+            dt = datetime.strptime(end_date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
+            params.append(int(dt.timestamp()))
 
         return where, params
 
@@ -315,7 +321,7 @@ class BaseDatabase:
     # -------------------------------------------------------------------------
 
     async def get_score(self, symbol: str) -> float | None:
-        """Get the score for a single security.
+        """Get the latest score for a single security.
 
         Args:
             symbol: Security symbol
@@ -323,12 +329,15 @@ class BaseDatabase:
         Returns:
             Score value, or None if not found
         """
-        cursor = await self.conn.execute("SELECT score FROM scores WHERE symbol = ?", (symbol,))
+        cursor = await self.conn.execute(
+            "SELECT score FROM scores WHERE symbol = ? ORDER BY calculated_at DESC, id DESC LIMIT 1",
+            (symbol,),
+        )
         row = await cursor.fetchone()
         return row["score"] if row else None
 
     async def get_scores(self, symbols: list[str]) -> dict[str, float]:
-        """Get scores for multiple securities.
+        """Get latest score per symbol for multiple securities.
 
         Args:
             symbols: List of security symbols
@@ -339,9 +348,19 @@ class BaseDatabase:
         if not symbols:
             return {}
         placeholders = ",".join("?" * len(symbols))
+        params = symbols + symbols + symbols
         cursor = await self.conn.execute(
-            f"SELECT symbol, score FROM scores WHERE symbol IN ({placeholders})",  # noqa: S608
-            symbols,
+            f"""SELECT s.symbol, s.score FROM scores s
+               INNER JOIN (
+                 SELECT symbol, MAX(calculated_at) AS calculated_at FROM scores
+                 WHERE symbol IN ({placeholders}) GROUP BY symbol
+               ) latest ON s.symbol = latest.symbol AND s.calculated_at = latest.calculated_at
+               INNER JOIN (
+                 SELECT symbol, calculated_at, MAX(id) AS id FROM scores
+                 WHERE symbol IN ({placeholders}) GROUP BY symbol, calculated_at
+               ) mid ON s.symbol = mid.symbol AND s.calculated_at = mid.calculated_at AND s.id = mid.id
+               WHERE s.symbol IN ({placeholders})""",  # noqa: S608
+            params,
         )
         rows = await cursor.fetchall()
         return {row["symbol"]: row["score"] for row in rows}
@@ -535,7 +554,7 @@ class BaseDatabase:
                 WHERE side = 'BUY'
                 GROUP BY symbol
             ) t ON d.symbol = t.symbol
-            WHERE d.date > COALESCE(SUBSTR(t.last_buy, 1, 10), '1970-01-01')
+            WHERE d.date > COALESCE(date(t.last_buy, 'unixepoch'), '1970-01-01')
             GROUP BY d.symbol
             HAVING pool > 0
             """
@@ -547,10 +566,28 @@ class BaseDatabase:
     # Prices (base implementation, can be overridden)
     # -------------------------------------------------------------------------
 
-    async def get_prices(self, symbol: str, days: int | None = None) -> list[dict]:
-        """Get historical prices for a security."""
-        query = "SELECT * FROM prices WHERE symbol = ? ORDER BY date DESC"
+    async def get_prices(
+        self,
+        symbol: str,
+        days: int | None = None,
+        end_date: str | None = None,
+    ) -> list[dict]:
+        """Get historical prices for a security.
+
+        Args:
+            symbol: Security symbol
+            days: Optional limit on number of most recent days
+            end_date: If set, only return rows with date <= end_date (YYYY-MM-DD)
+
+        Returns:
+            List of price dicts, newest first (or oldest-first if end_date semantics needed by caller)
+        """
+        query = "SELECT * FROM prices WHERE symbol = ?"
         params: list[str | int] = [symbol]
+        if end_date is not None:
+            query += " AND date <= ?"
+            params.append(end_date)
+        query += " ORDER BY date DESC"
         if days:
             query += " LIMIT ?"
             params.append(days)

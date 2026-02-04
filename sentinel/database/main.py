@@ -295,9 +295,10 @@ class Database(BaseDatabase):
     async def update_security_metadata(self, symbol: str, data: dict, market_id: str | None = None) -> None:
         """Update security with raw Tradernet metadata."""
         import json
+        import time
 
-        updates = ["data = ?", "last_synced = datetime('now')"]
-        params: list[str | int] = [json.dumps(data)]
+        updates = ["data = ?", "last_synced = ?"]
+        params: list[str | int] = [json.dumps(data), int(time.time())]
 
         if market_id:
             updates.append("market_id = ?")
@@ -682,7 +683,7 @@ class Database(BaseDatabase):
         migrations = [
             ("market_id", "TEXT"),
             ("data", "TEXT"),
-            ("last_synced", "TEXT"),
+            ("last_synced", "INTEGER"),
             ("user_multiplier", "REAL DEFAULT 1.0"),
             ("ml_enabled", "INTEGER DEFAULT 0"),
             ("ml_blend_ratio", "REAL DEFAULT 0.5"),
@@ -929,7 +930,7 @@ class Database(BaseDatabase):
                     side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL')),
                     quantity REAL NOT NULL,
                     price REAL NOT NULL,
-                    executed_at TEXT NOT NULL,
+                    executed_at INTEGER NOT NULL,
                     raw_data TEXT NOT NULL,
                     FOREIGN KEY (symbol) REFERENCES securities(symbol)
                 )
@@ -975,13 +976,13 @@ class Database(BaseDatabase):
                 price REAL NOT NULL,
                 commission REAL DEFAULT 0,
                 commission_currency TEXT DEFAULT 'EUR',
-                executed_at TEXT NOT NULL,
+                executed_at INTEGER NOT NULL,
                 raw_data TEXT,
                 FOREIGN KEY (symbol) REFERENCES securities(symbol)
             )
         """)
 
-        # Copy deduplicated data (keep the row with the highest id for each broker_trade_id)
+        # Copy deduplicated data
         await self.conn.execute("""
             INSERT INTO trades_new
                 (broker_trade_id, symbol, side, quantity, price, commission,
@@ -1095,7 +1096,7 @@ CREATE TABLE IF NOT EXISTS securities (
     ml_blend_ratio REAL DEFAULT 0.5,  -- ML/wavelet blend (0.0 = pure wavelet, 1.0 = pure ML)
     aliases TEXT,  -- Comma-separated alternative names for news/sentiment search
     data TEXT,  -- Raw Tradernet API response (JSON)
-    last_synced TEXT,
+    last_synced INTEGER,
     quote_data TEXT,  -- Raw quote data from Tradernet API (JSON)
     quote_updated_at INTEGER  -- When quote_data was last updated (unix timestamp)
 );
@@ -1133,7 +1134,7 @@ CREATE TABLE IF NOT EXISTS trades (
     price REAL NOT NULL,
     commission REAL DEFAULT 0,
     commission_currency TEXT DEFAULT 'EUR',
-    executed_at TEXT NOT NULL,
+    executed_at INTEGER NOT NULL,
     raw_data TEXT NOT NULL,
     FOREIGN KEY (symbol) REFERENCES securities(symbol)
 );
@@ -1146,14 +1147,16 @@ CREATE TABLE IF NOT EXISTS allocation_targets (
     PRIMARY KEY (type, name)
 );
 
--- Scores (calculated metrics for each security)
+-- Scores (historical; one row per calculation, latest per symbol via query)
 CREATE TABLE IF NOT EXISTS scores (
-    symbol TEXT PRIMARY KEY,
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
     score REAL,
     components TEXT,  -- JSON with breakdown
-    calculated_at TEXT,
+    calculated_at INTEGER NOT NULL,
     FOREIGN KEY (symbol) REFERENCES securities(symbol)
 );
+CREATE INDEX IF NOT EXISTS idx_scores_symbol_calculated_at ON scores (symbol, calculated_at);
 
 -- Cash balances per currency
 CREATE TABLE IF NOT EXISTS cash_balances (
