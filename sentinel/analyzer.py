@@ -767,16 +767,29 @@ class Analyzer:
 
         return results
 
-    async def update_scores(self, use_cache: bool = False) -> int:
+    async def update_scores(
+        self,
+        use_cache: bool = False,
+        as_of_date: str | None = None,
+    ) -> int:
         """
         Calculate and store scores for all securities.
 
         Args:
-            use_cache: Whether to use cached analysis (default False for fresh calculations)
+            use_cache: Whether to use cached analysis (default False for fresh calculations).
+            as_of_date: Optional date (YYYY-MM-DD). When set (e.g. backtest), scores are stored
+                with calculated_at = end-of-day for that date so get_score(..., as_of_date=ts) works.
         """
+        from datetime import datetime, timezone
+
         # Clear cache before recalculating to ensure fresh data
         if not use_cache:
             self._cache.clear()
+
+        calculated_ts: int | None = None
+        if as_of_date is not None:
+            dt = datetime.strptime(as_of_date + " 23:59:59", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+            calculated_ts = int(dt.timestamp())
 
         securities = await self._db.get_all_securities(active_only=True)
 
@@ -799,7 +812,7 @@ class Analyzer:
                     "volatility": motion.volatility,
                     "volatility_trend": motion.volatility_trend,
                 }
-                await security.set_score(motion.expected_return, components)
+                await security.set_score(motion.expected_return, components, calculated_at=calculated_ts)
                 count += 1
 
         return count

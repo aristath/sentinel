@@ -335,15 +335,28 @@ class Security:
         """
         return await self._db.get_score(self.symbol, as_of_date=as_of_date)
 
-    async def set_score(self, score: float, components: dict | None = None) -> None:
-        """Set the calculated score for this security."""
+    async def set_score(
+        self,
+        score: float,
+        components: dict | None = None,
+        calculated_at: int | None = None,
+    ) -> None:
+        """Set the calculated score for this security.
+
+        Args:
+            score: Score value (0-1).
+            components: Optional components dict (stored as JSON).
+            calculated_at: Optional Unix timestamp for the score date (e.g. end-of-day for backtest).
+                If None, uses current time (live).
+        """
         import json
         import time
 
+        ts = calculated_at if calculated_at is not None else int(time.time())
         await self._db.conn.execute(
             """INSERT INTO scores (symbol, score, components, calculated_at)
                VALUES (?, ?, ?, ?)""",
-            (self.symbol, score, json.dumps(components) if components else None, int(time.time())),
+            (self.symbol, score, json.dumps(components) if components else None, ts),
         )
         await self._db.conn.commit()
 

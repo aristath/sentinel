@@ -160,12 +160,18 @@ class Database(BaseDatabase):
             )
         await self.conn.commit()
 
-    async def get_prices_bulk(self, symbols: list[str], days: int | None = None) -> dict[str, list[dict]]:
+    async def get_prices_bulk(
+        self,
+        symbols: list[str],
+        days: int | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, list[dict]]:
         """Get historical prices for multiple securities in a single query.
 
         Args:
             symbols: List of security symbols
             days: Number of most recent days to fetch per symbol
+            end_date: If set (YYYY-MM-DD), only return rows with date <= end_date
 
         Returns:
             Dict mapping symbol -> list of price records (newest first)
@@ -174,27 +180,33 @@ class Database(BaseDatabase):
             return {}
 
         placeholders = ",".join("?" * len(symbols))
+        base_where = f"WHERE symbol IN ({placeholders})"
+        if end_date is not None:
+            base_where += " AND date <= ?"
+        base_params: list = list(symbols)
+        if end_date is not None:
+            base_params.append(end_date)
 
         if days:
-            # Use window function to get top N rows per symbol
+            # Use window function to get top N rows per symbol (after end_date filter)
             query = f"""
                 SELECT * FROM (
                     SELECT *,
                         ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY date DESC) as rn
                     FROM prices
-                    WHERE symbol IN ({placeholders})
+                    {base_where}
                 )
                 WHERE rn <= ?
                 ORDER BY symbol, date DESC
             """  # noqa: S608
-            params = [*symbols, days]
+            params = [*base_params, days]
         else:
             query = f"""
                 SELECT * FROM prices
-                WHERE symbol IN ({placeholders})
+                {base_where}
                 ORDER BY symbol, date DESC
             """  # noqa: S608
-            params = symbols
+            params = base_params
 
         cursor = await self.conn.execute(query, params)
         rows = await cursor.fetchall()
@@ -433,6 +445,27 @@ class Database(BaseDatabase):
         cursor = await self.conn.execute("SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1")
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+    async def get_ml_prediction_as_of(self, symbol: str, as_of_ts: int) -> dict | None:
+        """
+        Get the most recent ML prediction for a symbol as of a given timestamp.
+
+        Args:
+            symbol: Security symbol
+            as_of_ts: Unix timestamp; returns row with largest predicted_at <= as_of_ts
+
+        Returns:
+            Row as dict (includes prediction_id, symbol, predicted_at, final_score, etc.) or None
+        """
+        cursor = await self.conn.execute(
+            """SELECT * FROM ml_predictions
+               WHERE symbol = ? AND predicted_at <= ?
+               ORDER BY predicted_at DESC
+               LIMIT 1""",
+            (symbol, as_of_ts),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row is not None else None
 
     # -------------------------------------------------------------------------
     # Job Schedules
@@ -760,7 +793,9 @@ class Database(BaseDatabase):
             wavelet_score REAL,
             blend_ratio REAL,
             final_score REAL,
-            inference_time_ms REAL
+            inference_time_ms REAL,
+            regime_score REAL,
+            regime_dampening REAL
         );
 
         -- Per-symbol ML performance tracking
@@ -824,6 +859,14 @@ class Database(BaseDatabase):
             await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN last_run INTEGER DEFAULT 0")
         if "consecutive_failures" not in columns:
             await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
+
+        # Migration: add regime_score, regime_dampening to ml_predictions (one-time)
+        cursor = await self.conn.execute("PRAGMA table_info(ml_predictions)")
+        pred_columns = {row[1] for row in await cursor.fetchall()}
+        if "regime_score" not in pred_columns:
+            await self.conn.execute("ALTER TABLE ml_predictions ADD COLUMN regime_score REAL")
+        if "regime_dampening" not in pred_columns:
+            await self.conn.execute("ALTER TABLE ml_predictions ADD COLUMN regime_dampening REAL")
 
         # Migration: add aggregate feature columns to ml_training_samples if missing
         cursor = await self.conn.execute("PRAGMA table_info(ml_training_samples)")

@@ -87,11 +87,14 @@ class Planner:
     async def get_recommendations(
         self,
         min_trade_value: Optional[float] = None,
+        as_of_date: Optional[str] = None,
     ) -> list[TradeRecommendation]:
         """Generate trade recommendations to move toward ideal portfolio.
 
         Args:
             min_trade_value: Minimum trade value in EUR (uses setting if None)
+            as_of_date: Optional date (YYYY-MM-DD). When set (e.g. backtest),
+                prices and "today" are scoped to this date.
 
         Returns:
             List of TradeRecommendation, sorted by priority
@@ -105,6 +108,7 @@ class Planner:
             current=current,
             total_value=total_value,
             min_trade_value=min_trade_value,
+            as_of_date=as_of_date,
         )
 
     async def get_rebalance_summary(self) -> dict:

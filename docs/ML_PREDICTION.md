@@ -247,6 +247,61 @@ data/ml_models/
 
 Each symbol has its own directory with model files.
 
+## Historical Predictions and As-Of Semantics
+
+### ML predictions (historical)
+
+- **One row per (symbol, date)** in `ml_predictions`. Column `predicted_at` is a Unix timestamp (end-of-day for that date).
+- **Backfill**: `scripts/backfill_ml_predictions.py` runs the **current** model on historical features for each date: wavelet score as-of that date, features from prices up to that date, regime from OHLCV via `quote_data_from_prices(prices)`.
+- **Regime on each row**: Columns `regime_score` and `regime_dampening` store the quote-based regime used for that prediction (from `get_regime_adjusted_return` with `quote_data` from OHLCV when backfilling).
+
+### Wavelet score as-of date
+
+- **`get_score(symbol, as_of_date=None)`** (database): If `as_of_date` is set (Unix timestamp), returns the latest score with `calculated_at <= as_of_date`. If `None`, returns the latest score.
+- **`get_scores(symbols, as_of_date=None)`**: Same semantics per symbol.
+- **`Security.get_score(as_of_date=None)`**: Passes `as_of_date` through to the database. Used by backtester/API when score as of date T is needed.
+
+### ML prediction as-of
+
+- **`get_ml_prediction_as_of(symbol, as_of_ts)`** (database): Returns the most recent `ml_predictions` row for `symbol` with `predicted_at <= as_of_ts` (one row, or `None`). Used by backtester and API for historical ML score.
+
+### HMM regime_states (historical)
+
+- **Quote-based regime**: The continuous `regime_score` and `regime_dampening` are computed from quote data (live or from OHLCV) and stored on each ML prediction.
+- **HMM discrete regime**: The `regime_states` table stores (symbol, date, regime, regime_name, confidence) from the HMM model. **Backfill**: `scripts/backfill_regime_states.py` fills historical rows using the current HMM model and features truncated to each date.
+- **RegimeDetector as-of API**: `detect_regime_as_of(symbol, date_str)` returns `{regime, regime_name, confidence}` for that date (or `None` if insufficient data). `store_regime_state_for_date(symbol, date_str, regime, regime_name, confidence)` writes one row; idempotent (INSERT OR REPLACE).
+
+### Running the backfill scripts
+
+From the repo root with the virtual environment activated:
+
+1. **Regime states** (optional; can run before or after ML backfill):
+   ```bash
+   python scripts/backfill_regime_states.py
+   ```
+   - Fills `regime_states` with historical HMM labels for each (symbol, date).
+   - Requires price data; uses the current HMM model and ~2 years of lookback. Skips dates with insufficient data.
+   - Resumable: skips existing (symbol, date) rows.
+
+2. **ML predictions**:
+   ```bash
+   python scripts/backfill_ml_predictions.py
+   ```
+   - Fills `ml_predictions` with historical rows (one per symbol per date).
+   - Requires: price data and trained models for symbols with `ml_enabled` (run training at least once).
+   - Resumable: skips existing (symbol, predicted_at) rows.
+   - Uses wavelet score as-of each date, features from prices up to that date, and regime from OHLCV.
+
+Run price sync and (if needed) model training before backfilling. Both scripts log progress and commit periodically.
+
+### Backtester (per-day historical data)
+
+The backtester uses **point-in-time** data for each simulation day:
+
+- **Wavelet scores**: Each rebalance day it runs `Analyzer.update_scores()` against the simulation DB (which has `set_simulation_date(current_date)`), so prices and scores are computed only from data on or before that day.
+- **Prices in recommendations**: When generating recommendations, the Planner is called with `as_of_date=self._simulation_date`. The RebalanceEngine then uses `db.get_prices(symbol, days=250, end_date=as_of_date)` and `today=as_of_date` for feature extraction and ML, so no future data leaks into the rebalance logic.
+- **ML**: `predict_and_blend` runs each rebalance day with that day’s wavelet score and features (from prices up to `as_of_date`), so ML is effectively as-of that date.
+
 ## New Securities
 
 When a new security is added to the universe:

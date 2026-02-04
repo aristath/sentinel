@@ -375,6 +375,85 @@ class TestPrices:
         assert prices_by_date["2024-01-02"] == 105  # Updated
         assert prices_by_date["2024-01-03"] == 102  # New
 
+    @pytest.mark.asyncio
+    async def test_get_prices_bulk_end_date(self, temp_db):
+        """get_prices_bulk(symbols, days=N, end_date=date_str) returns only rows with date <= end_date."""
+        for sym in ["A", "B"]:
+            prices = [
+                {"date": f"2024-01-{i:02d}", "open": 100, "high": 101, "low": 99, "close": 100 + i, "volume": 1000}
+                for i in range(1, 11)
+            ]
+            await temp_db.save_prices(sym, prices)
+
+        result = await temp_db.get_prices_bulk(["A", "B"], days=20, end_date="2024-01-05")
+
+        assert "A" in result
+        assert "B" in result
+        for sym in ["A", "B"]:
+            rows = result[sym]
+            assert all(r["date"] <= "2024-01-05" for r in rows)
+            assert len(rows) == 5
+            assert rows[0]["date"] == "2024-01-05"
+            assert rows[-1]["date"] == "2024-01-01"
+
+
+class TestMLPredictions:
+    """Tests for ML prediction as-of queries."""
+
+    @pytest.mark.asyncio
+    async def test_get_ml_prediction_as_of_returns_latest_on_or_before_ts(self, temp_db):
+        """get_ml_prediction_as_of(symbol, ts) returns row with largest predicted_at <= ts."""
+        await temp_db.conn.execute(
+            """INSERT INTO ml_predictions
+               (prediction_id, symbol, predicted_at, features, predicted_return, ml_score, wavelet_score,
+                blend_ratio, final_score, inference_time_ms, regime_score, regime_dampening)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("S_100", "S", 100, "{}", 0.01, 0.6, 0.5, 0.4, 0.55, 5.0, 0.7, 0.9),
+        )
+        await temp_db.conn.execute(
+            """INSERT INTO ml_predictions
+               (prediction_id, symbol, predicted_at, features, predicted_return, ml_score, wavelet_score,
+                blend_ratio, final_score, inference_time_ms, regime_score, regime_dampening)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("S_200", "S", 200, "{}", 0.02, 0.65, 0.5, 0.4, 0.58, 5.0, 0.72, 0.88),
+        )
+        await temp_db.conn.execute(
+            """INSERT INTO ml_predictions
+               (prediction_id, symbol, predicted_at, features, predicted_return, ml_score, wavelet_score,
+                blend_ratio, final_score, inference_time_ms, regime_score, regime_dampening)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("S_300", "S", 300, "{}", 0.03, 0.7, 0.5, 0.4, 0.62, 5.0, 0.75, 0.85),
+        )
+        await temp_db.conn.commit()
+
+        row = await temp_db.get_ml_prediction_as_of("S", 250)
+        assert row is not None
+        assert row["symbol"] == "S"
+        assert row["predicted_at"] == 200
+        assert row["prediction_id"] == "S_200"
+
+        row_exact = await temp_db.get_ml_prediction_as_of("S", 200)
+        assert row_exact is not None
+        assert row_exact["predicted_at"] == 200
+
+    @pytest.mark.asyncio
+    async def test_get_ml_prediction_as_of_returns_none_when_no_row(self, temp_db):
+        """get_ml_prediction_as_of(symbol, ts) returns None when no row has predicted_at <= ts."""
+        await temp_db.conn.execute(
+            """INSERT INTO ml_predictions
+               (prediction_id, symbol, predicted_at, features, predicted_return, ml_score, wavelet_score,
+                blend_ratio, final_score, inference_time_ms, regime_score, regime_dampening)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ("X_500", "X", 500, "{}", 0.01, 0.5, 0.5, 0.3, 0.5, 5.0, 0.5, 1.0),
+        )
+        await temp_db.conn.commit()
+
+        row = await temp_db.get_ml_prediction_as_of("X", 400)
+        assert row is None
+
+        row_other = await temp_db.get_ml_prediction_as_of("Y", 1000)
+        assert row_other is None
+
 
 class TestTrades:
     """Tests for trade operations (now using broker-synced trades)."""

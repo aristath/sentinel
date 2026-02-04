@@ -300,7 +300,27 @@ class TestFeatureCaching:
             }
         )
 
+        # RebalanceEngine now uses db.get_prices(symbol, days=250, end_date=as_of_date) for hist data
+        db.get_prices = AsyncMock(return_value=self._make_hist_dicts(250))
+
         return engine, db
+
+    def _make_hist_dicts(self, count=250):
+        """Generate mock historical price dicts (newest first, for get_prices)."""
+        from datetime import datetime, timedelta
+
+        base = datetime(2025, 1, 31).date()
+        return [
+            {
+                "date": (base - timedelta(days=i)).isoformat(),
+                "open": 100.0,
+                "high": 105.0,
+                "low": 95.0,
+                "close": 102.0,
+                "volume": 10000.0,
+            }
+            for i in range(count)
+        ]
 
     def _make_hist_rows(self, count=250):
         """Generate mock historical price rows (desc order)."""
@@ -418,11 +438,8 @@ class TestFeatureCaching:
         """When hist_rows < 200, extract_features and cache_set are not called."""
         engine, db = self._make_engine_with_mocks()
 
-        # Only 50 rows — insufficient
-        hist_rows = self._make_hist_rows(50)
-        cursor_mock = MagicMock()
-        cursor_mock.fetchall = AsyncMock(return_value=hist_rows)
-        db.conn.execute = AsyncMock(return_value=cursor_mock)
+        # Only 50 rows — insufficient (code uses get_prices, not raw SQL)
+        db.get_prices = AsyncMock(return_value=self._make_hist_dicts(50))
         db.cache_get = AsyncMock(return_value=None)
 
         await engine.get_recommendations(

@@ -1,5 +1,6 @@
 """Securities and prices API routes."""
 
+from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -219,16 +220,25 @@ async def sync_all_prices(
 unified_router = APIRouter(prefix="/unified", tags=["unified"])
 
 
+def _end_of_day_utc_ts(date_str: str) -> int:
+    """Unix timestamp for end of date_str (YYYY-MM-DD) in UTC."""
+    dt = datetime.strptime(date_str + " 23:59:59", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
+    return int(dt.timestamp())
+
+
 @unified_router.get("")
 async def get_unified_view(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
     period: str = "1Y",
+    as_of: str | None = None,
 ) -> list[dict]:
     """
     Get aggregated data for unified security cards view.
 
     Args:
         period: Price history period - 1M, 1Y, 5Y, 10Y
+        as_of: Optional date (YYYY-MM-DD). When set, scores and ML predictions
+            are returned as of that date (wavelet score and ML prediction on or before that date).
 
     Returns all securities with positions, prices, scores, allocations,
     and recommendations.
@@ -252,21 +262,44 @@ async def get_unified_view(
     positions = await deps.db.get_all_positions()
     positions_map = {p["symbol"]: p for p in positions}
 
-    cursor = await deps.db.conn.execute("SELECT * FROM scores")
-    scores = await cursor.fetchall()
-    scores_map = {s["symbol"]: dict(s) for s in scores}
+    if as_of is not None:
+        as_of_ts = _end_of_day_utc_ts(as_of)
+        # Scores as of date: latest row per symbol with calculated_at <= as_of_ts
+        cursor = await deps.db.conn.execute(
+            """SELECT * FROM (
+                   SELECT *, ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY calculated_at DESC, id DESC) AS rn
+                   FROM scores WHERE calculated_at <= ?
+               ) WHERE rn = 1""",
+            (as_of_ts,),
+        )
+        scores = await cursor.fetchall()
+        scores_map = {}
+        for s in scores:
+            d = dict(s)
+            d.pop("rn", None)
+            scores_map[d["symbol"]] = d
+        # ML predictions as of date
+        ml_preds_map = {}
+        for symbol in all_symbols:
+            row = await deps.db.get_ml_prediction_as_of(symbol, as_of_ts)
+            if row is not None:
+                ml_preds_map[symbol] = row
+    else:
+        cursor = await deps.db.conn.execute("SELECT * FROM scores")
+        scores = await cursor.fetchall()
+        scores_map = {s["symbol"]: dict(s) for s in scores}
 
-    # Latest ML predictions per symbol (wavelet/ML score breakdown)
-    cursor = await deps.db.conn.execute(
-        """SELECT symbol, wavelet_score, ml_score, final_score
-           FROM ml_predictions
-           WHERE predicted_at = (
-               SELECT MAX(predicted_at) FROM ml_predictions p2
-               WHERE p2.symbol = ml_predictions.symbol
-           )"""
-    )
-    ml_preds = await cursor.fetchall()
-    ml_preds_map = {p["symbol"]: dict(p) for p in ml_preds}
+        # Latest ML predictions per symbol (wavelet/ML score breakdown)
+        cursor = await deps.db.conn.execute(
+            """SELECT symbol, wavelet_score, ml_score, final_score
+               FROM ml_predictions
+               WHERE predicted_at = (
+                   SELECT MAX(predicted_at) FROM ml_predictions p2
+                   WHERE p2.symbol = ml_predictions.symbol
+               )"""
+        )
+        ml_preds = await cursor.fetchall()
+        ml_preds_map = {p["symbol"]: dict(p) for p in ml_preds}
 
     # Recommendations using settings default for min_trade_value
     recommendations = await planner.get_recommendations()

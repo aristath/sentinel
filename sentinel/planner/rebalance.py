@@ -6,7 +6,7 @@ import asyncio
 import json
 import math
 from dataclasses import asdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 
@@ -62,6 +62,7 @@ class RebalanceEngine:
         current: dict[str, float],
         total_value: float,
         min_trade_value: float | None = None,
+        as_of_date: str | None = None,
     ) -> list[TradeRecommendation]:
         """Generate trade recommendations to move toward ideal portfolio.
 
@@ -70,6 +71,8 @@ class RebalanceEngine:
             current: symbol -> current allocation percentage
             total_value: total portfolio value in EUR
             min_trade_value: minimum trade value in EUR (uses setting if None)
+            as_of_date: optional date (YYYY-MM-DD). When set (e.g. backtest),
+                prices and "today" are scoped to this date; cache is skipped.
 
         Returns:
             List of TradeRecommendation, sorted by priority
@@ -79,11 +82,12 @@ class RebalanceEngine:
             setting_value = await self._settings.get("min_trade_value", default=100.0)
             min_trade_value = float(setting_value) if setting_value is not None else 100.0
 
-        # Check cache first
-        cache_key = f"planner:recommendations:{min_trade_value}"
-        cached = await self._db.cache_get(cache_key)
-        if cached is not None:
-            return [TradeRecommendation(**r) for r in json.loads(cached)]
+        # Skip cache when as_of_date is set (e.g. backtest)
+        if as_of_date is None:
+            cache_key = f"planner:recommendations:{min_trade_value}"
+            cached = await self._db.cache_get(cache_key)
+            if cached is not None:
+                return [TradeRecommendation(**r) for r in json.loads(cached)]
 
         if total_value == 0:
             return []
@@ -108,38 +112,39 @@ class RebalanceEngine:
         all_positions = await self._db.get_all_positions()
         positions_map = {p["symbol"]: p for p in all_positions}
 
-        scores_map = await self._db.get_scores(all_symbols)
+        # Scores: when as_of_date is set (e.g. backtest), request scores as of that date explicitly.
+        if as_of_date is not None:
+            end_of_day_ts = int(
+                datetime.strptime(as_of_date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
+                .replace(tzinfo=timezone.utc)
+                .timestamp()
+            )
+            scores_map = await self._db.get_scores(all_symbols, as_of_date=end_of_day_ts)
+        else:
+            scores_map = await self._db.get_scores(all_symbols)
 
-        # Fetch historical prices with validation
+        # Fetch historical prices: single path via get_prices(end_date=as_of_date).
+        # When as_of_date is None we get latest 250; when set we get only data on or before that date.
         price_validator = PriceValidator()
 
         async def get_historical_ohlcv(symbol):
-            cursor = await self._db.conn.execute(
-                """SELECT date, open, high, low, close, volume
-                   FROM prices WHERE symbol = ?
-                   ORDER BY date DESC LIMIT 250""",
-                (symbol,),
-            )
-            rows = await cursor.fetchall()
-            if not rows:
+            raw = await self._db.get_prices(symbol, days=250, end_date=as_of_date)
+            if not raw:
                 return []
-
-            price_list = [dict(row) for row in rows]
-            for price in price_list:
+            for price in raw:
                 for col in ["open", "high", "low", "close", "volume"]:
                     if col in price and price[col] is not None:
                         try:
                             price[col] = float(price[col])
                         except (ValueError, TypeError):
                             price[col] = 0.0
-
-            return price_validator.validate_price_series_desc(price_list)
+            return price_validator.validate_price_series_desc(raw)
 
         hist_prices_list = await asyncio.gather(*[get_historical_ohlcv(s) for s in all_symbols])
         hist_prices_map = {all_symbols[i]: hist_prices_list[i] for i in range(len(all_symbols))}
 
         # Process each symbol
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = as_of_date if as_of_date is not None else datetime.now().strftime("%Y-%m-%d")
 
         for symbol in all_symbols:
             sec = securities_map.get(symbol)
@@ -205,7 +210,7 @@ class RebalanceEngine:
         recommendations.sort(key=lambda x: (0 if x.action == "sell" else 1, -x.priority))
 
         # Add deficit-fix sells at the front
-        deficit_sells = await self._get_deficit_sells()
+        deficit_sells = await self._get_deficit_sells(as_of_date=as_of_date)
         if deficit_sells:
             deficit_symbols = {s.symbol for s in deficit_sells}
             recommendations = [r for r in recommendations if r.symbol not in deficit_symbols or r.action != "sell"]
@@ -214,12 +219,14 @@ class RebalanceEngine:
         # Apply cash constraint
         recommendations = await self._apply_cash_constraint(recommendations, min_trade_value)
 
-        # Cache result
-        await self._db.cache_set(
-            cache_key,
-            json.dumps([asdict(r) for r in recommendations]),
-            ttl_seconds=300,
-        )
+        # Cache result only when live (not as_of_date)
+        if as_of_date is None:
+            cache_key = f"planner:recommendations:{min_trade_value}"
+            await self._db.cache_set(
+                cache_key,
+                json.dumps([asdict(r) for r in recommendations]),
+                ttl_seconds=300,
+            )
         return recommendations
 
     async def _extract_features(self, symbol: str, hist_rows: list, sec: dict | None, today: str) -> dict | None:
@@ -679,7 +686,7 @@ class RebalanceEngine:
         """Calculate transaction cost for a trade."""
         return fixed_fee + (value * pct_fee)
 
-    async def _get_deficit_sells(self) -> list[TradeRecommendation]:
+    async def _get_deficit_sells(self, as_of_date: str | None = None) -> list[TradeRecommendation]:
         """Generate sell recommendations if negative balances can't be covered."""
         balances = await self._portfolio.get_cash_balances()
 
@@ -703,9 +710,13 @@ class RebalanceEngine:
         if uncovered_deficit <= 0:
             return []
 
-        return await self._generate_deficit_sells(uncovered_deficit)
+        return await self._generate_deficit_sells(uncovered_deficit, as_of_date=as_of_date)
 
-    async def _generate_deficit_sells(self, deficit_eur: float) -> list[TradeRecommendation]:
+    async def _generate_deficit_sells(
+        self,
+        deficit_eur: float,
+        as_of_date: str | None = None,
+    ) -> list[TradeRecommendation]:
         """Generate sell recommendations to cover remaining deficit."""
         sells: list[TradeRecommendation] = []
         remaining_deficit = deficit_eur
@@ -718,7 +729,15 @@ class RebalanceEngine:
         securities_map = {s["symbol"]: s for s in all_securities}
 
         all_symbols = [pos["symbol"] for pos in positions]
-        scores_map = await self._db.get_scores(all_symbols)
+        if as_of_date is not None:
+            end_of_day_ts = int(
+                datetime.strptime(as_of_date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
+                .replace(tzinfo=timezone.utc)
+                .timestamp()
+            )
+            scores_map = await self._db.get_scores(all_symbols, as_of_date=end_of_day_ts)
+        else:
+            scores_map = await self._db.get_scores(all_symbols)
 
         position_data = []
         for pos in positions:

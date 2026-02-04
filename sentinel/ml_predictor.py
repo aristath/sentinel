@@ -3,7 +3,7 @@
 import json
 import logging
 import time
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -39,6 +39,9 @@ class MLPredictor:
         ml_enabled: bool,
         ml_blend_ratio: float,
         features: Optional[Dict[str, float]] = None,
+        quote_data: Optional[Dict[str, Any]] = None,
+        predicted_at_ts: Optional[int] = None,
+        skip_cache: bool = False,
     ) -> Dict[str, float]:
         """
         Predict return using ML and blend with wavelet score (cached for 12 hours).
@@ -50,6 +53,9 @@ class MLPredictor:
             ml_enabled: Whether ML is enabled for this security
             ml_blend_ratio: Blend ratio (0.0 = pure wavelet, 1.0 = pure ML)
             features: Pre-computed features (optional, uses defaults if None)
+            quote_data: Optional regime quote_data (e.g. from quote_data_from_prices); if set, no DB load for regime
+            predicted_at_ts: Optional unix ts for stored prediction (e.g. end-of-day for backfill)
+            skip_cache: If True, do not read or write prediction cache (for backfill)
 
         Returns:
             {
@@ -65,12 +71,13 @@ class MLPredictor:
         if not ml_enabled:
             return self._fallback_to_wavelet(wavelet_score)
 
-        # Check cache first (12 hours = 43200 seconds)
+        # Check cache first (unless skip_cache e.g. for backfill)
         cache_key = f"ml:prediction:{symbol}:{date}"
-        cached = await self.db.cache_get(cache_key)
-        if cached is not None:
-            logger.debug(f"{symbol}: Using cached ML prediction")
-            return json.loads(cached)
+        if not skip_cache:
+            cached = await self.db.cache_get(cache_key)
+            if cached is not None:
+                logger.debug(f"{symbol}: Using cached ML prediction")
+                return json.loads(cached)
 
         # Get model for this symbol
         ensemble = await self._get_model(symbol)
@@ -100,8 +107,10 @@ class MLPredictor:
             logger.error(f"{symbol}: ML prediction failed: {e}")
             return self._fallback_to_wavelet(wavelet_score)
 
-        # Apply regime-based dampening
-        adjusted_return, regime_score, dampening = await get_regime_adjusted_return(symbol, predicted_return, self.db)
+        # Apply regime-based dampening (use quote_data if provided, else load from DB)
+        adjusted_return, regime_score, dampening = await get_regime_adjusted_return(
+            symbol, predicted_return, self.db, quote_data=quote_data
+        )
 
         # Convert adjusted return to score (0-1)
         # Map returns: -10% → 0.0, 0% → 0.5, +10% → 1.0
@@ -110,9 +119,23 @@ class MLPredictor:
         # Blend scores using per-security blend ratio
         final_score = (1 - ml_blend_ratio) * wavelet_score + ml_blend_ratio * ml_score
 
-        # Store prediction (use adjusted return)
+        # For backfill: use provided predicted_at_ts and prediction_id = symbol_date
+        prediction_id = f"{symbol}_{date}" if predicted_at_ts is not None else None
+
+        # Store prediction (use adjusted return, regime_score, regime_dampening)
         await self._store_prediction(
-            symbol, features, adjusted_return, ml_score, wavelet_score, ml_blend_ratio, final_score, inference_time_ms
+            symbol,
+            features,
+            adjusted_return,
+            ml_score,
+            wavelet_score,
+            ml_blend_ratio,
+            final_score,
+            inference_time_ms,
+            regime_score=regime_score,
+            regime_dampening=dampening,
+            predicted_at_ts=predicted_at_ts,
+            prediction_id=prediction_id,
         )
 
         result = {
@@ -126,8 +149,8 @@ class MLPredictor:
             "final_score": float(final_score),
         }
 
-        # Cache result (12 hours = 43200 seconds)
-        await self.db.cache_set(cache_key, json.dumps(result), ttl_seconds=43200)
+        if not skip_cache:
+            await self.db.cache_set(cache_key, json.dumps(result), ttl_seconds=43200)
         return result
 
     def _normalize_return_to_score(self, predicted_return: float) -> float:
@@ -185,19 +208,34 @@ class MLPredictor:
         }
 
     async def _store_prediction(
-        self, symbol, features, predicted_return, ml_score, wavelet_score, blend_ratio, final_score, inference_time_ms
+        self,
+        symbol,
+        features,
+        predicted_return,
+        ml_score,
+        wavelet_score,
+        blend_ratio,
+        final_score,
+        inference_time_ms,
+        regime_score: Optional[float] = None,
+        regime_dampening: Optional[float] = None,
+        predicted_at_ts: Optional[int] = None,
+        prediction_id: Optional[str] = None,
     ):
         """Store prediction in database for tracking (predicted_at = unix timestamp)."""
         try:
-            predicted_at_ts = int(time.time())
-            prediction_id = f"{symbol}_{predicted_at_ts}"
+            if predicted_at_ts is None:
+                predicted_at_ts = int(time.time())
+            if prediction_id is None:
+                prediction_id = f"{symbol}_{predicted_at_ts}"
 
             await self.db.conn.execute(
                 """INSERT INTO ml_predictions
                    (prediction_id, symbol, predicted_at,
                     features, predicted_return, ml_score, wavelet_score,
-                    blend_ratio, final_score, inference_time_ms)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    blend_ratio, final_score, inference_time_ms,
+                    regime_score, regime_dampening)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (
                     prediction_id,
                     symbol,
@@ -209,6 +247,8 @@ class MLPredictor:
                     blend_ratio,
                     final_score,
                     inference_time_ms,
+                    regime_score,
+                    regime_dampening,
                 ),
             )
             await self.db.conn.commit()

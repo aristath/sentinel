@@ -52,35 +52,34 @@ class RegimeDetector:
 
         return model
 
-    async def _extract_features(self, symbol: str) -> Optional[np.ndarray]:
-        """Extract features for HMM: returns, volatility, momentum."""
-        security = Security(symbol)
-        prices = await security.get_historical_prices(days=self.lookback_days)
-
+    def _build_features_from_prices(self, prices: list) -> Optional[np.ndarray]:
+        """Build HMM feature matrix from price list (newest first). Returns None if insufficient data."""
         if len(prices) < 100:
             return None
-
         closes = np.array([p["close"] for p in reversed(prices)])
         returns = np.diff(np.log(closes))
-
-        # Feature 1: Returns
-        # Feature 2: Rolling volatility (20-day)
         vol = np.array(
             [
                 np.std(returns[max(0, i - 20) : i + 1]) if i >= 20 else np.std(returns[: i + 1])
                 for i in range(len(returns))
             ]
         )
-
-        # Feature 3: RSI momentum
         rsi_indicator = ta.momentum.RSIIndicator(close=pd.Series(closes), window=14)
         rsi = rsi_indicator.rsi().fillna(50).values
-        # Align with returns (which has len(closes) - 1 elements)
         rsi = rsi[1:]
+        return np.column_stack([returns, vol, rsi])
 
-        # Combine features
-        features = np.column_stack([returns, vol, rsi])
-        return features
+    async def _extract_features(self, symbol: str) -> Optional[np.ndarray]:
+        """Extract features for HMM: returns, volatility, momentum (current/latest data)."""
+        security = Security(symbol)
+        prices = await security.get_historical_prices(days=self.lookback_days)
+        return self._build_features_from_prices(prices)
+
+    async def _extract_features_as_of(self, symbol: str, date_str: str) -> Optional[np.ndarray]:
+        """Extract features as of date_str (prices with end_date=date_str). For backfill."""
+        await self._db.connect()
+        prices = await self._db.get_prices(symbol, days=self.lookback_days, end_date=date_str)
+        return self._build_features_from_prices(prices)
 
     async def detect_current_regime(self, symbol: str) -> dict:
         """Detect current regime for a symbol."""
@@ -110,6 +109,34 @@ class RegimeDetector:
         await self._store_regime_state(symbol, regime, regime_name, confidence)
 
         return {"regime": int(regime), "regime_name": regime_name, "confidence": float(confidence)}
+
+    async def detect_regime_as_of(self, symbol: str, date_str: str) -> Optional[dict]:
+        """Detect regime for symbol as of date_str (for backfill). Uses current HMM model.
+        Returns None when insufficient price data or no model."""
+        if self._model is None:
+            await self._load_model()
+        if self._model is None:
+            return None
+        features = await self._extract_features_as_of(symbol, date_str)
+        if features is None:
+            return None
+        regime = self._model.predict(features)[-1]
+        probs = self._model.predict_proba(features)[-1]
+        confidence = float(np.max(probs))
+        regime_name = self._map_regime_to_name(regime, features)
+        return {"regime": int(regime), "regime_name": regime_name, "confidence": confidence}
+
+    async def store_regime_state_for_date(
+        self, symbol: str, date_str: str, regime: int, regime_name: str, confidence: float
+    ) -> None:
+        """Store regime state for (symbol, date_str). Idempotent (INSERT OR REPLACE)."""
+        await self._db.conn.execute(
+            """INSERT OR REPLACE INTO regime_states
+               (symbol, date, regime, regime_name, confidence)
+               VALUES (?, ?, ?, ?, ?)""",
+            (symbol, date_str, regime, regime_name, confidence),
+        )
+        await self._db.conn.commit()
 
     def _map_regime_to_name(self, regime: int, features: np.ndarray) -> str:
         """Map regime number to descriptive name based on characteristics."""

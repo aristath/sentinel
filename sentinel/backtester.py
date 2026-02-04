@@ -22,7 +22,7 @@ Usage:
 import random
 import tempfile
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import AsyncGenerator, Optional
 
@@ -751,17 +751,18 @@ class Backtester:
         trades = []
         currency = Currency()
 
-        # Recalculate scores based on price data available up to simulation date
-        # This mirrors what the real app does during a rebalance cycle
+        # Recalculate scores based on price data available up to simulation date.
+        # Pass as_of_date so scores are stored with calculated_at = end-of-day(simulation_date),
+        # enabling get_scores(..., as_of_date=ts) to return them explicitly.
         analyzer = Analyzer(db=self._sim_db)
-        await analyzer.update_scores(use_cache=False)
+        await analyzer.update_scores(use_cache=False, as_of_date=self._simulation_date)
 
         # Create Portfolio and Planner using simulation database/broker
         portfolio = Portfolio(db=self._sim_db, broker=self._sim_broker)
         planner = Planner(db=self._sim_db, broker=self._sim_broker, portfolio=portfolio)
 
-        # Get recommendations using the ACTUAL Planner logic
-        recommendations = await planner.get_recommendations()
+        # Get recommendations using the ACTUAL Planner logic (as_of_date = simulation date)
+        recommendations = await planner.get_recommendations(as_of_date=self._simulation_date)
 
         # Get cool-off setting
         settings_data = await self._sim_db.conn.execute("SELECT value FROM settings WHERE key = 'trade_cooloff_days'")
@@ -858,13 +859,18 @@ class Backtester:
         import uuid
 
         broker_trade_id = f"BACKTEST-{uuid.uuid4().hex[:8]}"
+        executed_at_ts = int(
+            datetime.strptime(self._simulation_date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
+            .replace(tzinfo=timezone.utc)
+            .timestamp()
+        )
         await self._sim_db.upsert_trade(
             broker_trade_id=broker_trade_id,
             symbol=symbol,
             side=action.upper(),
             quantity=quantity,
             price=price,
-            executed_at=self._simulation_date,
+            executed_at=executed_at_ts,
             raw_data={
                 "id": broker_trade_id,
                 "symbol": symbol,
