@@ -103,8 +103,8 @@ async def get_portfolio_pnl_history(
         net_deposits = snap.get("net_deposits_eur", 0) or 0
         total_value = snap.get("total_value_eur", 0) or 0
 
-        # P&L relative to net deposits at that point in time
-        pnl_eur = total_value - net_deposits
+        # P&L relative to net deposits (Cumulative Money In - Cumulative Money Out)
+        pnl_eur = snap.get("unrealized_pnl_eur", 0) or (total_value - net_deposits)
         pnl_pct = (pnl_eur / net_deposits * 100) if net_deposits > 0 else 0
 
         result_snapshots.append(
@@ -209,7 +209,10 @@ async def get_allocation_current() -> dict[str, Any]:
 async def get_allocation_targets_formatted(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, dict]:
-    """Get allocation targets as {geography: {name: weight}, industry: {name: weight}}."""
+    """
+    Get allocation targets as:
+    {geography: {name: weight}, industry: {name: weight}}.
+    """
     targets = await deps.db.get_allocation_targets()
 
     geography = {}
@@ -227,7 +230,7 @@ async def get_allocation_targets_formatted(
 async def get_available_geographies(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, list]:
-    """Get available geographies from securities and allocation_targets only (no defaults)."""
+    """Get available geographies from securities and allocation_targets."""
     # Only from securities + allocation_targets, NOT defaults
     existing = await deps.db.get_categories()
     targets = await deps.db.get_allocation_targets()
@@ -240,7 +243,7 @@ async def get_available_geographies(
 async def get_available_industries(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, list]:
-    """Get available industries from securities and allocation_targets only (no defaults)."""
+    """Get available industries from securities and allocation_targets."""
     # Only from securities + allocation_targets, NOT defaults
     existing = await deps.db.get_categories()
     targets = await deps.db.get_allocation_targets()
@@ -278,7 +281,10 @@ async def delete_geography_target(
     name: str,
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, str]:
-    """Delete a geography target. Category disappears from UI if not used by any security."""
+    """
+    Delete a geography target.
+    Category disappears from UI if not used by any security.
+    """
     await deps.db.delete_allocation_target("geography", name)
     return {"status": "ok"}
 
@@ -288,6 +294,9 @@ async def delete_industry_target(
     name: str,
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, str]:
-    """Delete an industry target. Category disappears from UI if not used by any security."""
+    """
+    Delete an industry target.
+    Category disappears from UI if not used by any security.
+    """
     await deps.db.delete_allocation_target("industry", name)
     return {"status": "ok"}

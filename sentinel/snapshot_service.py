@@ -8,7 +8,7 @@ Usage:
 
 import logging
 from datetime import date as date_type
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from sentinel.database import Database
 from sentinel.price_validator import PriceValidator
@@ -40,8 +40,9 @@ class SnapshotService:
 
         # Get all trades ordered by date
         trades = await self._db.get_trades(limit=10000)
-        if not trades:
-            logger.info("No trades found, skipping backfill")
+        cash_flows = await self._db.get_cash_flows()
+        if not trades and not cash_flows:
+            logger.info("No trades or cash flows found, skipping backfill")
             return
 
         # Deduplicate trades by broker_trade_id
@@ -54,7 +55,23 @@ class SnapshotService:
                 unique_trades.append(trade)
         trades = unique_trades
 
-        # Filter out FX pairs and options - only keep actual stock positions
+        # Sort trades and cash flows by date
+        trades_sorted = sorted(trades, key=lambda t: t["executed_at"])
+        cash_flows_sorted = sorted(cash_flows, key=lambda cf: cf["date"])
+
+        # First activity date
+        first_trade_date = (
+            datetime.fromtimestamp(trades_sorted[0]["executed_at"]).date().isoformat() if trades_sorted else None
+        )
+        first_cf_date = cash_flows_sorted[0]["date"] if cash_flows_sorted else None
+
+        if not first_trade_date and not first_cf_date:
+            logger.info("No activity found, skipping backfill")
+            return
+
+        first_activity_date = min(d for d in [first_trade_date, first_cf_date] if d)
+
+        # Filter out FX pairs and options for position tracking - only keep actual stock positions
         def is_stock_symbol(symbol: str) -> bool:
             if "/" in symbol:  # FX pairs like EUR/USD
                 return False
@@ -67,14 +84,6 @@ class SnapshotService:
         stock_trades = [t for t in trades if is_stock_symbol(t["symbol"])]
         excluded = len(trades) - len(stock_trades)
         logger.info(f"Processing {len(stock_trades)} stock trades (excluded {excluded} FX/options)")
-
-        if not stock_trades:
-            logger.info("No stock trades found, skipping backfill")
-            return
-
-        # Get the earliest trade date
-        trades_sorted = sorted(stock_trades, key=lambda t: t["executed_at"])
-        first_trade_date = trades_sorted[0]["executed_at"][:10]
 
         # Get all unique stock symbols from trades
         symbols = list(set(t["symbol"] for t in stock_trades))
@@ -123,8 +132,8 @@ class SnapshotService:
                 else:
                     sec_currency_map[symbol] = "EUR"
 
-        # Generate all dates from first trade to today
-        start_date = date_type.fromisoformat(first_trade_date)
+        # Generate all dates from first activity to today
+        start_date = date_type.fromisoformat(first_activity_date)
         end_date = date_type.today()
         all_dates = []
         current = start_date
@@ -134,8 +143,22 @@ class SnapshotService:
 
         # Prefetch historical FX rates for all dates and currencies
         currencies_needed = list(set(sec_currency_map.values()))
+        # Also include currencies from cash flows
+        cf_currencies = list(set(cf["currency"] for cf in cash_flows))
+        currencies_needed = list(set(currencies_needed + cf_currencies))
+
         logger.info(f"Prefetching FX rates for {len(all_dates)} dates, currencies: {currencies_needed}")
         await self._currency.prefetch_rates_for_dates(currencies_needed, all_dates)
+
+        # Running state
+        positions: dict[str, float] = {}  # symbol -> quantity
+        cost_basis: dict[str, float] = {}  # symbol -> total cost in EUR
+        running_cash_eur = 0.0
+        cumulative_net_deposits_eur = 0.0
+
+        # Keep track of processed items to avoid re-processing
+        last_trade_idx = 0
+        last_cf_idx = 0
 
         # Process each date
         total_dates = len(all_dates)
@@ -143,33 +166,71 @@ class SnapshotService:
             if i % 100 == 0:
                 logger.info(f"Processing date {i + 1}/{total_dates}: {date_str}")
 
-            # Calculate cumulative positions and cost basis up to this date
-            positions: dict[str, float] = {}  # symbol -> quantity
-            cost_basis: dict[str, float] = {}  # symbol -> total cost in EUR
+            # 1. Update cash flows up to this date
+            while last_cf_idx < len(cash_flows_sorted):
+                cf = cash_flows_sorted[last_cf_idx]
+                if cf["date"] > date_str:
+                    break
 
-            for trade in trades_sorted:
-                trade_date = trade["executed_at"][:10]
+                amount_local = cf["amount"]
+                curr = cf["currency"]
+                type_id = cf["type_id"]
+
+                # Convert to EUR using historical rate on the flow date
+                amount_eur = await self._currency.to_eur_for_date(amount_local, curr, cf["date"])
+
+                # Update cash balance
+                running_cash_eur += amount_eur
+
+                # Update net deposits (only for card deposits/payouts)
+                if type_id in ("card", "card_payout"):
+                    cumulative_net_deposits_eur += amount_eur
+
+                last_cf_idx += 1
+
+            # 2. Update trades up to this date
+            while last_trade_idx < len(trades_sorted):
+                trade = trades_sorted[last_trade_idx]
+                trade_date = datetime.fromtimestamp(trade["executed_at"]).date().isoformat()
                 if trade_date > date_str:
                     break
+
                 symbol = trade["symbol"]
                 qty = trade["quantity"]
-                trade_value_local = qty * trade["price"]
+                price_local = trade["price"]
+                trade_value_local = qty * price_local
                 sec_curr = sec_currency_map.get(symbol, "EUR")
-                # Use historical FX rate for the trade date
+
+                # Commission
+                comm_local = trade.get("commission", 0) or 0
+                comm_curr = trade.get("commission_currency", "EUR")
+                comm_eur = await self._currency.to_eur_for_date(comm_local, comm_curr, trade_date)
+
+                # Convert trade value to EUR
                 trade_value_eur = await self._currency.to_eur_for_date(trade_value_local, sec_curr, trade_date)
 
                 if trade["side"] == "BUY":
-                    positions[symbol] = positions.get(symbol, 0) + qty
-                    cost_basis[symbol] = cost_basis.get(symbol, 0) + trade_value_eur
-                else:  # SELL
-                    prev_qty = positions.get(symbol, 0)
-                    if prev_qty > 0:
-                        # Reduce cost basis proportionally
-                        avg_cost_per_unit = cost_basis.get(symbol, 0) / prev_qty
-                        cost_basis[symbol] = cost_basis.get(symbol, 0) - (qty * avg_cost_per_unit)
-                    positions[symbol] = positions.get(symbol, 0) - qty
+                    # Buy: Cash goes down by value + commission
+                    running_cash_eur -= trade_value_eur + comm_eur
 
-            # Calculate positions value using closing price and historical FX rate
+                    if is_stock_symbol(symbol):
+                        positions[symbol] = positions.get(symbol, 0) + qty
+                        cost_basis[symbol] = cost_basis.get(symbol, 0) + trade_value_eur
+                else:  # SELL
+                    # Sell: Cash goes up by value - commission
+                    running_cash_eur += trade_value_eur - comm_eur
+
+                    if is_stock_symbol(symbol):
+                        prev_qty = positions.get(symbol, 0)
+                        if prev_qty > 0:
+                            # Reduce cost basis proportionally
+                            avg_cost_per_unit = cost_basis.get(symbol, 0) / prev_qty
+                            cost_basis[symbol] = cost_basis.get(symbol, 0) - (min(qty, prev_qty) * avg_cost_per_unit)
+                        positions[symbol] = max(0, positions.get(symbol, 0) - qty)
+
+                last_trade_idx += 1
+
+            # 3. Calculate positions value using closing prices
             positions_value_eur = 0.0
             for symbol, qty in positions.items():
                 if qty <= 0:
@@ -186,26 +247,19 @@ class SnapshotService:
                 if price:
                     value_local = qty * price
                     sec_curr = sec_currency_map.get(symbol, "EUR")
-                    # Use historical FX rate
                     value_eur = await self._currency.to_eur_for_date(value_local, sec_curr, date_str)
                     positions_value_eur += value_eur
 
-            # Total cost basis for all open positions
-            total_cost_basis_eur = sum(cost_basis.get(s, 0) for s, q in positions.items() if q > 0)
-
-            # P&L = positions_value - cost_basis (what you paid for what you currently hold)
-            total_value_eur = positions_value_eur
-            unrealized_pnl_eur = total_value_eur - total_cost_basis_eur
-
-            # Store cost basis as net_deposits for the chart (this is what we compare against)
-            net_deposits_eur = total_cost_basis_eur
+            # 4. Final calculation for this date
+            total_value_eur = positions_value_eur + running_cash_eur
+            unrealized_pnl_eur = total_value_eur - cumulative_net_deposits_eur
 
             await self._db.upsert_portfolio_snapshot(
                 date=date_str,
                 total_value_eur=round(total_value_eur, 2),
                 positions_value_eur=round(positions_value_eur, 2),
-                cash_eur=0.0,
-                net_deposits_eur=round(net_deposits_eur, 2),
+                cash_eur=round(running_cash_eur, 2),
+                net_deposits_eur=round(cumulative_net_deposits_eur, 2),
                 unrealized_pnl_eur=round(unrealized_pnl_eur, 2),
             )
 
