@@ -119,8 +119,8 @@ class MLPredictor:
         # Blend scores using per-security blend ratio
         final_score = (1 - ml_blend_ratio) * wavelet_score + ml_blend_ratio * ml_score
 
-        # For backfill: use provided predicted_at_ts and prediction_id = symbol_date
-        prediction_id = f"{symbol}_{date}" if predicted_at_ts is not None else None
+        # For backfill: use provided predicted_at_ts and prediction_id = symbol_timestamp (consistent with live)
+        prediction_id = f"{symbol}_{predicted_at_ts}" if predicted_at_ts is not None else None
 
         # Store prediction (use adjusted return, regime_score, regime_dampening)
         await self._store_prediction(

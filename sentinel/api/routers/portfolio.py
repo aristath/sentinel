@@ -208,7 +208,7 @@ async def get_allocation_current() -> dict[str, Any]:
 @allocation_router.get("/targets")
 async def get_allocation_targets_formatted(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
-) -> dict[str, dict]:
+) -> dict[str, dict[str, float]]:
     """
     Get allocation targets as:
     {geography: {name: weight}, industry: {name: weight}}.

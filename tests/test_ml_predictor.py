@@ -256,7 +256,7 @@ async def test_predict_and_blend_with_quote_data_predicted_at_skip_cache(predict
     assert len(store_calls) == 1
     args, kwargs = store_calls[0]
     assert kwargs.get("predicted_at_ts") == predicted_at_ts
-    assert kwargs.get("prediction_id") == f"SYM_{date_str}"
+    assert kwargs.get("prediction_id") == f"SYM_{predicted_at_ts}"
     assert kwargs.get("regime_score") == 0.7
     assert kwargs.get("regime_dampening") == 0.85
     assert result["regime_score"] == 0.7
@@ -326,7 +326,7 @@ async def test_store_prediction_includes_regime_score_regime_dampening(temp_db):
         regime_score=0.72,
         regime_dampening=0.88,
         predicted_at_ts=1738100000,
-        prediction_id="X_2025-01-28",
+        prediction_id="X_1738100000",
     )
 
     cursor = await db.conn.execute(
@@ -336,7 +336,7 @@ async def test_store_prediction_includes_regime_score_regime_dampening(temp_db):
     )
     row = await cursor.fetchone()
     assert row is not None
-    assert dict(row)["prediction_id"] == "X_2025-01-28"
+    assert dict(row)["prediction_id"] == "X_1738100000"
     assert dict(row)["predicted_at"] == 1738100000
     assert dict(row)["regime_score"] == 0.72
     assert dict(row)["regime_dampening"] == 0.88
