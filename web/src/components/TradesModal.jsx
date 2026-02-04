@@ -19,9 +19,12 @@ import { useState } from 'react';
 import { getTrades, syncTrades, getSecurities } from '../api/client';
 import { formatNumber } from '../utils/formatting';
 
-function formatDate(dateStr) {
-  if (!dateStr) return '-';
-  const date = new Date(dateStr);
+function formatDate(executedAt) {
+  if (executedAt == null) return '-';
+  // API returns unix timestamp in seconds; coerce (JSON may send number or string) and convert to ms
+  const sec = Number(executedAt);
+  const date = new Date(Number.isFinite(sec) ? sec * 1000 : NaN);
+  if (Number.isNaN(date.getTime())) return '-';
   return date.toLocaleDateString('en-GB', {
     day: '2-digit',
     month: 'short',

@@ -5,8 +5,10 @@ Run this to check installation and data availability.
 """
 
 import asyncio
-import aiosqlite
 import sys
+
+import aiosqlite
+
 
 async def verify_setup():
     """Verify advanced analytics setup."""
@@ -22,6 +24,7 @@ async def verify_setup():
     try:
         import hmmlearn
         import sklearn
+
         print(f"   ✓ hmmlearn: {hmmlearn.__version__}")
         print(f"   ✓ scikit-learn: {sklearn.__version__}")
     except ImportError as e:
@@ -32,19 +35,17 @@ async def verify_setup():
     # 2. Check database tables
     print("2. Checking database tables...")
     try:
-        db = await aiosqlite.connect('data/sentinel.db')
+        db = await aiosqlite.connect("data/sentinel.db")
 
-        tables = ['regime_states', 'regime_models', 'correlation_matrices']
+        tables = ["regime_states", "regime_models", "correlation_matrices"]
 
         for table in tables:
-            cursor = await db.execute(
-                f"SELECT COUNT(*) FROM {table}"
-            )
+            cursor = await db.execute(f"SELECT COUNT(*) FROM {table}")  # noqa: S608
             count = (await cursor.fetchone())[0]
             print(f"   ✓ {table}: {count} records")
-            if count == 0 and table in ['correlation_matrices', 'regime_models']:
+            if count == 0 and table in ["correlation_matrices", "regime_models"]:
                 all_good = False
-                print(f"     ⚠ No data - run first-time setup jobs!")
+                print("     ⚠ No data - run first-time setup jobs!")
 
         await db.close()
     except Exception as e:
@@ -55,20 +56,18 @@ async def verify_setup():
     # 3. Check settings
     print("3. Checking settings...")
     try:
-        db = await aiosqlite.connect('data/sentinel.db')
+        db = await aiosqlite.connect("data/sentinel.db")
         db.row_factory = aiosqlite.Row
 
         settings = [
-            'use_regime_adjustment',
-            'use_cleaned_correlation',
+            "use_regime_adjustment",
+            "use_cleaned_correlation",
         ]
 
         for setting in settings:
-            cursor = await db.execute(
-                "SELECT value FROM settings WHERE key = ?", (setting,)
-            )
+            cursor = await db.execute("SELECT value FROM settings WHERE key = ?", (setting,))
             row = await cursor.fetchone()
-            value = row['value'] if row else 'NOT SET'
+            value = row["value"] if row else "NOT SET"
             print(f"   • {setting}: {value}")
 
         await db.close()
@@ -91,6 +90,7 @@ async def verify_setup():
 
     return all_good
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     result = asyncio.run(verify_setup())
     sys.exit(0 if result else 1)

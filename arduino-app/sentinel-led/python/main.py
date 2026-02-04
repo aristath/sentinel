@@ -7,30 +7,28 @@ to the MCU on demand. MCU pulls next trade when ready (after scrolling).
 This runs as an Arduino App via arduino-app-cli.
 """
 
-import time
 import logging
 import os
+import time
 from dataclasses import dataclass
 from threading import Lock
 
 import requests
 from arduino.app_utils import App, Bridge
 
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
 
 # Configuration
-SENTINEL_API_URL = os.environ.get('SENTINEL_API_URL', 'http://172.17.0.1:8000')
+SENTINEL_API_URL = os.environ.get("SENTINEL_API_URL", "http://172.17.0.1:8000")
 REFRESH_INTERVAL = 300  # Refresh recommendations every 5 minutes
 
 
 @dataclass
 class Trade:
     """A trade recommendation to display."""
+
     action: str
     amount: float
     symbol: str
@@ -38,7 +36,7 @@ class Trade:
 
     def to_display_string(self) -> str:
         """Format trade for LED display."""
-        if self.action == 'SELL':
+        if self.action == "SELL":
             return f"{self.symbol} -${self.amount:,.2f} (-{int(self.sell_pct)}%)"
         else:
             return f"{self.symbol} +${self.amount:,.2f}"
@@ -56,27 +54,24 @@ class TradeProvider:
     def fetch_recommendations(self) -> None:
         """Fetch trade recommendations from sentinel API."""
         try:
-            resp = requests.get(
-                f"{SENTINEL_API_URL}/api/planner/recommendations",
-                timeout=30
-            )
+            resp = requests.get(f"{SENTINEL_API_URL}/api/planner/recommendations", timeout=30)
             resp.raise_for_status()
             data = resp.json()
-            recommendations = data.get('recommendations', [])
+            recommendations = data.get("recommendations", [])
 
             with self._lock:
                 self._trades = []
                 for rec in recommendations:
-                    action = rec.get('action', '').upper()
-                    value = abs(rec.get('value_delta_eur', 0))
-                    symbol = rec.get('symbol', '')
-                    current_value = rec.get('current_value_eur', 0)
+                    action = rec.get("action", "").upper()
+                    value = abs(rec.get("value_delta_eur", 0))
+                    symbol = rec.get("symbol", "")
+                    current_value = rec.get("current_value_eur", 0)
 
-                    if action == 'SELL':
+                    if action == "SELL":
                         sell_pct = (value / current_value * 100) if current_value > 0 else 100
-                        trade = Trade(action='SELL', amount=value, symbol=symbol, sell_pct=sell_pct)
+                        trade = Trade(action="SELL", amount=value, symbol=symbol, sell_pct=sell_pct)
                     else:
-                        trade = Trade(action='BUY', amount=value, symbol=symbol)
+                        trade = Trade(action="BUY", amount=value, symbol=symbol)
 
                     self._trades.append(trade)
 

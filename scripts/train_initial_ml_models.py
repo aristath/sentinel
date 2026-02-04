@@ -42,7 +42,7 @@ async def load_training_data_for_symbol(db, symbol: str):
             df[col] = df[col].fillna(default_val)
 
     X = df[FEATURE_NAMES].values.astype(np.float32)
-    y = df['future_return'].values.astype(np.float32)
+    y = df["future_return"].values.astype(np.float32)
 
     # Remove invalid rows
     valid_mask = np.all(np.isfinite(X), axis=1) & np.isfinite(y)
@@ -53,16 +53,16 @@ async def load_training_data_for_symbol(db, symbol: str):
 
 
 async def main():
-    print("="*70)
+    print("=" * 70)
     print("Per-Symbol ML Model Training")
-    print("="*70)
+    print("=" * 70)
 
     db = Database()
     await db.connect()
     settings = Settings()
 
     # Get minimum samples requirement
-    min_samples = await settings.get('ml_min_samples_per_symbol', 100)
+    min_samples = await settings.get("ml_min_samples_per_symbol", 100)
     print(f"\nMinimum samples per symbol: {min_samples}")
 
     # Get symbols with sufficient data
@@ -82,7 +82,7 @@ async def main():
         print("Please run generate_ml_training_data.py first.")
         return
 
-    symbols = [(row['symbol'], row['sample_count']) for row in rows]
+    symbols = [(row["symbol"], row["sample_count"]) for row in rows]
     print(f"\nFound {len(symbols)} symbols with sufficient data:")
     for symbol, count in symbols[:10]:
         print(f"  {symbol}: {count} samples")
@@ -90,15 +90,15 @@ async def main():
         print(f"  ... and {len(symbols) - 10} more")
 
     # Train model for each symbol
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("Training Models")
-    print("="*70)
+    print("=" * 70)
 
     trained = 0
     failed = 0
 
     for i, (symbol, sample_count) in enumerate(symbols):
-        print(f"\n[{i+1}/{len(symbols)}] {symbol} ({sample_count} samples)")
+        print(f"\n[{i + 1}/{len(symbols)}] {symbol} ({sample_count} samples)")
 
         X, y = await load_training_data_for_symbol(db, symbol)
 
@@ -129,12 +129,13 @@ async def main():
                     validation_r2, last_trained_at)
                    VALUES (?, ?, ?, ?, ?, ?)""",
                 (
-                    symbol, len(X),
-                    metrics['ensemble_val_rmse'],
-                    metrics['ensemble_val_mae'],
-                    metrics['ensemble_val_r2'],
-                    datetime.now().isoformat()
-                )
+                    symbol,
+                    len(X),
+                    metrics["ensemble_val_rmse"],
+                    metrics["ensemble_val_mae"],
+                    metrics["ensemble_val_r2"],
+                    datetime.now().isoformat(),
+                ),
             )
             await db.conn.commit()
 
@@ -145,9 +146,9 @@ async def main():
             failed += 1
             continue
 
-    print("\n" + "="*70)
+    print("\n" + "=" * 70)
     print("Training Complete!")
-    print("="*70)
+    print("=" * 70)
     print(f"\nModels trained: {trained}")
     print(f"Models failed: {failed}")
     print("\nModels saved to: data/ml_models/<symbol>/")
@@ -162,5 +163,5 @@ async def main():
     print("  ml_wavelet_blend_ratio = 0.3  (or desired ratio)")
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     asyncio.run(main())

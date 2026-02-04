@@ -45,7 +45,7 @@ func (m *Model) rebuildContent() {
 	cards := pad.Render(m.viewCards())
 
 	sep := pad.Render(lipgloss.NewStyle().Foreground(t.Primary).Render(
-		strings.Repeat("═", w)))
+		strings.Repeat("/", w)))
 
 	oneBlock := strings.Join([]string{
 		strings.Repeat("\n", m.height),
@@ -98,7 +98,7 @@ func (m Model) viewHero() string {
 	}
 
 	// Portfolio value — hero number
-	valText := bigtext.RenderBold(formatEUR(value))
+	valText := bigtext.RenderExtraBoldXXL(formatEUR(value))
 	valBlock := theme.GradientText(valText, t.Primary, t.Accent)
 
 	// P&L and cash as compact block text
@@ -215,6 +215,9 @@ func (m Model) viewCards() string {
 		statsBlock := lipgloss.NewStyle().Foreground(profitColor).Bold(true).
 			Render(statsText)
 
+		nameBlock := lipgloss.NewStyle().Foreground(profitColor).
+			Render(sec.Name)
+
 		headerRow := lipgloss.JoinHorizontal(lipgloss.Top, symBlock, statsBlock)
 
 		var chartBlock string
@@ -236,7 +239,7 @@ func (m Model) viewCards() string {
 		expBar := expLabel + renderScoreBar(sec.ExpectedReturn, barWidth, t.Accent, t.Muted)
 
 		var cardLines []string
-		cardLines = append(cardLines, "", headerRow, "")
+		cardLines = append(cardLines, "", headerRow, nameBlock, "")
 		if chartBlock != "" {
 			cardLines = append(cardLines, chartBlock, "")
 		}
@@ -244,7 +247,9 @@ func (m Model) viewCards() string {
 
 		lines = append(lines, strings.Join(cardLines, "\n"))
 		if i < len(positions)-1 {
-			lines = append(lines, "", "", "")
+			cardSep := lipgloss.NewStyle().Foreground(t.Primary).Render(
+				strings.Repeat("/", w))
+			lines = append(lines, "", cardSep, "")
 		}
 	}
 
