@@ -26,6 +26,7 @@ from sentinel import Database
 from sentinel.ml_ensemble import EnsembleBlender
 from sentinel.ml_features import FeatureExtractor
 from sentinel.ml_predictor import MLPredictor
+from sentinel.price_validator import PriceValidator
 from sentinel.regime_quote import quote_data_from_prices
 
 logging.basicConfig(
@@ -77,6 +78,7 @@ async def main() -> None:
 
         predictor = MLPredictor(db=db)
         feature_extractor = FeatureExtractor(db=db)
+        price_validator = PriceValidator()
 
         current = datetime.strptime(min_date, "%Y-%m-%d").date()
         end = datetime.strptime(max_date, "%Y-%m-%d").date()
@@ -103,6 +105,12 @@ async def main() -> None:
                     if len(prices) < MIN_DAYS:
                         continue
 
+                    # Validate and interpolate prices (match training pipeline)
+                    # prices from DB are newest-first; validator expects oldest-first
+                    validated = price_validator.validate_and_interpolate(list(reversed(prices)))
+                    if len(validated) < MIN_DAYS:
+                        continue
+
                     # Wavelet score as of date
                     wavelet_score = await db.get_score(symbol, as_of_date=predicted_at_ts)
                     if wavelet_score is None:
@@ -110,10 +118,9 @@ async def main() -> None:
 
                     # Features: price_data chronological (oldest first) for extract_features
                     price_df = pd.DataFrame(
-                        prices,
+                        validated,
                         columns=["date", "open", "high", "low", "close", "volume"],
                     )
-                    price_df = price_df.iloc[::-1].reset_index(drop=True)
 
                     sec = await db.get_security(symbol)
                     security_data = (
@@ -130,8 +137,8 @@ async def main() -> None:
                     if features is None:
                         continue
 
-                    # Regime from OHLCV
-                    quote_data = quote_data_from_prices(prices)
+                    # Regime from OHLCV (quote_data_from_prices expects newest-first)
+                    quote_data = quote_data_from_prices(list(reversed(validated)))
 
                     ml_enabled = True
                     ml_blend_ratio = float(sec.get("ml_blend_ratio", 0.5)) if sec else 0.5

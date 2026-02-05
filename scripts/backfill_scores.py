@@ -20,6 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sentinel import Database
 from sentinel.analyzer import Analyzer
+from sentinel.price_validator import PriceValidator
 
 logging.basicConfig(
     level=logging.INFO,
@@ -42,6 +43,7 @@ async def main() -> None:
     await db.connect()
     try:
         analyzer = Analyzer(db=db)
+        price_validator = PriceValidator()
 
         # Date range from prices
         cursor = await db.conn.execute("SELECT MIN(date) AS min_date, MAX(date) AS max_date FROM prices")
@@ -73,7 +75,15 @@ async def main() -> None:
                     prices = await db.get_prices(symbol, days=LOOKBACK_DAYS, end_date=date_str)
                     if len(prices) < MIN_DAYS:
                         continue
-                    result = await analyzer.analyze_prices(symbol, prices)
+
+                    # Validate and interpolate prices (match training pipeline)
+                    # prices from DB are newest-first; validator expects oldest-first
+                    validated = price_validator.validate_and_interpolate(list(reversed(prices)))
+                    if len(validated) < MIN_DAYS:
+                        continue
+
+                    # analyze_prices expects newest-first
+                    result = await analyzer.analyze_prices(symbol, list(reversed(validated)))
                     if result is None:
                         continue
                     score, components = result
