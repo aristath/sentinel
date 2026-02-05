@@ -6,20 +6,32 @@ Scope: logic flaws and bug risks found during a codebase review, focusing on por
 
 ## Status snapshot
 
-- Tests: `pytest` passes (660).
+- Tests: `pytest` passes (666).
 - Lint: `ruff check .` passes.
 - Typecheck: `pyright` emits warnings (many in scripts/tests; a few in runtime modules).
+
+## Completion Summary (2026-02-05)
+
+### ✅ Fully Completed:
+- **#1**: Allocations now use invested-only denominator (cash excluded)
+- **#3**: Backtest/as-of-date sizing honored (uses `get_invested_value_eur(as_of_date)`)
+- **#6**: Deficit sells use historical prices when `as_of_date` is provided
+
+### 🔧 Partially Addressed:
+- **#4**: Planner cash constraint - Funding sells feature now generates explicit sells to fund buys before scaling, reducing cash constraint issues
+- **#23**: Unified endpoint allocation math - Now consistent with planner (both use invested-only denominators)
 
 ## Key findings (prioritized)
 
 ### A) Accounting / portfolio correctness
 
-1) **Allocations are calculated as % of (positions + cash)**
+~~1) **Allocations are calculated as % of (positions + cash)**~~ ✅ COMPLETED (2026-02-05)
    - `PortfolioAnalyzer.get_current_allocations()` divides each position EUR value by `Portfolio.total_value()`.
    - This makes allocations shrink when cash increases, potentially triggering buys even if invested mix is fine.
    - Location: `sentinel/planner/analyzer.py:43-65`, `sentinel/portfolio.py:74-89`
+   - **Fixed**: Now uses `invested_value_eur` (positions only) as denominator.
 
-3) **Backtest/as-of-date is not fully honored across planner sizing**
+~~3) **Backtest/as-of-date is not fully honored across planner sizing**~~ ✅ COMPLETED (2026-02-05)
    - `Planner.get_recommendations(as_of_date=...)` passes `as_of_date` into `RebalanceEngine`, but still computes `total_value` using live portfolio (`Portfolio.total_value()` has no as-of-date).
    - Impact: backtest recommendations can be sized against today’s value/cash/positions.
    - Location: `sentinel/planner/planner.py:102-112`, `sentinel/portfolio.py:74-89`
@@ -41,10 +53,11 @@ Scope: logic flaws and bug risks found during a codebase review, focusing on por
      - `sentinel/planner/rebalance.py:409-443`
      - `sentinel/security.py:147-155`
 
-6) **Deficit sells (negative balances) use live position prices even when as-of-date is provided**
+~~6) **Deficit sells (negative balances) use live position prices even when as-of-date is provided**~~ ✅ COMPLETED (2026-02-05)
    - `_generate_deficit_sells(..., as_of_date)` uses positions table `current_price`.
    - Scores may be as-of-date, but prices are not.
    - Location: `sentinel/planner/rebalance.py:724-835`
+   - **Fixed**: Now uses historical close prices when `as_of_date` is provided.
 
 ### C) ML feature/prediction flow
 

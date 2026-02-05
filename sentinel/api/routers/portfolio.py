@@ -58,16 +58,20 @@ async def get_portfolio_pnl_history(
     """
     Get portfolio P&L history for charting (hardcoded 1Y).
 
+    All three series use 14-day windows with 7-day steps.
+    ML predicts 14-day forward returns, so ML/wavelet are offset by 14 days:
+      predictions from [i-27, i-14] cover returns ending between i-13 and i.
+
     Returns weekly-sampled data points with:
-    - actual_ann_return: 30-day rolling TWR, annualized
-    - wavelet_ann_return: 30-day avg of wavelet scores, offset 14 days
-    - ml_ann_return: 30-day avg of ML predicted_return, offset 14 days
+    - actual_ann_return: 14-day rolling TWR as %
+    - wavelet_ann_return: 14-day avg of raw wavelet scores, offset 14 days
+    - ml_ann_return: 14-day avg of predicted_return as %, offset 14 days
     - target_ann_return in summary
     """
     days = 365
 
-    # Get daily snapshots (need extra 44 days for 30-day window + 14-day offset)
-    snapshots = await deps.db.get_portfolio_snapshots(days + 44)
+    # Get daily snapshots (need extra 28 days for 14-day window + 14-day offset)
+    snapshots = await deps.db.get_portfolio_snapshots(days + 28)
 
     # Check if we need to backfill
     latest_date = await deps.db.get_latest_snapshot_date()
@@ -115,9 +119,8 @@ async def get_portfolio_pnl_history(
             break
 
     # Sample at 7-day steps within the 1Y range
-    window = 30  # 1-month rolling window
-    offset = 14  # predictions are 14-day forward-looking
-    # No annualization — show raw 30-day rolling return %
+    window = 14  # 14-day rolling window (matches ML prediction horizon)
+    offset = 14  # ML predictions are 14-day forward-looking
 
     result_snapshots = []
     i = output_start
@@ -131,7 +134,7 @@ async def get_portfolio_pnl_history(
             "pnl_pct": d["pnl_pct"],
         }
 
-        # Actual: 30-day rolling TWR, annualized
+        # Actual: 14-day rolling TWR as %
         if i >= window:
             cumulative = 1.0
             valid = True
@@ -152,30 +155,25 @@ async def get_portfolio_pnl_history(
         else:
             point["actual_ann_return"] = None
 
-        # Wavelet: 30-day avg of scores, offset 14 days back
-        # Predictions from [i-offset-window+1, i-offset] predict for date i
-        w_start = max(0, i - offset - window + 1)
-        w_end = max(0, i - offset + 1)
-        w_vals = [daily[j]["wavelet_score"] for j in range(w_start, w_end) if daily[j]["wavelet_score"] is not None]
+        # Prediction window: [i-27, i-14] — offset by 14 days
+        p_start = max(0, i - offset - window + 1)
+        p_end = max(0, i - offset + 1)
+
+        # Wavelet: 14-day avg of raw scores, offset 14 days
+        w_vals = [daily[j]["wavelet_score"] for j in range(p_start, p_end) if daily[j]["wavelet_score"] is not None]
         if w_vals:
-            avg_w = sum(w_vals) / len(w_vals)
-            # Wavelet expected_return: composite signal from analyzer.py
-            # Convert to ~monthly % to match actual (30-day) and ML (14-day) scales
-            # ((score - 0.05) / 1.5) approximates annualized %, then /12 for monthly
-            point["wavelet_ann_return"] = round(((avg_w - 0.05) / 1.5) / 12.0 * 100.0, 2)
+            point["wavelet_ann_return"] = round(sum(w_vals) / len(w_vals), 4)
         else:
             point["wavelet_ann_return"] = None
 
-        # ML: 30-day avg of predicted_return, offset 14 days back
+        # ML: 14-day avg of predicted_return (14-day forward), offset 14 days, as %
         m_vals = [
             daily[j]["ml_predicted_return"]
-            for j in range(w_start, w_end)
+            for j in range(p_start, p_end)
             if daily[j]["ml_predicted_return"] is not None
         ]
         if m_vals:
-            avg_m = sum(m_vals) / len(m_vals)
-            # return_20d is raw 20-day fractional return, show as %
-            point["ml_ann_return"] = round(avg_m * 100.0, 2)
+            point["ml_ann_return"] = round(sum(m_vals) / len(m_vals) * 100.0, 2)
         else:
             point["ml_ann_return"] = None
 
