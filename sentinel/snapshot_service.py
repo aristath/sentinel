@@ -162,8 +162,8 @@ class SnapshotService:
         raw_ml = await self._db.get_all_ml_predictions_history()
         ml_by_symbol: dict[str, list[tuple[int, float]]] = defaultdict(list)
         for row in raw_ml:
-            if row["return_20d"] is not None:
-                ml_by_symbol[row["symbol"]].append((row["predicted_at"], row["return_20d"]))
+            if row["predicted_return"] is not None:
+                ml_by_symbol[row["symbol"]].append((row["predicted_at"], row["predicted_return"]))
 
         logger.info(
             f"Pre-fetched scores for {len(scores_by_symbol)} symbols, ML predictions for {len(ml_by_symbol)} symbols"

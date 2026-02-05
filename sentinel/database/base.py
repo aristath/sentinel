@@ -710,11 +710,10 @@ class BaseDatabase:
         """Get all ML predictions ordered by symbol and date.
 
         Returns:
-            List of {symbol, return_20d, predicted_at} dicts
+            List of {symbol, predicted_return, predicted_at} dicts
         """
         cursor = await self.conn.execute(
-            "SELECT symbol, json_extract(features, '$.return_20d') as return_20d,"
-            " predicted_at FROM ml_predictions ORDER BY symbol, predicted_at"
+            "SELECT symbol, predicted_return, predicted_at FROM ml_predictions ORDER BY symbol, predicted_at"
         )
         return [dict(row) for row in await cursor.fetchall()]
 
