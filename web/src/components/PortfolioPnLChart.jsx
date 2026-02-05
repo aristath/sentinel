@@ -1,22 +1,23 @@
 /**
  * Portfolio P&L Chart Component
  *
- * SVG-based area chart showing portfolio P&L percentage over time.
- * Green fill for positive P&L, red fill for negative P&L.
- * Includes a dashed zero line and summary badge.
+ * SVG-based chart showing annualized return % with:
+ * - Actual (green/red area fill): 14-day rolling TWR, annualized
+ * - Wavelet (blue line): portfolio-weighted wavelet score as annualized return
+ * - ML (peach line): portfolio-weighted ML score as annualized return
+ * - Target (dashed line): horizontal at 11%
  */
 import { catppuccin } from '../theme';
 import { buildSmoothPath } from '../utils/chartUtils';
 import { useResponsiveWidth } from '../hooks/useResponsiveWidth';
 
 /**
- * Renders a portfolio P&L area chart with gradient fill
+ * Renders the portfolio annualized return chart
  *
  * @param {Object} props
- * @param {Array} props.snapshots - Array of {date, pnl_eur, pnl_pct} objects
- * @param {Object} props.summary - {start_value, end_value, pnl_absolute, pnl_percent}
+ * @param {Array} props.snapshots - Array of snapshot objects with annualized return fields
+ * @param {Object} props.summary - Summary with target_ann_return
  * @param {number} props.height - Chart height (default 160)
- * @param {string} props.period - Current period selection
  */
 export function PortfolioPnLChart({
   snapshots = [],
@@ -25,7 +26,12 @@ export function PortfolioPnLChart({
 }) {
   const [containerRef, width] = useResponsiveWidth(300);
 
-  // Format currency for display
+  const formatPct = (value) => {
+    if (value == null) return '';
+    const sign = value >= 0 ? '+' : '';
+    return `${sign}${value.toFixed(1)}%`;
+  };
+
   const formatEur = (value) => {
     const sign = value >= 0 ? '+' : '';
     return `${sign}${value.toLocaleString('en-US', {
@@ -36,18 +42,51 @@ export function PortfolioPnLChart({
     })}`;
   };
 
-  const formatPct = (value) => {
-    const sign = value >= 0 ? '+' : '';
-    return `${sign}${value.toFixed(1)}%`;
-  };
+  // Legend component
+  const Legend = () => (
+    <div
+      style={{
+        display: 'flex',
+        gap: '12px',
+        fontSize: '10px',
+        color: catppuccin.subtext0,
+        padding: '0 4px',
+        marginBottom: '2px',
+        flexWrap: 'wrap',
+      }}
+    >
+      {[
+        { color: catppuccin.green, label: 'Actual' },
+        { color: catppuccin.blue, label: 'Wavelet' },
+        { color: catppuccin.yellow, label: 'ML' },
+        { color: catppuccin.overlay0, label: 'Target', dashed: true },
+      ].map(({ color, label, dashed }) => (
+        <span key={label} style={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+          {dashed ? (
+            <svg width="10" height="10">
+              <line x1="0" y1="5" x2="10" y2="5" stroke={color} strokeWidth="1.5" strokeDasharray="2,2" />
+            </svg>
+          ) : (
+            <span
+              style={{
+                width: '6px',
+                height: '6px',
+                borderRadius: '50%',
+                backgroundColor: color,
+                display: 'inline-block',
+              }}
+            />
+          )}
+          {label}
+        </span>
+      ))}
+    </div>
+  );
 
-  // Render chart
   const renderChart = () => {
-    // Not enough data
     if (!snapshots || snapshots.length < 2) {
       return (
         <div
-          className="portfolio-pnl-chart__empty"
           style={{
             width: '100%',
             height,
@@ -58,7 +97,7 @@ export function PortfolioPnLChart({
             fontSize: '0.875rem',
           }}
         >
-          No P&L data available
+          No data available
         </div>
       );
     }
@@ -69,84 +108,89 @@ export function PortfolioPnLChart({
 
     if (chartWidth <= 0 || chartHeight <= 0) return null;
 
-    // Extract P&L percentages
-    const values = snapshots.map((s) => s.pnl_pct);
-    const minValue = Math.min(...values, 0);
-    const maxValue = Math.max(...values, 0);
+    const targetReturn = summary?.target_ann_return ?? 11.0;
 
-    // Add some padding to the range
-    const range = maxValue - minValue || 1;
-    const paddedMin = minValue - range * 0.1;
-    const paddedMax = maxValue + range * 0.1;
+    // Collect all non-null values across series for Y-axis scaling
+    const allValues = [0, targetReturn];
+    snapshots.forEach((s) => {
+      if (s.actual_ann_return != null) allValues.push(s.actual_ann_return);
+      if (s.wavelet_ann_return != null) allValues.push(s.wavelet_ann_return);
+      if (s.ml_ann_return != null) allValues.push(s.ml_ann_return);
+    });
+
+    const rawMin = Math.min(...allValues);
+    const rawMax = Math.max(...allValues);
+    const range = rawMax - rawMin || 1;
+    const paddedMin = rawMin - range * 0.1;
+    const paddedMax = rawMax + range * 0.1;
     const valueRange = paddedMax - paddedMin;
 
-    // Scale functions
-    const scaleX = (i) => padding.left + (i / (values.length - 1)) * chartWidth;
+    const scaleX = (i) => padding.left + (i / (snapshots.length - 1)) * chartWidth;
     const scaleY = (v) => padding.top + chartHeight - ((v - paddedMin) / valueRange) * chartHeight;
 
-    // Zero line Y position
     const zeroY = scaleY(0);
+    const targetY = scaleY(targetReturn);
 
-    // Build points for the line
-    const points = values.map((v, i) => ({
-      x: scaleX(i),
-      y: scaleY(v),
-      value: v,
-    }));
-
-    // Build area path (line + close to bottom + back to start)
-    const buildAreaPath = (pts) => {
-      const linePath = buildSmoothPath(pts);
-      if (!linePath) return '';
-
-      const firstX = pts[0].x;
-      const lastX = pts[pts.length - 1].x;
-
-      // Close the path: go down to zero line, across, and up
-      return `${linePath} L ${lastX},${zeroY} L ${firstX},${zeroY} Z`;
-    };
-
-    // Split points into segments based on positive/negative
-    const segments = [];
-    let currentSegment = [points[0]];
-    let currentIsPositive = points[0].value >= 0;
-
-    for (let i = 1; i < points.length; i++) {
-      const isPositive = points[i].value >= 0;
-
-      if (isPositive !== currentIsPositive) {
-        // Find zero crossing point (linear interpolation)
-        const prev = points[i - 1];
-        const curr = points[i];
-        const t = (0 - prev.value) / (curr.value - prev.value);
-        const crossX = prev.x + t * (curr.x - prev.x);
-        const crossPoint = { x: crossX, y: zeroY, value: 0 };
-
-        // End current segment at crossing
-        currentSegment.push(crossPoint);
-        segments.push({ points: currentSegment, isPositive: currentIsPositive });
-
-        // Start new segment from crossing
-        currentSegment = [crossPoint, points[i]];
-        currentIsPositive = isPositive;
-      } else {
-        currentSegment.push(points[i]);
+    // Build actual return points with area fill (green/red split at zero)
+    const actualPoints = [];
+    snapshots.forEach((s, i) => {
+      if (s.actual_ann_return != null) {
+        actualPoints.push({ x: scaleX(i), y: scaleY(s.actual_ann_return), value: s.actual_ann_return });
       }
-    }
-    segments.push({ points: currentSegment, isPositive: currentIsPositive });
+    });
 
-    const lastPoint = points[points.length - 1];
-    const lastIsPositive = lastPoint.value >= 0;
+    // Split actual points into positive/negative segments at zero crossings
+    const segments = [];
+    if (actualPoints.length >= 2) {
+      let currentSegment = [actualPoints[0]];
+      let currentIsPositive = actualPoints[0].value >= 0;
+
+      for (let i = 1; i < actualPoints.length; i++) {
+        const isPositive = actualPoints[i].value >= 0;
+        if (isPositive !== currentIsPositive) {
+          const prev = actualPoints[i - 1];
+          const curr = actualPoints[i];
+          const t = (0 - prev.value) / (curr.value - prev.value);
+          const crossX = prev.x + t * (curr.x - prev.x);
+          const crossPoint = { x: crossX, y: zeroY, value: 0 };
+
+          currentSegment.push(crossPoint);
+          segments.push({ points: currentSegment, isPositive: currentIsPositive });
+          currentSegment = [crossPoint, actualPoints[i]];
+          currentIsPositive = isPositive;
+        } else {
+          currentSegment.push(actualPoints[i]);
+        }
+      }
+      segments.push({ points: currentSegment, isPositive: currentIsPositive });
+    }
+
+    // Build overlay line points (wavelet, ML) - skip nulls
+    const waveletPoints = [];
+    const mlPoints = [];
+    snapshots.forEach((s, i) => {
+      if (s.wavelet_ann_return != null) {
+        waveletPoints.push({ x: scaleX(i), y: scaleY(s.wavelet_ann_return) });
+      }
+      if (s.ml_ann_return != null) {
+        mlPoints.push({ x: scaleX(i), y: scaleY(s.ml_ann_return) });
+      }
+    });
+
+    const waveletPath = buildSmoothPath(waveletPoints);
+    const mlPath = buildSmoothPath(mlPoints);
+
+    // Current actual value for the dot
+    const lastActual = actualPoints.length > 0 ? actualPoints[actualPoints.length - 1] : null;
 
     return (
-      <svg width={width} height={height} style={{ display: 'block' }} className="portfolio-pnl-chart__svg">
-        {/* Gradient definitions */}
+      <svg width={width} height={height} style={{ display: 'block' }}>
         <defs>
-          <linearGradient id="pnl-gradient-pos" x1="0%" y1="0%" x2="0%" y2="100%">
+          <linearGradient id="ann-gradient-pos" x1="0%" y1="0%" x2="0%" y2="100%">
             <stop offset="0%" stopColor={catppuccin.green} stopOpacity={0.3} />
             <stop offset="100%" stopColor={catppuccin.green} stopOpacity={0.05} />
           </linearGradient>
-          <linearGradient id="pnl-gradient-neg" x1="0%" y1="100%" x2="0%" y2="0%">
+          <linearGradient id="ann-gradient-neg" x1="0%" y1="100%" x2="0%" y2="0%">
             <stop offset="0%" stopColor={catppuccin.red} stopOpacity={0.3} />
             <stop offset="100%" stopColor={catppuccin.red} stopOpacity={0.05} />
           </linearGradient>
@@ -161,22 +205,28 @@ export function PortfolioPnLChart({
           stroke={catppuccin.overlay0}
           strokeWidth={1}
           strokeDasharray="4,4"
-          opacity={0.6}
-          className="portfolio-pnl-chart__zero-line"
+          opacity={0.4}
         />
-
-        {/* Zero label */}
-        <text
-          x={width - padding.right + 5}
-          y={zeroY + 4}
-          fill={catppuccin.subtext0}
-          fontSize="10"
-          className="portfolio-pnl-chart__zero-label"
-        >
+        <text x={width - padding.right + 5} y={zeroY + 4} fill={catppuccin.subtext0} fontSize="10">
           0%
         </text>
 
-        {/* Area fills for each segment */}
+        {/* Target line */}
+        <line
+          x1={padding.left}
+          y1={targetY}
+          x2={width - padding.right}
+          y2={targetY}
+          stroke={catppuccin.overlay0}
+          strokeWidth={1}
+          strokeDasharray="4,4"
+          opacity={0.6}
+        />
+        <text x={width - padding.right + 5} y={targetY + 4} fill={catppuccin.subtext0} fontSize="10">
+          {formatPct(targetReturn)}
+        </text>
+
+        {/* Actual: area fills */}
         {segments.map((seg, idx) => {
           const segPath = buildSmoothPath(seg.points);
           if (!segPath || seg.points.length < 2) return null;
@@ -187,13 +237,12 @@ export function PortfolioPnLChart({
             <path
               key={`area-${idx}`}
               d={areaPath}
-              fill={`url(#pnl-gradient-${seg.isPositive ? 'pos' : 'neg'})`}
-              className="portfolio-pnl-chart__area"
+              fill={`url(#ann-gradient-${seg.isPositive ? 'pos' : 'neg'})`}
             />
           );
         })}
 
-        {/* Lines for each segment */}
+        {/* Actual: stroke lines */}
         {segments.map((seg, idx) => {
           const segPath = buildSmoothPath(seg.points);
           if (!segPath) return null;
@@ -206,66 +255,54 @@ export function PortfolioPnLChart({
               strokeWidth={2}
               strokeLinecap="round"
               strokeLinejoin="round"
-              className="portfolio-pnl-chart__line"
             />
           );
         })}
 
-        {/* Current value dot */}
-        <circle
-          cx={lastPoint.x}
-          cy={lastPoint.y}
-          r={4}
-          fill={lastIsPositive ? catppuccin.green : catppuccin.red}
-          stroke={catppuccin.base}
-          strokeWidth={2}
-          className="portfolio-pnl-chart__current-dot"
-        />
-
-        {/* Summary badge */}
-        {summary && (
-          <g className="portfolio-pnl-chart__summary">
-            <rect
-              x={width - padding.right - 85}
-              y={padding.top - 15}
-              width={80}
-              height={24}
-              rx={4}
-              fill={catppuccin.surface0}
-              opacity={0.9}
-            />
-            <text
-              x={width - padding.right - 45}
-              y={padding.top + 2}
-              fill={lastIsPositive ? catppuccin.green : catppuccin.red}
-              fontSize="11"
-              fontWeight="600"
-              textAnchor="middle"
-              className="portfolio-pnl-chart__summary-text"
-            >
-              {formatPct(summary.pnl_percent)}
-            </text>
-          </g>
+        {/* Wavelet line */}
+        {waveletPath && (
+          <path
+            d={waveletPath}
+            fill="none"
+            stroke={catppuccin.blue}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.8}
+          />
         )}
 
-        {/* Y-axis labels */}
-        <text
-          x={width - padding.right + 5}
-          y={padding.top + 10}
-          fill={catppuccin.subtext0}
-          fontSize="10"
-          className="portfolio-pnl-chart__max-label"
-        >
-          {formatPct(maxValue)}
+        {/* ML line */}
+        {mlPath && (
+          <path
+            d={mlPath}
+            fill="none"
+            stroke={catppuccin.yellow}
+            strokeWidth={1.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            opacity={0.8}
+          />
+        )}
+
+        {/* Current value dot */}
+        {lastActual && (
+          <circle
+            cx={lastActual.x}
+            cy={lastActual.y}
+            r={4}
+            fill={lastActual.value >= 0 ? catppuccin.green : catppuccin.red}
+            stroke={catppuccin.base}
+            strokeWidth={2}
+          />
+        )}
+
+        {/* Y-axis min/max labels */}
+        <text x={width - padding.right + 5} y={padding.top + 10} fill={catppuccin.subtext0} fontSize="10">
+          {formatPct(rawMax)}
         </text>
-        <text
-          x={width - padding.right + 5}
-          y={height - padding.bottom}
-          fill={catppuccin.subtext0}
-          fontSize="10"
-          className="portfolio-pnl-chart__min-label"
-        >
-          {formatPct(minValue)}
+        <text x={width - padding.right + 5} y={height - padding.bottom} fill={catppuccin.subtext0} fontSize="10">
+          {formatPct(rawMin)}
         </text>
       </svg>
     );
@@ -273,13 +310,12 @@ export function PortfolioPnLChart({
 
   return (
     <div ref={containerRef} style={{ width: '100%' }} className="portfolio-pnl-chart">
+      <Legend />
       <div style={{ height }}>
         {renderChart()}
       </div>
-      {/* Bottom summary line */}
       {summary && snapshots && snapshots.length >= 2 && (
         <div
-          className="portfolio-pnl-chart__footer"
           style={{
             display: 'flex',
             justifyContent: 'space-between',
@@ -294,7 +330,8 @@ export function PortfolioPnLChart({
             Value: <span style={{ color: catppuccin.text }}>{formatEur(summary.end_value).replace('+', '')}</span>
           </span>
           <span>
-            P&L: <span style={{ color: summary.pnl_absolute >= 0 ? catppuccin.green : catppuccin.red }}>
+            P&L:{' '}
+            <span style={{ color: summary.pnl_absolute >= 0 ? catppuccin.green : catppuccin.red }}>
               {formatEur(summary.pnl_absolute)}
             </span>
           </span>

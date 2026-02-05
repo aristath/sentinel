@@ -188,8 +188,7 @@ export const getCashFlows = () => request('/cashflows');
 export const syncCashFlows = () => request('/cashflows/sync', { method: 'POST' });
 
 // Portfolio P&L History
-export const getPortfolioPnLHistory = (period = '1Y') =>
-  request(`/portfolio/pnl-history?period=${period}`);
+export const getPortfolioPnLHistory = () => request('/portfolio/pnl-history');
 
 // Categories
 export const getCategories = () => request('/meta/categories');

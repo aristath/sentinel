@@ -112,10 +112,9 @@ function UnifiedPage() {
     refetchInterval: 300000, // Refresh every 5 minutes
   });
 
-  const [pnlPeriod, setPnlPeriod] = useState('1Y');
   const { data: pnlData } = useQuery({
-    queryKey: ['portfolio-pnl', pnlPeriod],
-    queryFn: () => getPortfolioPnLHistory(pnlPeriod),
+    queryKey: ['portfolio-pnl'],
+    queryFn: () => getPortfolioPnLHistory(),
     refetchInterval: 300000, // Refresh every 5 minutes
   });
 
@@ -474,25 +473,11 @@ function UnifiedPage() {
 
           {/* P&L Chart */}
           <Card shadow="sm" padding="sm" withBorder className="unified__pnl-chart">
-            <Group justify="space-between" mb="xs">
-              <Text size="sm" fw={500}>Portfolio P&L</Text>
-              <SegmentedControl
-                value={pnlPeriod}
-                onChange={setPnlPeriod}
-                data={[
-                  { value: '1M', label: '1M' },
-                  { value: '3M', label: '3M' },
-                  { value: '1Y', label: '1Y' },
-                  { value: 'MAX', label: 'Max' },
-                ]}
-                size="xs"
-              />
-            </Group>
+            <Text size="sm" fw={500} mb="xs">Portfolio P&L</Text>
             <PortfolioPnLChart
               snapshots={pnlData?.snapshots}
               summary={pnlData?.summary}
               height={160}
-              period={pnlPeriod}
             />
           </Card>
 
