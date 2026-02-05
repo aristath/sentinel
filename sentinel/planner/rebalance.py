@@ -103,7 +103,10 @@ class RebalanceEngine:
         all_symbols = list(set(list(ideal.keys()) + list(current.keys()) + ml_enabled_symbols))
 
         # Fetch all data in parallel for performance
-        current_quotes = await self._broker.get_quotes(all_symbols)
+        if as_of_date is not None:
+            current_quotes = {}
+        else:
+            current_quotes = await self._broker.get_quotes(all_symbols)
 
         # Batch-fetch securities, positions, and scores
         all_securities = await self._db.get_all_securities(active_only=False)
@@ -766,6 +769,16 @@ class RebalanceEngine:
                 continue
 
             price = pos.get("current_price", 0)
+            if as_of_date is not None:
+                hist = await self._db.get_prices(symbol, days=1, end_date=as_of_date)
+                if hist:
+                    close = hist[0].get("close")
+                    if close is not None:
+                        try:
+                            price = float(close)
+                        except (TypeError, ValueError):
+                            price = 0
+
             if price <= 0:
                 continue
 

@@ -76,16 +76,31 @@ class PortfolioAnalyzer:
 
         return allocations
 
-    async def get_invested_value_eur(self, as_of_date: str | None = None) -> float:
+    async def get_invested_value_eur(self, as_of_date: str | None = None, **kwargs) -> float:
+        as_of_date = kwargs.get("as_of_date", as_of_date)
         positions = await self._portfolio.positions()
 
         invested_total_eur = 0.0
         for pos in positions:
+            symbol = pos.get("symbol")
             quantity = pos.get("quantity", 0)
-            price = pos.get("current_price", 0)
             pos_currency = pos.get("currency", "EUR")
 
-            if quantity <= 0 or price <= 0:
+            if not symbol or quantity <= 0:
+                continue
+
+            price = pos.get("current_price", 0)
+            if as_of_date is not None:
+                hist = await self._db.get_prices(symbol, days=1, end_date=as_of_date)
+                if hist:
+                    close = hist[0].get("close")
+                    if close is not None:
+                        try:
+                            price = float(close)
+                        except (TypeError, ValueError):
+                            price = 0
+
+            if price <= 0:
                 continue
 
             value_local = quantity * price
