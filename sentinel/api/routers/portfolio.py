@@ -54,70 +54,137 @@ async def _backfill_portfolio_snapshots(db, currency) -> None:
 @router.get("/pnl-history")
 async def get_portfolio_pnl_history(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
-    period: str = "1Y",
 ) -> dict[str, Any]:
     """
-    Get portfolio P&L history for charting.
+    Get portfolio P&L history for charting (hardcoded 1Y).
 
-    Args:
-        period: Time period - 1M, 3M, 6M, 1Y, MAX
-
-    Returns:
-        snapshots: List of {date, pnl_eur, pnl_pct}
-        summary: {start_value, end_value, pnl_absolute, pnl_percent}
+    Returns weekly-sampled data points with:
+    - actual_ann_return: 30-day rolling TWR, annualized
+    - wavelet_ann_return: 30-day avg of wavelet scores, offset 14 days
+    - ml_ann_return: 30-day avg of ML predicted_return, offset 14 days
+    - target_ann_return in summary
     """
-    # Map period to days
-    period_days = {
-        "1M": 30,
-        "3M": 90,
-        "6M": 180,
-        "1Y": 365,
-        "MAX": None,
-    }
-    days = period_days.get(period, 365)
+    days = 365
 
-    # Get existing snapshots
-    snapshots = await deps.db.get_portfolio_snapshots(days)
+    # Get daily snapshots (need extra 44 days for 30-day window + 14-day offset)
+    snapshots = await deps.db.get_portfolio_snapshots(days + 44)
 
     # Check if we need to backfill
     latest_date = await deps.db.get_latest_snapshot_date()
     today = date_type.today().isoformat()
-
-    # If no snapshots or latest is not today, trigger backfill
     if not latest_date or latest_date < today:
         await _backfill_portfolio_snapshots(deps.db, deps.currency)
-        # Reload snapshots after backfill
-        snapshots = await deps.db.get_portfolio_snapshots(days)
-
-    # Filter by period
-    if days:
-        start_date = (date_type.today() - timedelta(days=days)).isoformat()
-        snapshots = [s for s in snapshots if s["date"] >= start_date]
+        snapshots = await deps.db.get_portfolio_snapshots(days + 44)
 
     if not snapshots:
         return {"snapshots": [], "summary": None}
 
-    # Build response with P&L percentages
-    result_snapshots = []
-    for snap in snapshots:
+    # Build daily data arrays from raw snapshots
+    daily = []
+    for i, snap in enumerate(snapshots):
         net_deposits = snap.get("net_deposits_eur", 0) or 0
         total_value = snap.get("total_value_eur", 0) or 0
-
-        # P&L relative to net deposits (Cumulative Money In - Cumulative Money Out)
         pnl_eur = snap.get("unrealized_pnl_eur", 0) or (total_value - net_deposits)
-        pnl_pct = (pnl_eur / net_deposits * 100) if net_deposits > 0 else 0
 
-        result_snapshots.append(
+        denominator = net_deposits
+        if i > 0:
+            prev_nd = snapshots[i - 1].get("net_deposits_eur", 0) or 0
+            if net_deposits > prev_nd:
+                denominator = prev_nd
+
+        pnl_pct = (pnl_eur / denominator * 100) if denominator > 0 else 0
+
+        daily.append(
             {
                 "date": snap["date"],
                 "total_value_eur": total_value,
                 "net_deposits_eur": net_deposits,
                 "pnl_eur": round(pnl_eur, 2),
                 "pnl_pct": round(pnl_pct, 2),
+                "wavelet_score": snap.get("avg_wavelet_score"),
+                "ml_predicted_return": snap.get("avg_ml_score"),
             }
         )
 
-    # Calculate summary
+    # Determine the 1Y output range (indices into daily array)
+    start_date = (date_type.today() - timedelta(days=days)).isoformat()
+    output_start = 0
+    for idx, d in enumerate(daily):
+        if d["date"] >= start_date:
+            output_start = idx
+            break
+
+    # Sample at 7-day steps within the 1Y range
+    window = 30  # 1-month rolling window
+    offset = 14  # predictions are 14-day forward-looking
+    # No annualization — show raw 30-day rolling return %
+
+    result_snapshots = []
+    i = output_start
+    while i < len(daily):
+        d = daily[i]
+        point = {
+            "date": d["date"],
+            "total_value_eur": d["total_value_eur"],
+            "net_deposits_eur": d["net_deposits_eur"],
+            "pnl_eur": d["pnl_eur"],
+            "pnl_pct": d["pnl_pct"],
+        }
+
+        # Actual: 30-day rolling TWR, annualized
+        if i >= window:
+            cumulative = 1.0
+            valid = True
+            for j in range(i - window + 1, i + 1):
+                prev_val = daily[j - 1]["total_value_eur"]
+                curr_val = daily[j]["total_value_eur"]
+                cash_flow = daily[j]["net_deposits_eur"] - daily[j - 1]["net_deposits_eur"]
+                if prev_val and prev_val > 0:
+                    hpr = (curr_val - prev_val - cash_flow) / prev_val
+                    cumulative *= 1.0 + hpr
+                else:
+                    valid = False
+                    break
+            if valid:
+                point["actual_ann_return"] = round((cumulative - 1.0) * 100.0, 2)
+            else:
+                point["actual_ann_return"] = None
+        else:
+            point["actual_ann_return"] = None
+
+        # Wavelet: 30-day avg of scores, offset 14 days back
+        # Predictions from [i-offset-window+1, i-offset] predict for date i
+        w_start = max(0, i - offset - window + 1)
+        w_end = max(0, i - offset + 1)
+        w_vals = [daily[j]["wavelet_score"] for j in range(w_start, w_end) if daily[j]["wavelet_score"] is not None]
+        if w_vals:
+            avg_w = sum(w_vals) / len(w_vals)
+            # Wavelet expected_return: composite signal from analyzer.py
+            # Convert to ~monthly % to match actual (30-day) and ML (14-day) scales
+            # ((score - 0.05) / 1.5) approximates annualized %, then /12 for monthly
+            point["wavelet_ann_return"] = round(((avg_w - 0.05) / 1.5) / 12.0 * 100.0, 2)
+        else:
+            point["wavelet_ann_return"] = None
+
+        # ML: 30-day avg of predicted_return, offset 14 days back
+        m_vals = [
+            daily[j]["ml_predicted_return"]
+            for j in range(w_start, w_end)
+            if daily[j]["ml_predicted_return"] is not None
+        ]
+        if m_vals:
+            avg_m = sum(m_vals) / len(m_vals)
+            # return_20d is raw 20-day fractional return, show as %
+            point["ml_ann_return"] = round(avg_m * 100.0, 2)
+        else:
+            point["ml_ann_return"] = None
+
+        result_snapshots.append(point)
+        i += 7  # 1-week step
+
+    if not result_snapshots:
+        return {"snapshots": [], "summary": None}
+
     first = result_snapshots[0]
     last = result_snapshots[-1]
 
@@ -128,6 +195,7 @@ async def get_portfolio_pnl_history(
         "end_net_deposits": last["net_deposits_eur"],
         "pnl_absolute": last["pnl_eur"],
         "pnl_percent": last["pnl_pct"],
+        "target_ann_return": 11.0,
     }
 
     return {"snapshots": result_snapshots, "summary": summary}

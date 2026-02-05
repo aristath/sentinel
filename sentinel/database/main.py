@@ -914,6 +914,10 @@ class Database(BaseDatabase):
                 )
                 logger.info("Added sync:dividends job schedule")
 
+        # Migration: add avg_wavelet_score, avg_ml_score to portfolio_snapshots
+        for col_name, col_def in [("avg_wavelet_score", "REAL"), ("avg_ml_score", "REAL")]:
+            await self._add_column_if_missing("portfolio_snapshots", col_name, col_def)
+
         # Migration: deduplicate trades and enforce UNIQUE on broker_trade_id
         await self._migrate_trades_unique_constraint()
 

@@ -657,6 +657,8 @@ class BaseDatabase:
         cash_eur: float | None = None,
         net_deposits_eur: float | None = None,
         unrealized_pnl_eur: float | None = None,
+        avg_wavelet_score: float | None = None,
+        avg_ml_score: float | None = None,
     ) -> None:
         """
         Insert or update a portfolio snapshot for a given date.
@@ -668,14 +670,17 @@ class BaseDatabase:
             cash_eur: Cash balance in EUR
             net_deposits_eur: Net deposits (deposits - withdrawals)
             unrealized_pnl_eur: Unrealized P&L (total_value - net_deposits)
+            avg_wavelet_score: Position-value-weighted average wavelet score
+            avg_ml_score: Position-value-weighted average ML score
         """
         from datetime import datetime
 
         await self.conn.execute(
             """INSERT OR REPLACE INTO portfolio_snapshots
                (date, total_value_eur, positions_value_eur, cash_eur,
-                net_deposits_eur, unrealized_pnl_eur, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                net_deposits_eur, unrealized_pnl_eur,
+                avg_wavelet_score, avg_ml_score, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (
                 date,
                 total_value_eur,
@@ -683,10 +688,35 @@ class BaseDatabase:
                 cash_eur,
                 net_deposits_eur,
                 unrealized_pnl_eur,
+                avg_wavelet_score,
+                avg_ml_score,
                 datetime.now().isoformat(),
             ),
         )
         await self.conn.commit()
+
+    async def get_all_scores_history(self) -> list[dict]:
+        """Get all wavelet scores ordered by symbol and date.
+
+        Returns:
+            List of {symbol, score, calculated_at} dicts
+        """
+        cursor = await self.conn.execute(
+            "SELECT symbol, score, calculated_at FROM scores ORDER BY symbol, calculated_at"
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def get_all_ml_predictions_history(self) -> list[dict]:
+        """Get all ML predictions ordered by symbol and date.
+
+        Returns:
+            List of {symbol, return_20d, predicted_at} dicts
+        """
+        cursor = await self.conn.execute(
+            "SELECT symbol, json_extract(features, '$.return_20d') as return_20d,"
+            " predicted_at FROM ml_predictions ORDER BY symbol, predicted_at"
+        )
+        return [dict(row) for row in await cursor.fetchall()]
 
     async def get_latest_snapshot_date(self) -> str | None:
         """

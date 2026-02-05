@@ -6,7 +6,9 @@ Usage:
     await service.backfill()
 """
 
+import bisect
 import logging
+from collections import defaultdict
 from datetime import date as date_type
 from datetime import datetime, timedelta
 
@@ -150,6 +152,23 @@ class SnapshotService:
         logger.info(f"Prefetching FX rates for {len(all_dates)} dates, currencies: {currencies_needed}")
         await self._currency.prefetch_rates_for_dates(currencies_needed, all_dates)
 
+        # Pre-fetch wavelet scores and ML predictions for weighted-average computation
+        raw_scores = await self._db.get_all_scores_history()
+        scores_by_symbol: dict[str, list[tuple[int, float]]] = defaultdict(list)
+        for row in raw_scores:
+            if row["score"] is not None:
+                scores_by_symbol[row["symbol"]].append((row["calculated_at"], row["score"]))
+
+        raw_ml = await self._db.get_all_ml_predictions_history()
+        ml_by_symbol: dict[str, list[tuple[int, float]]] = defaultdict(list)
+        for row in raw_ml:
+            if row["return_20d"] is not None:
+                ml_by_symbol[row["symbol"]].append((row["predicted_at"], row["return_20d"]))
+
+        logger.info(
+            f"Pre-fetched scores for {len(scores_by_symbol)} symbols, ML predictions for {len(ml_by_symbol)} symbols"
+        )
+
         # Running state
         positions: dict[str, float] = {}  # symbol -> quantity
         cost_basis: dict[str, float] = {}  # symbol -> total cost in EUR
@@ -180,7 +199,8 @@ class SnapshotService:
                 amount_eur = await self._currency.to_eur_for_date(amount_local, curr, cf["date"])
 
                 # Update cash balance
-                running_cash_eur += amount_eur
+                if type_id not in ("block", "unblock"):
+                    running_cash_eur += amount_eur
 
                 # Update net deposits (only for card deposits/payouts)
                 if type_id in ("card", "card_payout"):
@@ -210,17 +230,15 @@ class SnapshotService:
                 trade_value_eur = await self._currency.to_eur_for_date(trade_value_local, sec_curr, trade_date)
 
                 if trade["side"] == "BUY":
-                    # Buy: Cash goes down by value + commission
-                    running_cash_eur -= trade_value_eur + comm_eur
-
                     if is_stock_symbol(symbol):
+                        # Buy: Cash goes down by value + commission
+                        running_cash_eur -= trade_value_eur + comm_eur
                         positions[symbol] = positions.get(symbol, 0) + qty
                         cost_basis[symbol] = cost_basis.get(symbol, 0) + trade_value_eur
                 else:  # SELL
-                    # Sell: Cash goes up by value - commission
-                    running_cash_eur += trade_value_eur - comm_eur
-
                     if is_stock_symbol(symbol):
+                        # Sell: Cash goes up by value - commission
+                        running_cash_eur += trade_value_eur - comm_eur
                         prev_qty = positions.get(symbol, 0)
                         if prev_qty > 0:
                             # Reduce cost basis proportionally
@@ -250,7 +268,56 @@ class SnapshotService:
                     value_eur = await self._currency.to_eur_for_date(value_local, sec_curr, date_str)
                     positions_value_eur += value_eur
 
-            # 4. Final calculation for this date
+            # 4. Compute position-value-weighted average wavelet/ML scores
+            # Use end-of-day timestamp to match scores stored at 23:59:59 UTC
+            date_ts = int(datetime.strptime(date_str + " 23:59:59", "%Y-%m-%d %H:%M:%S").timestamp())
+            avg_wavelet = None
+            avg_ml = None
+
+            if positions_value_eur > 0:
+                w_sum = 0.0
+                w_total = 0.0
+                m_sum = 0.0
+                m_total = 0.0
+
+                for symbol, qty in positions.items():
+                    if qty <= 0:
+                        continue
+                    # Get this position's EUR value for weighting
+                    symbol_prices = price_lookup.get(symbol, {})
+                    price = symbol_prices.get(date_str)
+                    if price is None:
+                        available_dates = sorted(d for d in symbol_prices.keys() if d <= date_str)
+                        if available_dates:
+                            price = symbol_prices[available_dates[-1]]
+                    if not price:
+                        continue
+                    value_local = qty * price
+                    sec_curr = sec_currency_map.get(symbol, "EUR")
+                    pos_val = await self._currency.to_eur_for_date(value_local, sec_curr, date_str)
+
+                    # Binary-search for most recent wavelet score as-of date_ts
+                    ts_list = scores_by_symbol.get(symbol, [])
+                    if ts_list:
+                        idx = bisect.bisect_right(ts_list, (date_ts, float("inf"))) - 1
+                        if idx >= 0:
+                            w_sum += ts_list[idx][1] * pos_val
+                            w_total += pos_val
+
+                    # Binary-search for most recent ML score as-of date_ts
+                    ml_list = ml_by_symbol.get(symbol, [])
+                    if ml_list:
+                        idx = bisect.bisect_right(ml_list, (date_ts, float("inf"))) - 1
+                        if idx >= 0:
+                            m_sum += ml_list[idx][1] * pos_val
+                            m_total += pos_val
+
+                if w_total > 0:
+                    avg_wavelet = round(w_sum / w_total, 6)
+                if m_total > 0:
+                    avg_ml = round(m_sum / m_total, 6)
+
+            # 5. Final calculation for this date
             total_value_eur = positions_value_eur + running_cash_eur
             unrealized_pnl_eur = total_value_eur - cumulative_net_deposits_eur
 
@@ -261,6 +328,8 @@ class SnapshotService:
                 cash_eur=round(running_cash_eur, 2),
                 net_deposits_eur=round(cumulative_net_deposits_eur, 2),
                 unrealized_pnl_eur=round(unrealized_pnl_eur, 2),
+                avg_wavelet_score=avg_wavelet,
+                avg_ml_score=avg_ml,
             )
 
         logger.info("Portfolio snapshots backfill complete")

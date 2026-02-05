@@ -15,6 +15,7 @@ import ta
 from hmmlearn import hmm
 
 from sentinel.database import Database
+from sentinel.price_validator import PriceValidator
 from sentinel.security import Security
 
 
@@ -79,7 +80,12 @@ class RegimeDetector:
         """Extract features as of date_str (prices with end_date=date_str). For backfill."""
         await self._db.connect()
         prices = await self._db.get_prices(symbol, days=self.lookback_days, end_date=date_str)
-        return self._build_features_from_prices(prices)
+        # Validate and interpolate prices (match training pipeline)
+        # prices from DB are newest-first; validator expects oldest-first
+        validator = PriceValidator()
+        validated = validator.validate_and_interpolate(list(reversed(prices)))
+        # _build_features_from_prices expects newest-first
+        return self._build_features_from_prices(list(reversed(validated)))
 
     async def detect_current_regime(self, symbol: str) -> dict:
         """Detect current regime for a symbol."""
