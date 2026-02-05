@@ -28,7 +28,7 @@ class TrainingDataGenerator:
 
     async def generate_training_data(
         self,
-        start_date: str = "2017-01-01",
+        start_date: str = "2006-01-01",
         end_date: str | None = None,
         symbols: Optional[List[str]] = None,
         prediction_horizon_days: int = 14,
@@ -319,6 +319,7 @@ class TrainingDataGenerator:
         self,
         lookback_days: int = 90,
         prediction_horizon_days: int = 14,
+        backfill_years: int | None = None,
     ) -> pd.DataFrame:
         """
         Generate training samples from recent data only.
@@ -331,6 +332,7 @@ class TrainingDataGenerator:
         Args:
             lookback_days: Number of days of history to use for feature extraction
             prediction_horizon_days: Days ahead to predict
+            backfill_years: If set, backfill historical samples up to this many years ago
 
         Returns:
             DataFrame with new training samples
@@ -338,9 +340,13 @@ class TrainingDataGenerator:
         await self.db.connect()
 
         # Calculate date range
-        feature_start = (datetime.now() - timedelta(days=lookback_days + prediction_horizon_days + 200)).strftime(
-            "%Y-%m-%d"
-        )
+        if backfill_years is not None and backfill_years > 0:
+            current_year = datetime.now().year
+            feature_start = f"{current_year - backfill_years}-01-01"
+        else:
+            feature_start = (datetime.now() - timedelta(days=lookback_days + prediction_horizon_days + 200)).strftime(
+                "%Y-%m-%d"
+            )
 
         symbols = await self._get_universe_symbols()
 
@@ -360,8 +366,11 @@ class TrainingDataGenerator:
             # Get security data for aggregate features
             security_data = security_data_map.get(symbol)
 
-            # Only create samples for the lookback period
-            sample_start_idx = max(200, len(price_data) - lookback_days - prediction_horizon_days)
+            # Only create samples for the lookback period unless backfilling
+            if backfill_years is not None and backfill_years > 0:
+                sample_start_idx = 200
+            else:
+                sample_start_idx = max(200, len(price_data) - lookback_days - prediction_horizon_days)
             sample_end_idx = len(price_data) - prediction_horizon_days
 
             for i in range(sample_start_idx, sample_end_idx, 7):

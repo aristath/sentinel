@@ -157,9 +157,13 @@ class MLRetrainer:
         """Generate training samples from recent data."""
         horizon_days = await self.settings.get("ml_prediction_horizon_days", 14)
 
+        lookback_years = await self.settings.get("ml_training_lookback_years", 8)
+        feature_lookback_days = await self.settings.get("ml_training_feature_lookback_days", 365)
+
         df = await self.trainer.generate_incremental_samples(
-            lookback_days=90,
+            lookback_days=feature_lookback_days,
             prediction_horizon_days=horizon_days,
+            backfill_years=lookback_years,
         )
 
         return len(df) if df is not None else 0
