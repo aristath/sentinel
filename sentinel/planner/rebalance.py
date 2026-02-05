@@ -168,6 +168,7 @@ class RebalanceEngine:
                 ml_enabled=sec_ml_enabled,
                 ml_blend_ratio=sec_ml_blend_ratio,
                 features=features,
+                skip_cache=as_of_date is not None,
             )
 
             base_score = ml_result["final_score"]
