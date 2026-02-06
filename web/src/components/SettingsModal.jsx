@@ -283,6 +283,14 @@ export function SettingsModal({ opened, onClose }) {
                 onChange={(e) => handleChange('tradernet_api_secret', e.target.value)}
                 placeholder="Enter API secret"
               />
+
+              <TextInput
+                label="ML Service Base URL"
+                description="Base URL for sentinel-ml (used by monolith orchestration and tooling)"
+                value={settings?.ml_service_base_url || 'http://localhost:8001'}
+                onChange={(e) => handleChange('ml_service_base_url', e.target.value)}
+                placeholder="http://localhost:8001"
+              />
             </Stack>
           </Tabs.Panel>
 

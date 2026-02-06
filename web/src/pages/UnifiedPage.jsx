@@ -31,7 +31,7 @@ import { MarketsOpenCard } from '../components/MarketsOpenCard';
 import { PortfolioPnLChart } from '../components/PortfolioPnLChart';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
-import { getUnifiedView, getSecurities, updateSecurity, addSecurity, deleteSecurity, getPortfolio, getRecommendations, getCashFlows, getPortfolioPnLHistory, getSettings, updateSetting } from '../api/client';
+import { getUnifiedView, getSecurities, updateSecurity, addSecurity, deleteSecurity, getPortfolio, getRecommendations, getCashFlows, getPortfolioPnLHistory, getSettings, updateSetting, getMLPortfolioOverlays } from '../api/client';
 
 import { formatEur, formatCurrencySymbol } from '../utils/formatting';
 import './UnifiedPage.css';
@@ -117,6 +117,32 @@ function UnifiedPage() {
     queryFn: () => getPortfolioPnLHistory(),
     refetchInterval: 300000, // Refresh every 5 minutes
   });
+
+  const { data: mlOverlayData } = useQuery({
+    queryKey: ['portfolio-pnl-ml-overlays'],
+    queryFn: () => getMLPortfolioOverlays(),
+    refetchInterval: 300000,
+  });
+
+  const mergedPnlSnapshots = useMemo(() => {
+    const base = pnlData?.snapshots || [];
+    const overlays = mlOverlayData?.snapshots || [];
+    if (!base.length) return [];
+    if (!overlays.length) return base;
+
+    const byDate = new Map(overlays.map((o) => [o.date, o]));
+    return base.map((row) => {
+      const overlay = byDate.get(row.date);
+      if (!overlay) return row;
+      return {
+        ...row,
+        ml_xgboost: overlay.ml_xgboost,
+        ml_ridge: overlay.ml_ridge,
+        ml_rf: overlay.ml_rf,
+        ml_svr: overlay.ml_svr,
+      };
+    });
+  }, [pnlData?.snapshots, mlOverlayData?.snapshots]);
 
   // Settings for simulated cash
   const { data: settings } = useQuery({
@@ -475,7 +501,7 @@ function UnifiedPage() {
           <Card shadow="sm" padding="sm" withBorder className="unified__pnl-chart">
             <Text size="sm" fw={500} mb="xs">Portfolio P&L</Text>
             <PortfolioPnLChart
-              snapshots={pnlData?.snapshots}
+              snapshots={mergedPnlSnapshots}
               summary={pnlData?.summary}
               height={300}
             />
