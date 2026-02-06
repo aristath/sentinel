@@ -202,15 +202,15 @@ export function SecurityChart({
           />
         )}
 
-        {/* Blended projection (green/red dashed - main prediction) */}
+        {/* Combined projection (lavender dashed - main prediction) */}
         {blendedPoints.length > 0 && (
           <path
             d={buildSmoothPath([points[points.length - 1], ...blendedPoints])}
             fill="none"
-            stroke={expectedReturn >= 0 ? catppuccin.green : catppuccin.red}
+            stroke={catppuccin.lavender}
             strokeWidth={1.5}
             strokeDasharray="4,4"
-            className={`security-chart__projection security-chart__projection--blended ${expectedReturn >= 0 ? 'security-chart__projection--positive' : 'security-chart__projection--negative'}`}
+            className="security-chart__projection security-chart__projection--combined"
           />
         )}
 
@@ -254,9 +254,9 @@ export function SecurityChart({
           </span>
           <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <svg width="16" height="2">
-              <line x1="0" y1="1" x2="16" y2="1" stroke={catppuccin.green} strokeWidth="1.5" strokeDasharray="3,2" />
+              <line x1="0" y1="1" x2="16" y2="1" stroke={catppuccin.lavender} strokeWidth="1.5" strokeDasharray="3,2" />
             </svg>
-            Blended
+            Combined
           </span>
         </div>
       )}

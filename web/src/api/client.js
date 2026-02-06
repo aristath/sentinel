@@ -290,6 +290,12 @@ export const resetAndRetrain = () =>
   requestML('/ml/reset-and-retrain', { method: 'POST' });
 export const getResetStatus = () => requestML('/ml/reset-status');
 export const getMLPortfolioOverlays = () => requestML('/ml/portfolio-overlays');
+export const getMLSecurityOverlays = (symbols, days = 365) => {
+  const list = Array.isArray(symbols) ? symbols.filter(Boolean) : [];
+  if (list.length === 0) return Promise.resolve({ series: {} });
+  const params = new URLSearchParams({ symbols: list.join(','), days: String(days) });
+  return requestML(`/ml/security-overlays?${params.toString()}`);
+};
 
 // Cash Flows
 export const getCashFlows = () => request('/cashflows');

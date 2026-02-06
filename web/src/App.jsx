@@ -1,5 +1,4 @@
-import { AppShell, Group, Title, ActionIcon, Badge, Tooltip, Switch, Text, Modal, Button, RingProgress } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { AppShell, Group, Title, ActionIcon, Badge, Tooltip, Switch, Text } from '@mantine/core';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { IconSettings, IconClock, IconRefresh, IconChartLine, IconPlanet, IconReceipt, IconBrain } from '@tabler/icons-react';
 
@@ -8,7 +7,7 @@ import { SchedulerModal } from './components/SchedulerModal';
 import { SettingsModal } from './components/SettingsModal';
 import { BacktestModal } from './components/BacktestModal';
 import { TradesModal } from './components/TradesModal';
-import { getSchedulerStatus, refreshAll, getSettings, updateSetting, getLedStatus, setLedEnabled, getVersion, resetAndRetrain, getResetStatus } from './api/client';
+import { getSchedulerStatus, refreshAll, getSettings, updateSetting, getLedStatus, setLedEnabled, getVersion, getResetStatus } from './api/client';
 import { useState } from 'react';
 
 function App() {
@@ -16,7 +15,7 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [backtestOpen, setBacktestOpen] = useState(false);
   const [tradesOpen, setTradesOpen] = useState(false);
-  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [mlModalOpen, setMlModalOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: schedulerStatus } = useQuery({
@@ -69,26 +68,6 @@ function App() {
     refetchInterval: (query) => {
       // Only poll frequently when a reset is running
       return query.state.data?.running ? 1000 : 10000;
-    },
-  });
-
-  const resetRetrainMutation = useMutation({
-    mutationFn: resetAndRetrain,
-    onSuccess: () => {
-      notifications.show({
-        title: 'Reset & Retrain Started',
-        message: 'ML models are being retrained in the background',
-        color: 'blue',
-      });
-      setResetConfirmOpen(false);
-      queryClient.invalidateQueries({ queryKey: ['resetStatus'] });
-    },
-    onError: (error) => {
-      notifications.show({
-        title: 'Error',
-        message: error.message,
-        color: 'red',
-      });
     },
   });
 
@@ -182,53 +161,21 @@ function App() {
                   </ActionIcon>
                 </Tooltip>
 
-                {resetStatus?.running ? (
-                  <Tooltip
-                    label={
-                      resetStatus.models_total
-                        ? `Training ${resetStatus.current_symbol} (${resetStatus.models_current}/${resetStatus.models_total})`
-                        : `${resetStatus.step_name} (${resetStatus.current_step}/${resetStatus.total_steps})`
-                    }
+                <Tooltip
+                  label={resetStatus?.running
+                    ? 'ML retraining in progress - open ML tuning'
+                    : 'ML tuning and per-security projections'}
+                >
+                  <ActionIcon
+                    variant="subtle"
+                    size="lg"
+                    color={resetStatus?.running ? 'orange' : undefined}
+                    onClick={() => setMlModalOpen(true)}
+                    className="app__action-btn app__action-btn--reset-retrain"
                   >
-                    <Group gap={6}>
-                      <RingProgress
-                        size={32}
-                        thickness={3}
-                        sections={[
-                          {
-                            value: resetStatus.models_total
-                              ? (resetStatus.models_current / resetStatus.models_total) * 100
-                              : (resetStatus.current_step / resetStatus.total_steps) * 100,
-                            color: 'orange',
-                          },
-                        ]}
-                        label={
-                          <Text size="xs" ta="center" c="orange" fw={500}>
-                            {resetStatus.models_total ? resetStatus.models_current : resetStatus.current_step}
-                          </Text>
-                        }
-                      />
-                      <Text size="xs" c="dimmed" style={{ maxWidth: 140 }} truncate>
-                        {resetStatus.models_total
-                          ? `${resetStatus.current_symbol} (${resetStatus.models_current}/${resetStatus.models_total})`
-                          : resetStatus.step_name}
-                      </Text>
-                    </Group>
-                  </Tooltip>
-                ) : (
-                  <Tooltip label="Reset & Retrain All ML Models">
-                    <ActionIcon
-                      variant="subtle"
-                      size="lg"
-                      color="orange"
-                      onClick={() => setResetConfirmOpen(true)}
-                      loading={resetRetrainMutation.isPending}
-                      className="app__action-btn app__action-btn--reset-retrain"
-                    >
-                      <IconBrain size={20} />
-                    </ActionIcon>
-                  </Tooltip>
-                )}
+                    <IconBrain size={20} />
+                  </ActionIcon>
+                </Tooltip>
 
                 <Tooltip label="Scheduler">
                   <ActionIcon
@@ -271,7 +218,7 @@ function App() {
         </AppShell.Header>
 
         <AppShell.Main className="app__main">
-          <UnifiedPage />
+          <UnifiedPage mlModalOpen={mlModalOpen} onCloseMlModal={() => setMlModalOpen(false)} />
         </AppShell.Main>
       </AppShell>
 
@@ -279,33 +226,6 @@ function App() {
       <SettingsModal opened={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <BacktestModal opened={backtestOpen} onClose={() => setBacktestOpen(false)} />
       <TradesModal opened={tradesOpen} onClose={() => setTradesOpen(false)} />
-
-      <Modal
-        opened={resetConfirmOpen}
-        onClose={() => setResetConfirmOpen(false)}
-        title="Reset & Retrain All ML Models"
-        centered
-      >
-        <Text size="sm" mb="md">
-          This will delete all ML training data and model files, then retrain
-          all models from scratch. This operation may take several minutes.
-        </Text>
-        <Text size="sm" c="dimmed" mb="lg">
-          Use this after changing security geography or industry classifications.
-        </Text>
-        <Group justify="flex-end">
-          <Button variant="default" onClick={() => setResetConfirmOpen(false)}>
-            Cancel
-          </Button>
-          <Button
-            color="orange"
-            onClick={() => resetRetrainMutation.mutate()}
-            loading={resetRetrainMutation.isPending}
-          >
-            Reset & Retrain
-          </Button>
-        </Group>
-      </Modal>
     </>
   );
 }

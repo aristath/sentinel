@@ -6,6 +6,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { notifications } from '@mantine/notifications';
 import {
   Stack,
   Group,
@@ -29,10 +30,10 @@ import { AllocationRadarCard } from '../components/AllocationRadarCard';
 import { JobsCard } from '../components/JobsCard';
 import { MarketsOpenCard } from '../components/MarketsOpenCard';
 import { PortfolioPnLChart } from '../components/PortfolioPnLChart';
-import { PortfolioWeightControls } from '../components/PortfolioWeightControls';
+import { MLTuningModal } from '../components/MLTuningModal';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
-import { getUnifiedView, getSecurities, updateSecurity, addSecurity, deleteSecurity, getPortfolio, getRecommendations, getCashFlows, getPortfolioPnLHistory, getSettings, updateSetting, getMLPortfolioOverlays, updateSettingsBatch } from '../api/client';
+import { getUnifiedView, getSecurities, updateSecurity, addSecurity, deleteSecurity, getPortfolio, getRecommendations, getCashFlows, getPortfolioPnLHistory, getSettings, updateSetting, getMLPortfolioOverlays, updateSettingsBatch, getMLSecurityOverlays, getResetStatus, resetAndRetrain } from '../api/client';
 
 import { formatEur, formatCurrencySymbol } from '../utils/formatting';
 import './UnifiedPage.css';
@@ -95,7 +96,7 @@ function weightsEqual(a, b) {
   );
 }
 
-function UnifiedPage() {
+function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
   const [period, setPeriod] = useState('1Y');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('priority');
@@ -103,7 +104,6 @@ function UnifiedPage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [securityToDelete, setSecurityToDelete] = useState(null);
-  const [weightsOpen, setWeightsOpen] = useState(false);
   const [weightsDraft, setWeightsDraft] = useState(DEFAULT_PREDICTION_WEIGHTS);
   const [weightsBaseline, setWeightsBaseline] = useState(DEFAULT_PREDICTION_WEIGHTS);
   const [weightsSaveError, setWeightsSaveError] = useState('');
@@ -184,6 +184,21 @@ function UnifiedPage() {
     queryKey: ['settings'],
     queryFn: getSettings,
   });
+  const securitySymbols = useMemo(
+    () => (securities || []).map((s) => s.symbol).filter(Boolean).sort(),
+    [securities]
+  );
+  const { data: securityOverlayData } = useQuery({
+    queryKey: ['ml-security-overlays', securitySymbols.join(','), period],
+    queryFn: () => getMLSecurityOverlays(securitySymbols, period === '1M' ? 30 : period === '5Y' ? 1825 : period === '10Y' ? 3650 : 365),
+    enabled: mlModalOpen && securitySymbols.length > 0,
+    refetchInterval: 120000,
+  });
+  const { data: resetStatus } = useQuery({
+    queryKey: ['resetStatus'],
+    queryFn: getResetStatus,
+    refetchInterval: (query) => (query.state.data?.running ? 1000 : 10000),
+  });
   const isResearchMode = settings?.trading_mode === 'research';
   const simulatedCash = settings?.simulated_cash_eur;
   const [editingCash, setEditingCash] = useState(false);
@@ -259,6 +274,25 @@ function UnifiedPage() {
     },
   });
 
+  const resetRetrainMutation = useMutation({
+    mutationFn: resetAndRetrain,
+    onSuccess: () => {
+      notifications.show({
+        title: 'Reset & Retrain Started',
+        message: 'ML models are being retrained in the background',
+        color: 'blue',
+      });
+      queryClient.invalidateQueries({ queryKey: ['resetStatus'] });
+    },
+    onError: (err) => {
+      notifications.show({
+        title: 'Error',
+        message: err?.message || 'Failed to start reset & retrain',
+        color: 'red',
+      });
+    },
+  });
+
   const addMutation = useMutation({
     mutationFn: ({ symbol, geography, industry }) => addSecurity(symbol, geography, industry),
     onSuccess: () => {
@@ -325,6 +359,11 @@ function UnifiedPage() {
   const handleResetWeights = () => {
     setWeightsSaveError('');
     setWeightsDraft(weightsBaseline);
+  };
+
+  const handleResetRetrain = () => {
+    if (!window.confirm('Reset and retrain all ML models? This can take several minutes.')) return;
+    resetRetrainMutation.mutate();
   };
 
   // Filter and sort securities
@@ -590,18 +629,6 @@ function UnifiedPage() {
             />
           </Card>
 
-          <PortfolioWeightControls
-            opened={weightsOpen}
-            onToggle={() => setWeightsOpen((open) => !open)}
-            draftWeights={weightsDraft}
-            baselineWeights={weightsBaseline}
-            onWeightChange={handleWeightChange}
-            onSave={handleSaveWeights}
-            onReset={handleResetWeights}
-            isSaving={weightsMutation.isPending}
-            error={weightsSaveError}
-          />
-
           {/* Global Controls */}
           <Card shadow="sm" padding="md" withBorder className="unified__controls">
             <Group justify="space-between" wrap="wrap" gap="md" className="unified__controls-row">
@@ -715,6 +742,22 @@ function UnifiedPage() {
       </div>
 
       {/* Modals */}
+      <MLTuningModal
+        opened={mlModalOpen}
+        onClose={onCloseMlModal}
+        securities={securities || []}
+        weightsDraft={weightsDraft}
+        weightsBaseline={weightsBaseline}
+        onWeightChange={handleWeightChange}
+        onSaveWeights={handleSaveWeights}
+        onResetWeights={handleResetWeights}
+        isSavingWeights={weightsMutation.isPending}
+        weightsError={weightsSaveError}
+        onResetRetrain={handleResetRetrain}
+        isResetRetraining={resetRetrainMutation.isPending}
+        resetStatus={resetStatus}
+        securityOverlaysMap={securityOverlayData?.series || {}}
+      />
       <AddSecurityModal
         opened={addModalOpen}
         onClose={() => setAddModalOpen(false)}

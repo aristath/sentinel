@@ -26,6 +26,7 @@ export function PortfolioWeightControls({
   onReset,
   isSaving = false,
   error = '',
+  showToggle = true,
 }) {
   const normalized = normalizeWeights(draftWeights);
   const isValid = normalized != null;
@@ -35,17 +36,19 @@ export function PortfolioWeightControls({
     <Card shadow="sm" padding="sm" withBorder>
       <Group justify="space-between">
         <Text size="sm" fw={500}>Prediction Weights</Text>
-        <Button
-          variant="subtle"
-          size="xs"
-          leftSection={opened ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
-          onClick={onToggle}
-        >
-          {opened ? 'Collapse' : 'Expand'}
-        </Button>
+        {showToggle && (
+          <Button
+            variant="subtle"
+            size="xs"
+            leftSection={opened ? <IconChevronDown size={14} /> : <IconChevronRight size={14} />}
+            onClick={onToggle}
+          >
+            {opened ? 'Collapse' : 'Expand'}
+          </Button>
+        )}
       </Group>
 
-      <Collapse in={opened}>
+      <Collapse in={showToggle ? opened : true}>
         <Stack gap="sm" mt="sm">
           {WEIGHT_FIELDS.map(({ key, label }) => {
             const rawValue = Number(draftWeights?.[key] ?? 0);

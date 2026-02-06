@@ -74,6 +74,44 @@ async def get_scores(
     return {row["symbol"]: float(row["score"]) for row in rows if row["score"] is not None}
 
 
+@router.get("/scores-history")
+async def get_scores_history(
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+    symbols: str = Query(default=""),
+    since_ts: int | None = None,
+) -> dict[str, list[dict]]:
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not symbol_list:
+        return {}
+
+    symbols_json = json.dumps(symbol_list)
+    sql = """
+        SELECT symbol, calculated_at, score FROM (
+            SELECT
+                symbol,
+                calculated_at,
+                score,
+                ROW_NUMBER() OVER (
+                    PARTITION BY symbol, calculated_at
+                    ORDER BY id DESC
+                ) AS rn
+            FROM scores
+            WHERE symbol IN (SELECT value FROM json_each(?))
+              AND score IS NOT NULL
+              AND (? IS NULL OR calculated_at >= ?)
+        )
+        WHERE rn = 1
+        ORDER BY symbol ASC, calculated_at ASC
+    """
+    cursor = await deps.db.conn.execute(sql, (symbols_json, since_ts, since_ts))
+    rows = await cursor.fetchall()
+
+    result: dict[str, list[dict]] = {symbol: [] for symbol in symbol_list}
+    for row in rows:
+        result[row["symbol"]].append({"calculated_at": int(row["calculated_at"]), "score": float(row["score"])})
+    return result
+
+
 @router.get("/settings")
 async def get_settings(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],

@@ -433,6 +433,118 @@ async def get_portfolio_overlays(deps: Annotated[CommonDependencies, Depends(get
     return payload
 
 
+@router.get("/security-overlays")
+async def get_security_overlays(
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+    symbols: str,
+    days: int = 365,
+) -> dict:
+    symbol_list = [s.strip() for s in symbols.split(",") if s.strip()]
+    if not symbol_list:
+        return {"series": {}}
+
+    # Security prices are trading-day series (descending); load enough history for rolling window.
+    lookback_days = max(365, int(days)) + 300
+    all_prices = await asyncio.gather(*[deps.monolith.get_prices(symbol, days=lookback_days) for symbol in symbol_list])
+
+    # Preload historical wavelet scores from monolith (single request).
+    score_history = await deps.monolith.get_scores_history(symbol_list)
+
+    # Preload per-model prediction histories from ml.db.
+    symbol_set = set(symbol_list)
+    pred_hist_by_model: dict[str, dict[str, list[tuple[int, float]]]] = {mt: {} for mt in MODEL_TYPES}
+    for mt in MODEL_TYPES:
+        rows = await deps.ml_db.get_all_predictions_history(mt)
+        for row in rows:
+            symbol = row.get("symbol")
+            if symbol not in symbol_set:
+                continue
+            predicted_return = row.get("predicted_return")
+            if predicted_return is None:
+                continue
+            pred_hist_by_model[mt].setdefault(symbol, []).append((int(row["predicted_at"]), float(predicted_return)))
+        for symbol in pred_hist_by_model[mt]:
+            pred_hist_by_model[mt][symbol].sort(key=lambda x: x[0])
+
+    series: dict[str, list[dict]] = {}
+    window = 252
+    offset = 14
+
+    for idx, symbol in enumerate(symbol_list):
+        price_rows = all_prices[idx] or []
+        if not price_rows:
+            series[symbol] = []
+            continue
+
+        # Ascending for chronological rolling computations.
+        prices = list(reversed(price_rows))
+        closes = [float(p["close"]) for p in prices if p.get("close") is not None]
+        dates = [p["date"] for p in prices if p.get("close") is not None]
+        if len(closes) < (window + offset + 1):
+            series[symbol] = []
+            continue
+
+        # Rolling historical actual return (%): trailing 1Y price return.
+        actual_series: list[float | None] = [None] * len(closes)
+        for i in range(window, len(closes)):
+            prev = closes[i - window]
+            curr = closes[i]
+            if prev > 0:
+                actual_series[i] = ((curr / prev) - 1.0) * 100.0
+
+        # Score history for fast as-of lookup.
+        score_points = score_history.get(symbol, [])
+        score_ts = [int(row["calculated_at"]) for row in score_points]
+        score_vals = [float(row["score"]) for row in score_points]
+
+        rows_out = []
+        for i in range(window, len(closes)):
+            row = {
+                "date": dates[i],
+                "actual_ann_return": round(float(actual_series[i]), 2) if actual_series[i] is not None else None,
+                "wavelet_ann_return": None,
+                "ml_xgboost": None,
+                "ml_ridge": None,
+                "ml_rf": None,
+                "ml_svr": None,
+            }
+
+            past_i = i - offset
+            if past_i < window:
+                rows_out.append(row)
+                continue
+
+            past_actual = actual_series[past_i]
+            if past_actual is None:
+                rows_out.append(row)
+                continue
+
+            past_date = dates[past_i]
+            eod_ts = int(datetime.strptime(past_date + " 23:59:59", "%Y-%m-%d %H:%M:%S").timestamp())
+
+            # Wavelet overlay: past actual + wavelet score as-of that past date.
+            if score_ts:
+                score_idx = bisect.bisect_right(score_ts, eod_ts) - 1
+                if score_idx >= 0:
+                    row["wavelet_ann_return"] = round(float(past_actual) + score_vals[score_idx] * 100.0, 2)
+
+            # Per-model overlays: past actual + predicted_return as-of that past date.
+            for mt in MODEL_TYPES:
+                pred_list = pred_hist_by_model[mt].get(symbol, [])
+                if not pred_list:
+                    continue
+                pred_idx = bisect.bisect_right(pred_list, (eod_ts, float("inf"))) - 1
+                if pred_idx >= 0:
+                    row[f"ml_{mt}"] = round(float(past_actual) + pred_list[pred_idx][1] * 100.0, 2)
+
+            rows_out.append(row)
+
+        # Keep only the most recent requested span.
+        series[symbol] = rows_out[-days:] if days > 0 else rows_out
+
+    return {"series": series}
+
+
 async def _run_reset_and_retrain():
     manager = MLResetManager()
     set_active_reset(manager)

@@ -87,6 +87,12 @@ class MonolithDataClient:
             params["as_of_ts"] = as_of_ts
         return await self._get_json("/api/internal/ml/scores", params=params)
 
+    async def get_scores_history(self, symbols: list[str], since_ts: int | None = None) -> dict[str, list[dict]]:
+        params: dict[str, Any] = {"symbols": ",".join(symbols)}
+        if since_ts is not None:
+            params["since_ts"] = since_ts
+        return await self._get_json("/api/internal/ml/scores-history", params=params)
+
     async def get_portfolio_snapshots(self, days: int = 365) -> list[dict]:
         return await self._get_json("/api/internal/ml/portfolio-snapshots", params={"days": days})
 
