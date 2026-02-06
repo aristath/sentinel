@@ -6,14 +6,14 @@ import numpy as np
 import pytest
 
 # These will be imported after Phase 2 implementation
-from sentinel.ml_ensemble import (
+from sentinel_ml.ml_ensemble import (
     EnsembleBlender,
     RandomForestReturnPredictor,
     RidgeReturnPredictor,
     SVRReturnPredictor,
     XGBoostReturnPredictor,
 )
-from sentinel.ml_features import NUM_FEATURES
+from sentinel_ml.ml_features import NUM_FEATURES
 
 MODEL_TYPES = ["xgboost", "ridge", "rf", "svr"]
 

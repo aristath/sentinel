@@ -239,25 +239,6 @@ class TestScoringCalculate:
         mock_analyzer.update_scores.assert_awaited_once()
 
 
-class TestAnalyticsRegime:
-    """Tests for analytics_regime task."""
-
-    @pytest.mark.asyncio
-    async def test_analytics_regime_trains_model(self, mock_db, mock_detector):
-        """Verify detector.train_model() is called with symbols."""
-        from sentinel.jobs.tasks import analytics_regime
-
-        await analytics_regime(mock_db, mock_detector)
-
-        mock_detector.train_model.assert_awaited_once()
-        # Check symbols were passed
-        args, kwargs = mock_detector.train_model.call_args
-        symbols = args[0] if args else kwargs.get("symbols", [])
-        assert "AAPL.US" in symbols
-        assert "MSFT.US" in symbols
-        assert "GOOG.US" in symbols
-
-
 class TestTradingCheckMarkets:
     """Tests for trading_check_markets task."""
 
@@ -356,34 +337,6 @@ class TestPlanningRefresh:
 
         mock_db.cache_clear.assert_awaited_once_with("planner:")
         mock_planner.calculate_ideal_portfolio.assert_awaited_once()
-
-
-class TestMLRetrain:
-    """Tests for ml_retrain task."""
-
-    @pytest.mark.asyncio
-    async def test_ml_retrain_all_securities(self, mock_db, mock_retrainer):
-        """Verify retrainer is called for all ML-enabled securities."""
-        from sentinel.jobs.tasks import ml_retrain
-
-        await ml_retrain(mock_db, mock_retrainer)
-
-        # Should retrain for each ML-enabled security
-        assert mock_retrainer.retrain_symbol.await_count == 2
-
-
-class TestMLMonitor:
-    """Tests for ml_monitor task."""
-
-    @pytest.mark.asyncio
-    async def test_ml_monitor_all_securities(self, mock_db, mock_monitor):
-        """Verify monitor is called for all ML-enabled securities."""
-        from sentinel.jobs.tasks import ml_monitor
-
-        await ml_monitor(mock_db, mock_monitor)
-
-        # Should monitor each ML-enabled security
-        assert mock_monitor.track_symbol_performance.await_count == 2
 
 
 class TestTradingBalanceFix:

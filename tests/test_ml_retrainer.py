@@ -6,9 +6,9 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sentinel.database.ml import MODEL_TYPES
-from sentinel.ml_features import NUM_FEATURES
-from sentinel.ml_retrainer import MLRetrainer
+from sentinel_ml.database.ml import MODEL_TYPES
+from sentinel_ml.ml_features import NUM_FEATURES
+from sentinel_ml.ml_retrainer import MLRetrainer
 
 
 @pytest.fixture
@@ -33,7 +33,7 @@ async def test_retrain_trains_all_4_models(retrainer):
     retrainer.ml_db.load_training_data = AsyncMock(return_value=(X, y))
     retrainer.ml_db.update_model_record = AsyncMock()
 
-    with patch("sentinel.ml_retrainer.EnsembleBlender") as MockBlender:
+    with patch("sentinel_ml.ml_retrainer.EnsembleBlender") as MockBlender:
         instance = MockBlender.return_value
         instance.train.return_value = {
             f"{mt}_metrics": {"val_mae": 0.01, "val_rmse": 0.02, "val_r2": 0.5} for mt in MODEL_TYPES

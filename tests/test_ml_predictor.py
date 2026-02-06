@@ -9,9 +9,9 @@ import pytest
 import pytest_asyncio
 
 from sentinel.database import Database
-from sentinel.database.ml import MODEL_TYPES, MLDatabase
-from sentinel.ml_features import DEFAULT_FEATURES, FEATURE_NAMES, NUM_FEATURES
-from sentinel.ml_predictor import MLPredictor
+from sentinel_ml.database.ml import MODEL_TYPES, MLDatabase
+from sentinel_ml.ml_features import DEFAULT_FEATURES, FEATURE_NAMES, NUM_FEATURES
+from sentinel_ml.ml_predictor import MLPredictor
 
 
 @pytest_asyncio.fixture
@@ -117,7 +117,7 @@ async def test_predict_and_blend_no_model(predictor):
     predictor.db.connect = AsyncMock()
     predictor.db.cache_get = AsyncMock(return_value=None)
 
-    with patch("sentinel.ml_predictor.EnsembleBlender.model_exists", return_value=False):
+    with patch("sentinel_ml.ml_predictor.EnsembleBlender.model_exists", return_value=False):
         wavelet_score = 0.6
         result = await predictor.predict_and_blend(
             symbol="TEST",
@@ -158,7 +158,7 @@ async def test_predict_and_blend_returns_all_4_models(predictor, sample_features
     predictor._load_times["TEST"] = float("inf")
 
     with patch(
-        "sentinel.ml_predictor.get_regime_adjusted_return",
+        "sentinel_ml.ml_predictor.get_regime_adjusted_return",
         new_callable=AsyncMock,
         return_value=(0.04, 0.5, 0.1),
     ):
@@ -210,7 +210,7 @@ async def test_predict_stores_to_all_4_tables(predictor, sample_features):
     predictor._load_times["TEST"] = float("inf")
 
     with patch(
-        "sentinel.ml_predictor.get_regime_adjusted_return",
+        "sentinel_ml.ml_predictor.get_regime_adjusted_return",
         new_callable=AsyncMock,
         return_value=(0.04, 0.5, 0.1),
     ):
@@ -263,7 +263,7 @@ async def test_predict_regime_dampening_per_model(predictor, sample_features):
             return ml_return * 0.8, -0.5, 0.2
         return ml_return, -0.5, 0.0
 
-    with patch("sentinel.ml_predictor.get_regime_adjusted_return", side_effect=mock_regime):
+    with patch("sentinel_ml.ml_predictor.get_regime_adjusted_return", side_effect=mock_regime):
         result = await predictor.predict_and_blend(
             symbol="TEST",
             date="2025-01-27",
@@ -299,7 +299,7 @@ async def test_predict_skip_cache(predictor, sample_features):
     predictor._load_times["SYM"] = float("inf")
 
     with patch(
-        "sentinel.ml_predictor.get_regime_adjusted_return",
+        "sentinel_ml.ml_predictor.get_regime_adjusted_return",
         new_callable=AsyncMock,
         return_value=(0.03, 0.5, 0.0),
     ):

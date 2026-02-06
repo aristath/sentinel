@@ -88,6 +88,7 @@ class TestSettingsDefaults:
             "ml_weight_svr",
             "ml_prediction_horizon_days",
             "ml_training_lookback_years",
+            "ml_service_base_url",
         ]
         for key in ml_keys:
             assert key in DEFAULTS, f"Missing ML default: {key}"

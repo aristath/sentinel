@@ -8,8 +8,8 @@ import pytest
 import pytest_asyncio
 
 from sentinel.database import Database
-from sentinel.database.ml import MLDatabase
-from sentinel.ml_monitor import MLMonitor
+from sentinel_ml.database.ml import MLDatabase
+from sentinel_ml.ml_monitor import MLMonitor
 
 
 @pytest_asyncio.fixture

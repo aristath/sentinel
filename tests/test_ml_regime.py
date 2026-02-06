@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from sentinel.regime_quote import (
+from sentinel_ml.regime_quote import (
     apply_regime_dampening,
     calculate_regime_score,
     get_regime_adjusted_return,

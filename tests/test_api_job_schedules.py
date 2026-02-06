@@ -39,8 +39,8 @@ async def test_get_job_schedules_returns_all(db):
     """GET /api/jobs/schedules should return all schedules."""
     schedules = await db.get_job_schedules()
 
-    # Should have 19 default schedules (including sync:cashflows, sync:dividends)
-    assert len(schedules) == 19
+    # ML/analytics schedules moved to sentinel-ml service
+    assert len(schedules) == 16
 
     # Check structure (no longer has enabled, dependencies, is_parameterized fields)
     schedule = schedules[0]
@@ -173,9 +173,9 @@ async def test_market_timing_values(db):
     trading = await db.get_job_schedule("trading:check_markets")
     assert trading["market_timing"] == 2
 
-    # Analytics regime should be ALL_CLOSED (3)
-    analytics = await db.get_job_schedule("analytics:regime")
-    assert analytics["market_timing"] == 3
+    # Backup should be ANY_TIME (0)
+    backup = await db.get_job_schedule("backup:r2")
+    assert backup["market_timing"] == 0
 
 
 @pytest.mark.asyncio
@@ -188,13 +188,10 @@ async def test_all_job_types_present(db):
         "sync:metadata",
         "sync:exchange_rates",
         "scoring:calculate",
-        "analytics:regime",
         "trading:check_markets",
         "trading:execute",
         "trading:rebalance",
         "planning:refresh",
-        "ml:retrain",
-        "ml:monitor",
         "backup:r2",
     ]
 
@@ -211,5 +208,5 @@ async def test_categories_present(db):
     schedules = await db.get_job_schedules()
     categories = set(s["category"] for s in schedules)
 
-    expected = {"sync", "scoring", "analytics", "trading", "ml", "backup"}
+    expected = {"sync", "scoring", "trading", "backup"}
     assert categories == expected

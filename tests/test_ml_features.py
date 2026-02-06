@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sentinel.ml_features import (
+from sentinel_ml.ml_features import (
     DEFAULT_FEATURES,
     FEATURE_NAMES,
     NUM_FEATURES,

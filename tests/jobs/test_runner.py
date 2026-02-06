@@ -137,10 +137,7 @@ class TestRunnerInit:
         mock_broker,
         mock_portfolio,
         mock_analyzer,
-        mock_detector,
         mock_planner,
-        mock_retrainer,
-        mock_monitor,
         mock_cache,
         mock_market_checker,
     ):
@@ -163,10 +160,7 @@ class TestRunnerInit:
                 mock_broker,
                 mock_portfolio,
                 mock_analyzer,
-                mock_detector,
                 mock_planner,
-                mock_retrainer,
-                mock_monitor,
                 mock_cache,
                 mock_market_checker,
             )
@@ -181,10 +175,7 @@ class TestRunnerInit:
         mock_broker,
         mock_portfolio,
         mock_analyzer,
-        mock_detector,
         mock_planner,
-        mock_retrainer,
-        mock_monitor,
         mock_cache,
         mock_market_checker,
     ):
@@ -206,10 +197,7 @@ class TestRunnerInit:
                 mock_broker,
                 mock_portfolio,
                 mock_analyzer,
-                mock_detector,
                 mock_planner,
-                mock_retrainer,
-                mock_monitor,
                 mock_cache,
                 mock_market_checker,
             )

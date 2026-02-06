@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 
 from sentinel.database import Database
-from sentinel.database.ml import MLDatabase
+from sentinel_ml.database.ml import MLDatabase
 
 
 def _midnight_utc(iso_date: str) -> int:

@@ -200,7 +200,7 @@ async def test_seed_default_job_schedules_inserts_all(db):
     await db.seed_default_job_schedules()
 
     schedules = await db.get_job_schedules()
-    assert len(schedules) == 19  # 19 default schedules (including sync:cashflows, sync:dividends)
+    assert len(schedules) == 16  # ML/analytics jobs moved to sentinel-ml service
 
     # Check some specific defaults
     portfolio = await db.get_job_schedule("sync:portfolio")
@@ -208,10 +208,6 @@ async def test_seed_default_job_schedules_inserts_all(db):
     assert portfolio["interval_minutes"] == 30
     assert portfolio["interval_market_open_minutes"] == 5
     assert portfolio["category"] == "sync"
-
-    ml_retrain = await db.get_job_schedule("ml:retrain")
-    assert ml_retrain is not None
-    assert ml_retrain["interval_minutes"] == 10080
 
     # Check trading:rebalance is now included
     rebalance = await db.get_job_schedule("trading:rebalance")

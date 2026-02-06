@@ -7,8 +7,8 @@ import pytest
 import pytest_asyncio
 
 from sentinel.database import Database
-from sentinel.database.ml import MLDatabase
-from sentinel.regime_hmm import RegimeDetector
+from sentinel_ml.database.ml import MLDatabase
+from sentinel_ml.regime_hmm import RegimeDetector
 
 
 @pytest_asyncio.fixture

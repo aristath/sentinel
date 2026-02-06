@@ -6,7 +6,7 @@ import time
 
 import pytest
 
-from sentinel.database.ml import MLDatabase
+from sentinel_ml.database.ml import MLDatabase
 
 MODEL_TYPES = ["xgboost", "ridge", "rf", "svr"]
 

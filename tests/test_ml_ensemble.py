@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from sentinel.database.ml import MODEL_TYPES
-from sentinel.ml_ensemble import (
+from sentinel_ml.database.ml import MODEL_TYPES
+from sentinel_ml.ml_ensemble import (
     EnsembleBlender,
     RandomForestReturnPredictor,
     RidgeReturnPredictor,

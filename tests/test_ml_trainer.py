@@ -13,8 +13,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from sentinel.ml_features import FEATURE_NAMES, NUM_FEATURES
-from sentinel.ml_trainer import TrainingDataGenerator
+from sentinel_ml.ml_features import FEATURE_NAMES, NUM_FEATURES
+from sentinel_ml.ml_trainer import TrainingDataGenerator
 
 
 @pytest.fixture
@@ -58,10 +58,7 @@ class TestPriceDataFetching:
             {"date": "2024-01-01", "open": 100, "high": 101, "low": 99, "close": 100.5, "volume": 1000},
             {"date": "2024-01-02", "open": 100.5, "high": 102, "low": 100, "close": 101, "volume": 1100},
         ]
-        trainer.db.conn = AsyncMock()
-        cursor_mock = AsyncMock()
-        cursor_mock.fetchall = AsyncMock(return_value=mock_rows)
-        trainer.db.conn.execute = AsyncMock(return_value=cursor_mock)
+        trainer.db.get_prices = AsyncMock(return_value=list(reversed(mock_rows)))
 
         result = await trainer._get_price_data("TEST", "2024-01-01", "2024-01-31")
 
@@ -73,10 +70,7 @@ class TestPriceDataFetching:
     async def test_get_price_data_empty(self, trainer):
         """Test price data with no results."""
         trainer.db = AsyncMock()
-        trainer.db.conn = AsyncMock()
-        cursor_mock = AsyncMock()
-        cursor_mock.fetchall = AsyncMock(return_value=[])
-        trainer.db.conn.execute = AsyncMock(return_value=cursor_mock)
+        trainer.db.get_prices = AsyncMock(return_value=[])
 
         result = await trainer._get_price_data("TEST", "2024-01-01", "2024-01-31")
 
@@ -92,10 +86,7 @@ class TestPriceDataFetching:
         mock_rows = [
             {"date": "2024-01-01", "open": "100.5", "high": "101", "low": "99", "close": "100.5", "volume": "1000"},
         ]
-        trainer.db.conn = AsyncMock()
-        cursor_mock = AsyncMock()
-        cursor_mock.fetchall = AsyncMock(return_value=mock_rows)
-        trainer.db.conn.execute = AsyncMock(return_value=cursor_mock)
+        trainer.db.get_prices = AsyncMock(return_value=list(reversed(mock_rows)))
 
         result = await trainer._get_price_data("TEST", "2024-01-01", "2024-01-31")
 
