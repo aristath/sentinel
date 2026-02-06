@@ -22,16 +22,15 @@ from sentinel.api.routers import (
     cache_router,
     cashflows_router,
     exchange_rates_router,
+    internal_ml_router,
     jobs_router,
     led_router,
     markets_router,
     meta_router,
-    ml_router,
     planner_router,
     portfolio_router,
     prices_router,
     pulse_router,
-    regime_router,
     scores_router,
     securities_router,
     set_scheduler,
@@ -47,7 +46,6 @@ from sentinel.broker import Broker
 from sentinel.cache import Cache
 from sentinel.currency import Currency
 from sentinel.database import Database
-from sentinel.database.ml import MLDatabase
 from sentinel.jobs import init as init_jobs
 from sentinel.jobs import stop as stop_jobs
 from sentinel.jobs.market import BrokerMarketChecker
@@ -72,9 +70,6 @@ async def lifespan(app: FastAPI):
     db = Database()
     await db.connect()
 
-    ml_db = MLDatabase()
-    await ml_db.connect()
-
     settings = Settings()
     await settings.init_defaults()
 
@@ -91,17 +86,11 @@ async def lifespan(app: FastAPI):
 
     # Initialize job system components
     from sentinel.analyzer import Analyzer
-    from sentinel.ml_monitor import MLMonitor
-    from sentinel.ml_retrainer import MLRetrainer
     from sentinel.planner import Planner
-    from sentinel.regime_hmm import RegimeDetector
 
     portfolio = Portfolio()
     analyzer = Analyzer()
-    detector = RegimeDetector()
     planner = Planner()
-    retrainer = MLRetrainer()
-    monitor = MLMonitor()
     cache = Cache("motion")
 
     # Seed default job schedules before starting scheduler
@@ -117,10 +106,7 @@ async def lifespan(app: FastAPI):
         broker,
         portfolio,
         analyzer,
-        detector,
         planner,
-        retrainer,
-        monitor,
         cache,
         market_checker,
     )
@@ -151,7 +137,6 @@ async def lifespan(app: FastAPI):
         except asyncio.CancelledError:
             pass
 
-    await ml_db.close()
     await db.close()
 
 
@@ -222,8 +207,7 @@ app.include_router(cashflows_router, prefix="/api")
 app.include_router(trading_actions_router, prefix="/api")
 app.include_router(planner_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
-app.include_router(ml_router, prefix="/api")
-app.include_router(regime_router, prefix="/api")
+app.include_router(internal_ml_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
 app.include_router(system_router, prefix="/api")
 app.include_router(cache_router, prefix="/api")
@@ -240,7 +224,7 @@ app.include_router(pulse_router, prefix="/api")
 web_dir = Path(__file__).parent.parent / "web" / "dist"
 
 if web_dir.exists():
-    from fastapi.responses import FileResponse
+    from fastapi.responses import FileResponse, JSONResponse
 
     # Serve static assets
     app.mount("/assets", StaticFiles(directory=str(web_dir / "assets")), name="assets")
@@ -249,6 +233,9 @@ if web_dir.exists():
     @app.get("/{path:path}")
     async def serve_spa(path: str):
         """Serve index.html for all non-API routes (SPA support)."""
+        # API paths must return API 404, not SPA HTML.
+        if path.startswith("api/"):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
         file_path = web_dir / path
         if file_path.exists() and file_path.is_file():
             return FileResponse(file_path)

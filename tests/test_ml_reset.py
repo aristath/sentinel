@@ -8,8 +8,8 @@ import pytest
 import pytest_asyncio
 
 from sentinel.database import Database
-from sentinel.database.ml import MODEL_TYPES, MLDatabase
-from sentinel.ml_reset import (
+from sentinel_ml.database.ml import MODEL_TYPES, MLDatabase
+from sentinel_ml.ml_reset import (
     TOTAL_STEPS,
     MLResetManager,
     get_active_reset,
@@ -17,6 +17,21 @@ from sentinel.ml_reset import (
     is_reset_in_progress,
     set_active_reset,
 )
+
+
+class FakeMonolithClient:
+    """Test double for monolith internal ML endpoints."""
+
+    def __init__(self, db: Database):
+        self._db = db
+
+    async def delete_aggregates(self) -> int:
+        cursor = await self._db.conn.execute("DELETE FROM prices WHERE symbol LIKE '_AGG_%'")
+        await self._db.conn.commit()
+        return cursor.rowcount
+
+    async def recompute_aggregates(self) -> dict:
+        return {"country": 0, "industry": 0}
 
 
 @pytest_asyncio.fixture
@@ -60,12 +75,12 @@ async def ml_db():
 @pytest.fixture
 def manager(db, ml_db):
     """Create MLResetManager with test databases."""
-    return MLResetManager(db=db, ml_db=ml_db)
+    return MLResetManager(db=db, ml_db=ml_db, monolith_client=FakeMonolithClient(db))
 
 
 @pytest.mark.asyncio
 async def test_delete_aggregates_removes_all_agg_symbols(db, manager):
-    """Verify all _AGG_* symbols are deleted from prices table."""
+    """Aggregate deletion uses monolith internal endpoint contract."""
     # Setup: insert aggregate prices
     await db.conn.execute(
         "INSERT INTO prices (symbol, date, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -194,7 +209,7 @@ async def test_delete_model_files_removes_directory_contents(manager, tmp_path):
     (model_dir / "MSFT" / "model.pt").write_text("fake model")
 
     # Patch DATA_DIR
-    with patch("sentinel.ml_reset.DATA_DIR", tmp_path):
+    with patch("sentinel_ml.ml_reset.DATA_DIR", tmp_path):
         await manager.delete_model_files()
 
     # Assert: directory exists but is empty
@@ -208,7 +223,7 @@ async def test_delete_model_files_handles_nonexistent_directory(manager, tmp_pat
     model_dir = tmp_path / "ml_models"
     assert not model_dir.exists()
 
-    with patch("sentinel.ml_reset.DATA_DIR", tmp_path):
+    with patch("sentinel_ml.ml_reset.DATA_DIR", tmp_path):
         await manager.delete_model_files()
 
     # Directory should be created
