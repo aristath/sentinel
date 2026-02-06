@@ -45,6 +45,7 @@ DEFAULTS = {
     # API
     "tradernet_api_key": "",
     "tradernet_api_secret": "",
+    "ml_service_base_url": "http://localhost:8001",
     # Advanced Analytics
     "use_regime_adjustment": False,
     # Regime Detection

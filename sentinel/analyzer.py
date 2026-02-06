@@ -704,34 +704,7 @@ class Analyzer:
             + 0.10 * (consistency_bonus + 0.5)  # Shift to positive range
         )
 
-        # Apply regime adjustment if enabled
-        if use_regime:
-            from sentinel.settings import Settings
-
-            settings = Settings()
-            regime_enabled = await settings.get("use_regime_adjustment", False)
-        else:
-            regime_enabled = False
-
-        if regime_enabled:
-            from sentinel.regime_hmm import RegimeDetector
-
-            detector = RegimeDetector()
-            regime_data = await detector.detect_current_regime(symbol)
-
-            # Regime-specific component weights (quality, mean_reversion, momentum, consistency)
-            REGIME_WEIGHTS = {
-                "Bull": (0.30, 0.30, 0.30, 0.10),  # Boost momentum
-                "Bear": (0.40, 0.40, 0.10, 0.10),  # Boost quality, reduce momentum
-                "Sideways": (0.30, 0.40, 0.20, 0.10),  # Default weights
-            }
-            w_quality, w_mr, w_mom, w_cons = REGIME_WEIGHTS.get(regime_data["regime_name"], REGIME_WEIGHTS["Sideways"])
-            expected_return = (
-                w_quality * quality
-                + w_mr * mean_reversion
-                + w_mom * adjusted_momentum
-                + w_cons * (consistency_bonus + 0.5)
-            )
+        # Regime adjustment moved to sentinel-ml micro-service.
 
         return expected_return
 

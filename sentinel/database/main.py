@@ -609,14 +609,11 @@ class Database(BaseDatabase):
             ("sync:dividends", 1440, 1440, 0, "sync", "Sync dividends from broker"),
             ("aggregate:compute", 1440, 1440, 1, "sync", "Compute aggregate price series"),
             ("scoring:calculate", 1440, 1440, 0, "scoring", "Calculate security scores"),
-            ("analytics:regime", 10080, 10080, 3, "analytics", "Train regime detection model"),
             ("trading:check_markets", 30, 30, 2, "trading", "Check which markets are open"),
             ("trading:execute", 30, 15, 2, "trading", "Execute pending trade recommendations"),
             ("trading:rebalance", 60, 60, 0, "trading", "Check portfolio rebalance needs"),
             ("trading:balance_fix", 15, 15, 0, "trading", "Fix negative currency balances"),
             ("planning:refresh", 60, 30, 0, "trading", "Refresh trading plan and recommendations"),
-            ("ml:retrain", 10080, 10080, 3, "ml", "Retrain ML models for all ML-enabled securities"),
-            ("ml:monitor", 10080, 10080, 0, "ml", "Monitor ML performance for all ML-enabled securities"),
             ("backup:r2", 1440, 1440, 0, "backup", "Backup data folder to Cloudflare R2"),
         ]
 

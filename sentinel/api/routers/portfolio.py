@@ -11,7 +11,6 @@ from fastapi import APIRouter, Depends
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
-from sentinel.database.ml import MODEL_TYPES
 from sentinel.portfolio import Portfolio
 from sentinel.services.portfolio import PortfolioService
 
@@ -120,18 +119,6 @@ async def get_portfolio_pnl_history(
         if row["score"] is not None:
             scores_by_symbol[row["symbol"]].append((row["calculated_at"], row["score"]))
 
-    # --- Pre-fetch ML predictions per model ---
-    await deps.ml_db.connect()
-    ml_per_model: dict[str, dict[str, list[tuple[int, float]]]] = {}
-    for mt in MODEL_TYPES:
-        ml_per_model[mt] = defaultdict(list)
-        raw_ml = await deps.ml_db.get_all_predictions_history(mt)
-        for row in raw_ml:
-            if row["predicted_return"] is not None:
-                ml_per_model[mt][row["symbol"]].append((row["predicted_at"], row["predicted_return"]))
-        for symbol in ml_per_model[mt]:
-            ml_per_model[mt][symbol].sort(key=lambda x: x[0])
-
     # --- Build daily data from snapshots ---
     daily = []
     for snap in snapshots:
@@ -167,26 +154,6 @@ async def get_portfolio_pnl_history(
             if w_total > 0:
                 wavelet_score = round(w_sum / w_total, 6)
 
-        # Per-model ML scores
-        ml_scores = {}
-        for mt in MODEL_TYPES:
-            ml_scores[mt] = None
-            if positions_value > 0:
-                m_sum = 0.0
-                m_total = 0.0
-                for symbol, pos in positions.items():
-                    pos_val = pos.get("value_eur", 0)
-                    if pos_val <= 0:
-                        continue
-                    pm_list = ml_per_model[mt].get(symbol, [])
-                    if pm_list:
-                        idx = bisect.bisect_right(pm_list, (eod_ts, float("inf"))) - 1
-                        if idx >= 0:
-                            m_sum += pm_list[idx][1] * pos_val
-                            m_total += pos_val
-                if m_total > 0:
-                    ml_scores[mt] = round(m_sum / m_total, 6)
-
         daily.append(
             {
                 "date": iso_date,
@@ -195,10 +162,10 @@ async def get_portfolio_pnl_history(
                 "pnl_eur": round(pnl_eur, 2),
                 "pnl_pct": round(pnl_pct, 2),
                 "wavelet_score": wavelet_score,
-                "ml_xgboost_return": ml_scores.get("xgboost"),
-                "ml_ridge_return": ml_scores.get("ridge"),
-                "ml_rf_return": ml_scores.get("rf"),
-                "ml_svr_return": ml_scores.get("svr"),
+                "ml_xgboost_return": None,
+                "ml_ridge_return": None,
+                "ml_rf_return": None,
+                "ml_svr_return": None,
             }
         )
 
@@ -286,21 +253,8 @@ async def get_portfolio_pnl_history(
             if not past_valid:
                 past_cumulative = None
 
-        for mt, key in [
-            ("xgboost", "ml_xgboost_return"),
-            ("ridge", "ml_ridge_return"),
-            ("rf", "ml_rf_return"),
-            ("svr", "ml_svr_return"),
-        ]:
-            if past_cumulative is not None and past_i >= 0 and past_i <= last_daily_idx:
-                ml_pred = daily[past_i].get(key)
-                if ml_pred is not None:
-                    past_cagr = (past_cumulative - 1.0) * 100.0
-                    point[f"ml_{mt}"] = round(past_cagr + ml_pred * 100.0, 2)
-                else:
-                    point[f"ml_{mt}"] = None
-            else:
-                point[f"ml_{mt}"] = None
+        for mt in ["xgboost", "ridge", "rf", "svr"]:
+            point[f"ml_{mt}"] = None
 
         result_snapshots.append(point)
         i += 1

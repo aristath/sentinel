@@ -40,14 +40,11 @@ TASK_REGISTRY: dict[str, tuple[Callable, list[str]]] = {
     "sync:dividends": (tasks.sync_dividends, ["db", "broker"]),
     "aggregate:compute": (tasks.aggregate_compute, ["db"]),
     "scoring:calculate": (tasks.scoring_calculate, ["analyzer"]),
-    "analytics:regime": (tasks.analytics_regime, ["db", "detector"]),
     "trading:check_markets": (tasks.trading_check_markets, ["broker", "db", "planner"]),
     "trading:execute": (tasks.trading_execute, ["broker", "db", "planner"]),
     "trading:rebalance": (tasks.trading_rebalance, ["planner"]),
     "trading:balance_fix": (tasks.trading_balance_fix, ["db", "broker"]),
     "planning:refresh": (tasks.planning_refresh, ["db", "planner"]),
-    "ml:retrain": (tasks.ml_retrain, ["db", "retrainer"]),
-    "ml:monitor": (tasks.ml_monitor, ["db", "monitor"]),
     "backup:r2": (tasks.backup_r2, ["db"]),
 }
 
@@ -63,10 +60,7 @@ async def init(
     broker,
     portfolio,
     analyzer,
-    detector,
     planner,
-    retrainer,
-    monitor,
     cache,
     market_checker,
 ) -> AsyncIOScheduler:
@@ -77,10 +71,7 @@ async def init(
         broker: Broker instance
         portfolio: Portfolio instance
         analyzer: Analyzer instance
-        detector: RegimeDetector instance
         planner: Planner instance
-        retrainer: MLRetrainer instance
-        monitor: MLMonitor instance
         cache: Cache instance
         market_checker: MarketChecker instance
 
@@ -95,10 +86,7 @@ async def init(
         "broker": broker,
         "portfolio": portfolio,
         "analyzer": analyzer,
-        "detector": detector,
         "planner": planner,
-        "retrainer": retrainer,
-        "monitor": monitor,
         "cache": cache,
         "market_checker": market_checker,
     }

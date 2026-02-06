@@ -298,25 +298,6 @@ async def scoring_calculate(analyzer) -> None:
 
 
 # -----------------------------------------------------------------------------
-# Analytics Tasks
-# -----------------------------------------------------------------------------
-
-
-async def analytics_regime(db, detector) -> None:
-    """Train HMM regime detection model."""
-    securities = await db.get_all_securities(active_only=True)
-    symbols = [s["symbol"] for s in securities]
-
-    if len(symbols) < 3:
-        logger.warning("Not enough securities for regime detection")
-        return
-
-    model = await detector.train_model(symbols)
-    if model:
-        logger.info(f"Regime model trained on {len(symbols)} securities")
-
-
-# -----------------------------------------------------------------------------
 # Trading Tasks
 # -----------------------------------------------------------------------------
 
@@ -562,74 +543,6 @@ async def planning_refresh(db, planner) -> None:
     buys = [r for r in recommendations if r.action == "buy"]
     sells = [r for r in recommendations if r.action == "sell"]
     logger.info(f"Generated {len(recommendations)} recommendations: {len(buys)} buys, {len(sells)} sells")
-
-
-# -----------------------------------------------------------------------------
-# ML Tasks
-# -----------------------------------------------------------------------------
-
-
-async def ml_retrain(db, retrainer) -> None:
-    """Retrain ML models for all ML-enabled securities."""
-    securities = await db.get_ml_enabled_securities()
-
-    if not securities:
-        logger.info("No ML-enabled securities to retrain")
-        return
-
-    trained = 0
-    skipped = 0
-
-    for sec in securities:
-        symbol = sec["symbol"]
-        result = await retrainer.retrain_symbol(symbol)
-
-        if result:
-            logger.info(
-                f"ML retraining complete for {symbol}: "
-                f"RMSE={result.get('validation_rmse', 0):.4f}, "
-                f"samples={result.get('training_samples', 0)}"
-            )
-            trained += 1
-        else:
-            logger.info(f"ML retraining skipped for {symbol}: insufficient data")
-            skipped += 1
-
-    logger.info(f"ML retraining complete: {trained} trained, {skipped} skipped")
-
-
-async def ml_monitor(db, monitor) -> None:
-    """Monitor ML model performance for all ML-enabled securities."""
-    securities = await db.get_ml_enabled_securities()
-
-    if not securities:
-        logger.info("No ML-enabled securities to monitor")
-        return
-
-    monitored = 0
-
-    for sec in securities:
-        symbol = sec["symbol"]
-        per_model = await monitor.track_symbol_performance(symbol)
-
-        if not per_model:
-            logger.info(f"ML monitoring for {symbol}: no predictions to evaluate")
-            continue
-
-        for mt, metrics in per_model.items():
-            if metrics.get("predictions_evaluated", 0) > 0:
-                logger.info(
-                    f"ML performance for {symbol}/{mt}: "
-                    f"MAE={metrics.get('mean_absolute_error', 0):.4f}, "
-                    f"RMSE={metrics.get('root_mean_squared_error', 0):.4f}, "
-                    f"N={metrics['predictions_evaluated']}"
-                )
-                if metrics.get("drift_detected"):
-                    logger.warning(f"ML DRIFT DETECTED for {symbol}/{mt}!")
-
-        monitored += 1
-
-    logger.info(f"ML monitoring complete: {monitored} securities evaluated")
 
 
 # -----------------------------------------------------------------------------

@@ -8,14 +8,10 @@ import math
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-import pandas as pd
-
 from sentinel.analyzer import Analyzer
 from sentinel.broker import Broker
 from sentinel.currency import Currency
 from sentinel.database import Database
-from sentinel.ml_features import FeatureExtractor
-from sentinel.ml_predictor import MLPredictor
 from sentinel.portfolio import Portfolio
 from sentinel.price_validator import PriceValidator, check_trade_blocking
 from sentinel.settings import Settings
@@ -53,8 +49,6 @@ class RebalanceEngine:
         self._settings = settings or Settings()
         self._currency = currency or Currency()
         self._analyzer = Analyzer(db=self._db)
-        self._ml_predictor = MLPredictor(db=self._db, settings=self._settings)
-        self._feature_extractor = FeatureExtractor(db=self._db)
 
     async def get_recommendations(
         self,
@@ -96,11 +90,7 @@ class RebalanceEngine:
         expected_returns = {}
         security_data = {}
 
-        # Include all ML-enabled securities so predictions run for them too
-        ml_enabled_rows = await self._db.get_ml_enabled_securities()
-        ml_enabled_symbols = [row["symbol"] for row in ml_enabled_rows]
-
-        all_symbols = list(set(list(ideal.keys()) + list(current.keys()) + ml_enabled_symbols))
+        all_symbols = list(set(list(ideal.keys()) + list(current.keys())))
 
         # Fetch all data in parallel for performance
         if as_of_date is not None:
@@ -147,34 +137,14 @@ class RebalanceEngine:
         hist_prices_map = {all_symbols[i]: hist_prices_list[i] for i in range(len(all_symbols))}
 
         # Process each symbol
-        today = as_of_date if as_of_date is not None else datetime.now().strftime("%Y-%m-%d")
-
         for symbol in all_symbols:
             sec = securities_map.get(symbol)
             pos = positions_map.get(symbol)
             user_multiplier = sec.get("user_multiplier", 1.0) if sec else 1.0
 
             wavelet_score = scores_map.get(symbol, 0)
-
-            # Extract features for ML
             hist_rows = hist_prices_map.get(symbol, [])
-            features = await self._extract_features(symbol, hist_rows, sec, today)
-
-            # Apply ML blending if enabled
-            sec_ml_enabled = bool(sec.get("ml_enabled", 0)) if sec else False
-            sec_ml_blend_ratio = float(sec.get("ml_blend_ratio", 0.5)) if sec else 0.5
-
-            ml_result = await self._ml_predictor.predict_and_blend(
-                symbol=symbol,
-                date=today,
-                wavelet_score=wavelet_score,
-                ml_enabled=sec_ml_enabled,
-                ml_blend_ratio=sec_ml_blend_ratio,
-                features=features,
-                skip_cache=as_of_date is not None,
-            )
-
-            base_score = ml_result["final_score"]
+            base_score = wavelet_score
             expected_returns[symbol] = adjust_score_for_conviction(base_score, user_multiplier or 1.0)
 
             # Get price
@@ -233,44 +203,6 @@ class RebalanceEngine:
                 ttl_seconds=300,
             )
         return recommendations
-
-    async def _extract_features(self, symbol: str, hist_rows: list, sec: dict | None, today: str) -> dict | None:
-        """Extract ML features for a security."""
-        if not hist_rows or len(hist_rows) < 200:
-            return None
-
-        feature_cache_key = f"features:{symbol}:{today}"
-        cached = await self._db.cache_get(feature_cache_key)
-        if cached is not None:
-            try:
-                return json.loads(cached)
-            except (json.JSONDecodeError, TypeError):
-                pass
-
-        price_df = pd.DataFrame(
-            [dict(r) for r in hist_rows],
-            columns=["date", "open", "high", "low", "close", "volume"],
-        )
-        price_df = price_df.iloc[::-1].reset_index(drop=True)
-
-        features = await self._feature_extractor.extract_features(
-            symbol=symbol,
-            date=today,
-            price_data=price_df,
-            sentiment_score=None,
-            security_data=sec,
-        )
-
-        if features:
-            native_features = {k: float(v) for k, v in features.items()}
-            await self._db.cache_set(
-                feature_cache_key,
-                json.dumps(native_features),
-                ttl_seconds=86400,
-            )
-            return native_features
-
-        return None
 
     def _get_price(
         self,

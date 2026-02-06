@@ -3,11 +3,11 @@
 from datetime import datetime, timezone
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
-from sentinel.database.ml import MODEL_TYPES
 from sentinel.security import Security
 
 router = APIRouter(prefix="/securities", tags=["securities"])
@@ -232,45 +232,33 @@ async def _get_blended_prediction(
     symbol: str,
     as_of_ts: int | None = None,
 ) -> dict:
-    """Read latest prediction from each per-model table and blend using settings weights.
+    predictions = await _get_blended_predictions(deps, [symbol], as_of_ts=as_of_ts)
+    return predictions.get(symbol, {})
 
-    Returns dict with wavelet_score, ml_score (weighted blend), and per-model scores.
-    """
-    weights = {}
-    for mt in MODEL_TYPES:
-        weights[mt] = await deps.settings.get(f"ml_weight_{mt}", 0.25)
 
-    per_model = {}
-    for mt in MODEL_TYPES:
-        if as_of_ts is not None:
-            row = await deps.ml_db.get_prediction_as_of(mt, symbol, as_of_ts)
-        else:
-            # Get the most recent prediction as of "now"
-            row = await deps.ml_db.get_prediction_as_of(mt, symbol, int(datetime.now().timestamp()))
-        if row:
-            per_model[mt] = row
-
-    if not per_model:
+async def _get_blended_predictions(
+    deps: CommonDependencies,
+    symbols: list[str],
+    as_of_ts: int | None = None,
+) -> dict[str, dict]:
+    """Load blended ML scores for symbols from sentinel-ml service."""
+    if not symbols:
         return {}
 
-    # Weighted blend of predicted_return across available models
-    total_weight = 0.0
-    weighted_return = 0.0
-    for mt, pred in per_model.items():
-        pr = pred.get("predicted_return")
-        if pr is not None:
-            w = weights.get(mt, 0.25)
-            weighted_return += pr * w
-            total_weight += w
+    base_url = str(await deps.db.get_setting("ml_service_base_url", "http://localhost:8001")).rstrip("/")
+    params: dict[str, str | int] = {"symbols": ",".join(symbols)}
+    if as_of_ts is not None:
+        params["as_of_ts"] = as_of_ts
 
-    blended_return = (weighted_return / total_weight) if total_weight > 0 else None
-
-    return {
-        "ml_score": blended_return,
-        "final_score": blended_return,
-        "wavelet_score": None,  # wavelet is separate, not stored in ML prediction tables
-        "per_model": {mt: pred.get("predicted_return") for mt, pred in per_model.items()},
-    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(f"{base_url}/ml/latest-scores", params=params)
+            resp.raise_for_status()
+            payload = resp.json()
+            scores = payload.get("scores", {})
+            return scores if isinstance(scores, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 @unified_router.get("")
@@ -325,19 +313,13 @@ async def get_unified_view(
             d = dict(s)
             d.pop("rn", None)
             scores_map[d["symbol"]] = d
-        # ML predictions as of date — read from per-model tables, blend on the fly
-        ml_preds_map = {}
-        for symbol in all_symbols:
-            ml_preds_map[symbol] = await _get_blended_prediction(deps, symbol, as_of_ts)
+        ml_preds_map = await _get_blended_predictions(deps, all_symbols, as_of_ts=as_of_ts)
     else:
         cursor = await deps.db.conn.execute("SELECT * FROM scores")
         scores = await cursor.fetchall()
         scores_map = {s["symbol"]: dict(s) for s in scores}
 
-        # Latest ML predictions per symbol — blend from per-model tables
-        ml_preds_map = {}
-        for symbol in all_symbols:
-            ml_preds_map[symbol] = await _get_blended_prediction(deps, symbol)
+        ml_preds_map = await _get_blended_predictions(deps, all_symbols)
 
     # Recommendations using settings default for min_trade_value
     recommendations = await planner.get_recommendations()
@@ -442,7 +424,7 @@ async def get_unified_view(
         # Expected return with user conviction adjustment
         user_multiplier = sec.get("user_multiplier", 1.0) or 1.0
         ml_pred = ml_preds_map.get(symbol, {})
-        ml_final_score = ml_pred.get("final_score")
+        ml_final_score = ml_pred.get("final_score", ml_pred.get("ml_score"))
         fallback_score = components.get("expected_return", 0) or 0
         base_expected_return = float(ml_final_score if ml_final_score is not None else fallback_score)
         adjusted_expected_return = adjust_score_for_conviction(base_expected_return, user_multiplier)
@@ -497,7 +479,7 @@ async def get_unified_view(
                 "base_expected_return": base_expected_return,
                 "score_components": components,
                 # ML prediction breakdown
-                "wavelet_score": ml_pred.get("wavelet_score"),
+                "wavelet_score": score_data.get("score"),
                 "ml_score": ml_pred.get("ml_score"),
                 # Price history (simplified for charts, oldest first)
                 "prices": [{"date": p["date"], "close": p["close"]} for p in reversed(prices)],
