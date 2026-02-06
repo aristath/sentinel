@@ -34,7 +34,9 @@ async def main() -> None:
         print("Removed data/ml_models/ contents")
     finally:
         await manager.ml_db.close()
-        await manager.db.close()
+        close_fn = getattr(manager.db, "close", None)
+        if callable(close_fn):
+            await close_fn()  # type: ignore[misc]
     print("Done. Next: generate_ml_training_data.py -> train_initial_ml_models.py -> backfill_ml_predictions.py")
 
 

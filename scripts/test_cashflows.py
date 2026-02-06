@@ -3,6 +3,7 @@
 
 import asyncio
 import json
+from typing import Any, cast
 
 from sentinel.database import Database
 from sentinel.settings import Settings
@@ -38,7 +39,7 @@ async def main():
     print("=" * 60)
 
     # Use raw API request for getUserCashFlows
-    cashflow_response = api.request(
+    cashflow_response = cast(Any, api).request(
         "getUserCashFlows",
         {
             "take": 100,
@@ -54,7 +55,7 @@ async def main():
     print("ALL CASHFLOWS")
     print("=" * 60)
 
-    all_cashflows = api.request(
+    all_cashflows = cast(Any, api).request(
         "getUserCashFlows",
         {
             "take": 20,

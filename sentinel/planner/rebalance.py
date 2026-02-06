@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import math
 from dataclasses import asdict
 from datetime import datetime, timezone
+
+import httpx
 
 from sentinel.analyzer import Analyzer
 from sentinel.broker import Broker
@@ -18,6 +21,8 @@ from sentinel.settings import Settings
 from sentinel.utils.scoring import adjust_score_for_conviction
 
 from .models import TradeRecommendation
+
+logger = logging.getLogger(__name__)
 
 
 class RebalanceEngine:
@@ -105,6 +110,7 @@ class RebalanceEngine:
         all_positions = await self._db.get_all_positions()
         positions_map = {p["symbol"]: p for p in all_positions}
 
+        end_of_day_ts: int | None = None
         # Scores: when as_of_date is set (e.g. backtest), request scores as of that date explicitly.
         if as_of_date is not None:
             end_of_day_ts = int(
@@ -115,6 +121,7 @@ class RebalanceEngine:
             scores_map = await self._db.get_scores(all_symbols, as_of_date=end_of_day_ts)
         else:
             scores_map = await self._db.get_scores(all_symbols)
+        ml_scores_map = await self._get_ml_weighted_scores(all_symbols, as_of_ts=end_of_day_ts)
 
         # Fetch historical prices: single path via get_prices(end_date=as_of_date).
         # When as_of_date is None we get latest 250; when set we get only data on or before that date.
@@ -144,7 +151,7 @@ class RebalanceEngine:
 
             wavelet_score = scores_map.get(symbol, 0)
             hist_rows = hist_prices_map.get(symbol, [])
-            base_score = wavelet_score
+            base_score = ml_scores_map.get(symbol, wavelet_score)
             expected_returns[symbol] = adjust_score_for_conviction(base_score, user_multiplier or 1.0)
 
             # Get price
@@ -683,6 +690,7 @@ class RebalanceEngine:
         securities_map = {s["symbol"]: s for s in all_securities}
 
         all_symbols = [pos["symbol"] for pos in positions]
+        end_of_day_ts: int | None = None
         if as_of_date is not None:
             end_of_day_ts = int(
                 datetime.strptime(as_of_date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
@@ -692,6 +700,7 @@ class RebalanceEngine:
             scores_map = await self._db.get_scores(all_symbols, as_of_date=end_of_day_ts)
         else:
             scores_map = await self._db.get_scores(all_symbols)
+        ml_scores_map = await self._get_ml_weighted_scores(all_symbols, as_of_ts=end_of_day_ts)
 
         position_data = []
         for pos in positions:
@@ -723,7 +732,7 @@ class RebalanceEngine:
 
             currency = sec.get("currency", "EUR")
             lot_size = sec.get("min_lot", 1)
-            score = scores_map.get(symbol, 0)
+            score = ml_scores_map.get(symbol, scores_map.get(symbol, 0))
 
             local_value = qty * price
             eur_value = await self._currency.to_eur(local_value, currency)
@@ -797,3 +806,43 @@ class RebalanceEngine:
             remaining_deficit -= sell_value_eur
 
         return sells
+
+    async def _get_ml_weighted_scores(self, symbols: list[str], as_of_ts: int | None = None) -> dict[str, float]:
+        """Fetch blended ML scores from sentinel-ml for planner prioritization.
+
+        Falls back to empty map on connectivity issues so planner still works with
+        wavelet-only scoring.
+        """
+        if not symbols:
+            return {}
+
+        try:
+            base_url_setting = self._settings.get("ml_service_base_url", "http://localhost:8001")
+            if asyncio.iscoroutine(base_url_setting):
+                base_url_setting = await base_url_setting
+            base_url = str(base_url_setting or "http://localhost:8001").rstrip("/")
+
+            params: dict[str, str | int] = {"symbols": ",".join(symbols)}
+            if as_of_ts is not None:
+                params["as_of_ts"] = as_of_ts
+
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(f"{base_url}/ml/latest-scores", params=params)
+                response.raise_for_status()
+                payload = response.json()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Planner ML score fetch failed: %s", exc)
+            return {}
+
+        scores = payload.get("scores", {})
+        if not isinstance(scores, dict):
+            return {}
+
+        result: dict[str, float] = {}
+        for symbol, score_payload in scores.items():
+            if not isinstance(score_payload, dict):
+                continue
+            value = score_payload.get("final_score", score_payload.get("ml_score"))
+            if isinstance(value, int | float):
+                result[symbol] = float(value)
+        return result

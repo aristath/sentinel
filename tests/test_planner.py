@@ -215,3 +215,87 @@ class TestDeficitSellsSimulatedCash:
 
         # Portfolio returns positive cash, so no deficit sells needed
         assert sells == []
+
+
+class TestPlannerMlScoringIntegration:
+    """Tests that planner prioritization uses sentinel-ml blended scores."""
+
+    @pytest.mark.asyncio
+    async def test_get_recommendations_uses_ml_weighted_score_when_available(self):
+        db = MagicMock()
+        db.get_all_securities = AsyncMock(
+            return_value=[
+                {
+                    "symbol": "AAA",
+                    "currency": "EUR",
+                    "min_lot": 1,
+                    "allow_buy": 1,
+                    "allow_sell": 1,
+                    "user_multiplier": 1.0,
+                }
+            ]
+        )
+        db.get_all_positions = AsyncMock(return_value=[])
+        db.get_scores = AsyncMock(return_value={"AAA": 0.2})
+        db.get_prices = AsyncMock(return_value=[])
+
+        engine = RebalanceEngine(db=db)
+        engine._broker = MagicMock()
+        engine._broker.get_quotes = AsyncMock(return_value={})
+        engine._db = db
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(return_value=100.0)
+        engine._get_ml_weighted_scores = AsyncMock(return_value={"AAA": 0.9})
+        engine._get_deficit_sells = AsyncMock(return_value=[])
+        engine._apply_cash_constraint = AsyncMock(side_effect=lambda recs, _: recs)
+        engine._build_recommendation = AsyncMock(return_value=None)
+
+        await engine.get_recommendations(
+            ideal={"AAA": 0.1},
+            current={"AAA": 0.0},
+            total_value=10000.0,
+            as_of_date="2025-01-15",
+        )
+
+        expected_returns = engine._build_recommendation.call_args[0][5]
+        assert expected_returns["AAA"] == pytest.approx(0.9)
+
+    @pytest.mark.asyncio
+    async def test_get_recommendations_falls_back_to_wavelet_when_ml_unavailable(self):
+        db = MagicMock()
+        db.get_all_securities = AsyncMock(
+            return_value=[
+                {
+                    "symbol": "AAA",
+                    "currency": "EUR",
+                    "min_lot": 1,
+                    "allow_buy": 1,
+                    "allow_sell": 1,
+                    "user_multiplier": 1.0,
+                }
+            ]
+        )
+        db.get_all_positions = AsyncMock(return_value=[])
+        db.get_scores = AsyncMock(return_value={"AAA": 0.2})
+        db.get_prices = AsyncMock(return_value=[])
+
+        engine = RebalanceEngine(db=db)
+        engine._broker = MagicMock()
+        engine._broker.get_quotes = AsyncMock(return_value={})
+        engine._db = db
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(return_value=100.0)
+        engine._get_ml_weighted_scores = AsyncMock(return_value={})
+        engine._get_deficit_sells = AsyncMock(return_value=[])
+        engine._apply_cash_constraint = AsyncMock(side_effect=lambda recs, _: recs)
+        engine._build_recommendation = AsyncMock(return_value=None)
+
+        await engine.get_recommendations(
+            ideal={"AAA": 0.1},
+            current={"AAA": 0.0},
+            total_value=10000.0,
+            as_of_date="2025-01-15",
+        )
+
+        expected_returns = engine._build_recommendation.call_args[0][5]
+        assert expected_returns["AAA"] == pytest.approx(0.2)

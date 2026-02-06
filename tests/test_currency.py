@@ -196,7 +196,7 @@ class TestCurrencyExchangeServiceGetRate:
         service = CurrencyExchangeService()
 
         # Mock get_cross_rate to raise an exception
-        async def mock_get_cross_rate(from_curr, to_curr):
+        async def mock_get_cross_rate(from_currency, to_currency):
             raise Exception("Database error")
 
         service._currency.get_cross_rate = mock_get_cross_rate

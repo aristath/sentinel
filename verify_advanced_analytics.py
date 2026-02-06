@@ -41,7 +41,8 @@ async def verify_setup():
 
         for table in tables:
             cursor = await db.execute(f"SELECT COUNT(*) FROM {table}")  # noqa: S608
-            count = (await cursor.fetchone())[0]
+            row = await cursor.fetchone()
+            count = row[0] if row is not None else 0
             print(f"   ✓ {table}: {count} records")
             if count == 0 and table == "regime_models":
                 all_good = False

@@ -11,8 +11,8 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import ta
 from hmmlearn import hmm
+from ta.momentum import RSIIndicator
 
 from sentinel_ml.adapters import MonolithDBAdapter
 from sentinel_ml.clients.monolith_client import MonolithDataClient
@@ -67,8 +67,8 @@ class RegimeDetector:
                 for i in range(len(returns))
             ]
         )
-        rsi_indicator = ta.momentum.RSIIndicator(close=pd.Series(closes), window=14)
-        rsi = rsi_indicator.rsi().fillna(50).values
+        rsi_indicator = RSIIndicator(close=pd.Series(closes), window=14)
+        rsi = np.asarray(rsi_indicator.rsi().fillna(50).values, dtype=np.float64)
         rsi = rsi[1:]
         return np.column_stack([returns, vol, rsi])
 

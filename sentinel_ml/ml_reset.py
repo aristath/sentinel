@@ -8,7 +8,7 @@ then regenerating everything from scratch.
 import logging
 import shutil
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from sentinel_ml.adapters import MonolithDBAdapter, MonolithSettingsAdapter
 from sentinel_ml.clients.monolith_client import MonolithDataClient
@@ -16,6 +16,14 @@ from sentinel_ml.database.ml import MLDatabase
 from sentinel_ml.paths import DATA_DIR
 
 logger = logging.getLogger(__name__)
+
+
+def _as_int(value: Any, default: int) -> int:
+    try:
+        return int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
+
 
 # Global state for tracking active reset operation
 _active_reset: Optional["MLResetManager"] = None
@@ -178,8 +186,8 @@ class MLResetManager:
 
         generator = TrainingDataGenerator(db=self.db, ml_db=self.ml_db)
 
-        horizon_days = await self._settings.get("ml_prediction_horizon_days", 14)
-        lookback_years = await self._settings.get("ml_training_lookback_years", 8)
+        horizon_days = _as_int(await self._settings.get("ml_prediction_horizon_days", 14), 14)
+        lookback_years = _as_int(await self._settings.get("ml_training_lookback_years", 8), 8)
 
         current_year = datetime.now().year
         df = await generator.generate_training_data(

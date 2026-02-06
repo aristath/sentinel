@@ -7,7 +7,7 @@ import json
 import logging
 import pickle
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Protocol
 
 import numpy as np
 import xgboost as xgb
@@ -21,6 +21,13 @@ from sentinel_ml.database.ml import MODEL_TYPES
 from sentinel_ml.ml_features import FEATURE_NAMES, NUM_FEATURES
 
 logger = logging.getLogger(__name__)
+
+
+class _PredictorProtocol(Protocol):
+    def train(self, X_train: np.ndarray, y_train: np.ndarray, X_val: np.ndarray, y_val: np.ndarray) -> Dict: ...
+    def predict(self, X: np.ndarray) -> np.ndarray: ...
+    def save(self, path: Path) -> None: ...
+    def load(self, path: Path) -> None: ...
 
 
 def _compute_regression_metrics(predictions: np.ndarray, labels: np.ndarray) -> tuple[float, float, float]:
@@ -272,7 +279,7 @@ class EnsembleBlender:
     """Blend XGBoost, Ridge, RF, and SVR predictions."""
 
     def __init__(self):
-        self.predictors: Dict[str, object] = {mt: _PREDICTOR_MAP[mt]() for mt in MODEL_TYPES}
+        self.predictors: Dict[str, _PredictorProtocol] = {mt: _PREDICTOR_MAP[mt]() for mt in MODEL_TYPES}
 
     def train(self, X: np.ndarray, y: np.ndarray, validation_split: float = 0.2) -> Dict:
         """Train all 4 models on the same train/val split."""

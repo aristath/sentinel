@@ -303,6 +303,7 @@ class TestMarketData:
 
         security = Security("AAPL.US", broker=broker)
         quote = await security.get_quote()
+        assert quote is not None
 
         assert quote["price"] == 180.00
         assert quote["bid"] == 179.90
@@ -945,6 +946,7 @@ class TestQuoteDataParsing:
         security._data = {"quote_data": json.dumps({"bid": 99.50, "ask": 100.50, "ltp": 100.00})}
 
         quote = security._get_quote_data()
+        assert quote is not None
         assert quote["bid"] == 99.50
         assert quote["ask"] == 100.50
 

@@ -24,7 +24,7 @@ import tempfile
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, cast
 
 import numpy as np
 
@@ -759,7 +759,11 @@ class Backtester:
 
         # Create Portfolio and Planner using simulation database/broker
         portfolio = Portfolio(db=self._sim_db, broker=self._sim_broker)
-        planner = Planner(db=self._sim_db, broker=self._sim_broker, portfolio=portfolio)
+        planner = Planner(
+            db=cast(Database, self._sim_db),
+            broker=cast(Broker, self._sim_broker),
+            portfolio=portfolio,
+        )
 
         # Get recommendations using the ACTUAL Planner logic (as_of_date = simulation date)
         recommendations = await planner.get_recommendations(as_of_date=self._simulation_date)

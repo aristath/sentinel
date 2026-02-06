@@ -2,12 +2,14 @@
 
 import os
 import tempfile
+from typing import cast
 from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
 
 from sentinel.database import Database
+from sentinel_ml.clients.monolith_client import MonolithDataClient
 from sentinel_ml.database.ml import MODEL_TYPES, MLDatabase
 from sentinel_ml.ml_reset import (
     TOTAL_STEPS,
@@ -75,7 +77,7 @@ async def ml_db():
 @pytest.fixture
 def manager(db, ml_db):
     """Create MLResetManager with test databases."""
-    return MLResetManager(db=db, ml_db=ml_db, monolith_client=FakeMonolithClient(db))
+    return MLResetManager(db=db, ml_db=ml_db, monolith_client=cast(MonolithDataClient, FakeMonolithClient(db)))
 
 
 @pytest.mark.asyncio

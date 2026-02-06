@@ -100,6 +100,7 @@ async def test_detect_regime_as_of_returns_dict():
     detector._model.predict_proba = MagicMock(return_value=np.tile([0.2, 0.7, 0.1], (n_rows, 1)))
 
     result = await detector.detect_regime_as_of("SYM", "2025-01-20")
+    assert result is not None
     assert "regime" in result
     assert "regime_name" in result
     assert "confidence" in result

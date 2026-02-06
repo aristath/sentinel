@@ -66,6 +66,7 @@ DEFAULTS = {
     "ml_weight_ridge": 0.25,
     "ml_weight_rf": 0.25,
     "ml_weight_svr": 0.25,
+    "ml_weight_wavelet": 0.25,
     "ml_prediction_horizon_days": 21,  # Predict 21 days ahead (~1 month)
     "ml_training_lookback_years": 8,
     "ml_validation_split": 0.2,

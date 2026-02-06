@@ -440,7 +440,7 @@ class TestTradeBlocking:
     def test_high_anomaly_blocks_trade(self):
         """Price >10x average blocks trading."""
         current = 1100  # 11x average of 100
-        history = [100] * 30
+        history = [100.0] * 30
         allow, reason = check_trade_blocking(current, history)
         assert allow is False
         assert "high price anomaly" in reason
@@ -448,7 +448,7 @@ class TestTradeBlocking:
     def test_low_anomaly_allows_trade(self):
         """Price <0.1x average still allows trading (might be opportunity)."""
         current = 5  # 0.05x average of 100
-        history = [100] * 30
+        history = [100.0] * 30
         allow, reason = check_trade_blocking(current, history)
         # Low anomaly allows trades per the design (might be genuine crash)
         assert allow is True
@@ -456,7 +456,7 @@ class TestTradeBlocking:
     def test_insufficient_history_allows_trade(self):
         """Less than 30 days of history allows trading."""
         current = 1000
-        history = [100] * 20  # Only 20 days
+        history = [100.0] * 20  # Only 20 days
         allow, reason = check_trade_blocking(current, history)
         assert allow is True
 

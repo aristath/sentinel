@@ -6,6 +6,7 @@ These tests verify the intended behavior of utility functions:
 3. Position value calculations
 """
 
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
@@ -215,7 +216,7 @@ class TestAdjustScoreForConviction:
     def test_none_multiplier_treated_as_neutral(self):
         """None multiplier should be treated as 1.0 (neutral)."""
         base = 0.05
-        result = adjust_score_for_conviction(base, None)
+        result = adjust_score_for_conviction(base, cast(float, None))
         assert result == base
 
     def test_negative_base_score(self):

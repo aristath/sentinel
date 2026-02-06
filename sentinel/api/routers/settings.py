@@ -2,13 +2,14 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.led import LEDController
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+WEIGHT_KEYS = {"ml_weight_wavelet", "ml_weight_xgboost", "ml_weight_ridge", "ml_weight_rf", "ml_weight_svr"}
 
 # Global LED controller reference (set by app lifespan)
 _led_controller: LEDController | None = None
@@ -36,6 +37,42 @@ async def set_setting(
 ) -> dict[str, str]:
     """Set a setting value."""
     await deps.settings.set(key, value.get("value"))
+    return {"status": "ok"}
+
+
+@router.put("")
+async def set_settings_batch(
+    payload: dict,
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict[str, str]:
+    """Set multiple settings atomically.
+
+    For this endpoint, payload must contain all ML weight keys so validation can
+    enforce domain/range constraints and prevent partial inconsistent updates.
+    """
+    values = payload.get("values")
+    if not isinstance(values, dict):
+        raise HTTPException(status_code=400, detail="Payload must include object field 'values'")
+
+    keys = set(values.keys())
+    if keys != WEIGHT_KEYS:
+        raise HTTPException(status_code=400, detail=f"Batch update requires exactly these keys: {sorted(WEIGHT_KEYS)}")
+
+    parsed_weights: dict[str, float] = {}
+    for key in WEIGHT_KEYS:
+        raw = values.get(key)
+        if isinstance(raw, bool) or not isinstance(raw, int | float):
+            raise HTTPException(status_code=400, detail=f"Setting '{key}' must be a number")
+        value = float(raw)
+        if value < 0.0 or value > 1.0:
+            raise HTTPException(status_code=400, detail=f"Setting '{key}' must be in [0, 1]")
+        parsed_weights[key] = value
+
+    if sum(parsed_weights.values()) <= 0.0:
+        raise HTTPException(status_code=400, detail="At least one weight must be greater than zero")
+
+    await deps.db.set_settings_batch({key: parsed_weights[key] for key in sorted(WEIGHT_KEYS)})
+
     return {"status": "ok"}
 
 

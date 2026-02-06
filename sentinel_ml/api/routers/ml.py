@@ -5,6 +5,7 @@ import bisect
 import json
 import logging
 from datetime import datetime
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -17,10 +18,19 @@ from sentinel_ml.ml_monitor import MLMonitor
 from sentinel_ml.ml_reset import MLResetManager, get_reset_status, is_reset_in_progress, set_active_reset
 from sentinel_ml.ml_retrainer import MLRetrainer
 from sentinel_ml.ml_trainer import TrainingDataGenerator
+from sentinel_ml.utils.weights import compute_weighted_blend
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/ml", tags=["ml"])
 _OVERLAY_CACHE: dict[str, object] = {"key": None, "value": None}
+
+
+def _as_int(value: Any, default: int) -> int:
+    """Convert dynamic setting values to int with a safe default."""
+    try:
+        return int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
 
 
 @router.get("/status")
@@ -159,15 +169,16 @@ async def get_latest_scores(
     if not symbol_list:
         return {"scores": {}}
 
-    settings = await deps.monolith.get_settings([f"ml_weight_{mt}" for mt in MODEL_TYPES])
+    settings = await deps.monolith.get_settings([f"ml_weight_{mt}" for mt in MODEL_TYPES] + ["ml_weight_wavelet"])
     weights = {mt: float(settings.get(f"ml_weight_{mt}", 0.25) or 0.25) for mt in MODEL_TYPES}
+    weights["wavelet"] = float(settings.get("ml_weight_wavelet", 0.25) or 0.25)
+    wavelet_scores = await deps.monolith.get_scores(symbol_list, as_of_ts=as_of_ts)
 
     scores: dict[str, dict] = {}
     for symbol in symbol_list:
-        weighted_score = 0.0
-        weighted_return = 0.0
-        total_weight = 0.0
         per_model: dict[str, dict] = {}
+        score_components: dict[str, float | None] = {"wavelet": wavelet_scores.get(symbol)}
+        return_components: dict[str, float | None] = {"wavelet": wavelet_scores.get(symbol)}
 
         for mt in MODEL_TYPES:
             if as_of_ts is not None:
@@ -182,21 +193,20 @@ async def get_latest_scores(
             if ml_score is None or predicted_return is None:
                 continue
 
-            weight = weights.get(mt, 0.25)
-            weighted_score += float(ml_score) * weight
-            weighted_return += float(predicted_return) * weight
-            total_weight += weight
+            score_components[mt] = float(ml_score)
+            return_components[mt] = float(predicted_return)
             per_model[mt] = {
                 "ml_score": float(ml_score),
                 "predicted_return": float(predicted_return),
                 "predicted_at": int(row.get("predicted_at") or 0),
             }
 
-        if total_weight > 0:
-            blended_score = weighted_score / total_weight
+        blended_score = compute_weighted_blend(score_components, weights)
+        blended_return = compute_weighted_blend(return_components, weights)
+        if blended_score is not None and blended_return is not None:
             scores[symbol] = {
                 "ml_score": blended_score,
-                "predicted_return": weighted_return / total_weight,
+                "predicted_return": blended_return,
                 "final_score": blended_score,
                 "per_model": per_model,
             }
@@ -223,8 +233,8 @@ async def train_symbol_stream(
 
             yield _sse({"step": 2, "total": 5, "message": "Generating training samples...", "progress": 20})
             trainer = TrainingDataGenerator(ml_db=deps.ml_db)
-            horizon_days = await settings.get("ml_prediction_horizon_days", 14)
-            lookback_years = await settings.get("ml_training_lookback_years", 8)
+            horizon_days = _as_int(await settings.get("ml_prediction_horizon_days", 14), 14)
+            lookback_years = _as_int(await settings.get("ml_training_lookback_years", 8), 8)
             samples_df = await trainer.generate_training_data_for_symbol(
                 symbol,
                 lookback_years=lookback_years,
@@ -234,7 +244,7 @@ async def train_symbol_stream(
             yield _sse({"step": 2, "total": 5, "message": f"Generated {sample_count} samples", "progress": 40})
 
             yield _sse({"step": 3, "total": 5, "message": "Checking data sufficiency...", "progress": 50})
-            min_samples = await settings.get("ml_min_samples_per_symbol", 100)
+            min_samples = _as_int(await settings.get("ml_min_samples_per_symbol", 100), 100)
             if sample_count < min_samples:
                 err_msg = f"Insufficient samples: {sample_count} < {min_samples} required"
                 yield _sse({"error": err_msg})
@@ -345,7 +355,7 @@ async def get_portfolio_overlays(deps: Annotated[CommonDependencies, Depends(get
     for mt in MODEL_TYPES:
         cursor = await deps.ml_db.conn.execute(f"SELECT MAX(predicted_at) AS max_ts FROM ml_predictions_{mt}")  # noqa: S608
         row = await cursor.fetchone()
-        max_pred_ts = max(max_pred_ts, int(row["max_ts"] or 0))
+        max_pred_ts = max(max_pred_ts, int((row["max_ts"] if row is not None else 0) or 0))
     cache_key = f"{last_date}:{len(points)}:{max_pred_ts}"
     if _OVERLAY_CACHE.get("key") == cache_key and isinstance(_OVERLAY_CACHE.get("value"), dict):
         return _OVERLAY_CACHE["value"]  # type: ignore[return-value]

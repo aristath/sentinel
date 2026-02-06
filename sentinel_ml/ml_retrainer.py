@@ -1,7 +1,7 @@
 """ML model retraining pipeline - per-symbol, 4 model types."""
 
 import logging
-from typing import Dict, Optional
+from typing import Any, Dict, Optional
 
 import numpy as np
 
@@ -12,6 +12,13 @@ from sentinel_ml.ml_ensemble import EnsembleBlender
 from sentinel_ml.ml_trainer import TrainingDataGenerator
 
 logger = logging.getLogger(__name__)
+
+
+def _as_int(value: Any, default: int) -> int:
+    try:
+        return int(value) if value is not None else default
+    except (TypeError, ValueError):
+        return default
 
 
 class MLRetrainer:
@@ -59,7 +66,7 @@ class MLRetrainer:
         logger.info(f"      Generated {new_samples} new samples")
 
         logger.info("[2/4] Finding symbols with sufficient training data...")
-        min_samples = await self.settings.get("ml_min_samples_per_symbol", 100)
+        min_samples = _as_int(await self.settings.get("ml_min_samples_per_symbol", 100), 100)
         symbols_with_data = await self.ml_db.get_symbols_with_sufficient_data(min_samples)
         logger.info(f"      Found {len(symbols_with_data)} symbols with >= {min_samples} samples")
 
@@ -109,7 +116,7 @@ class MLRetrainer:
         await self.db.connect()
         await self.ml_db.connect()
 
-        min_samples = await self.settings.get("ml_min_samples_per_symbol", 100)
+        min_samples = _as_int(await self.settings.get("ml_min_samples_per_symbol", 100), 100)
         sample_count = await self.ml_db.get_sample_count(symbol)
 
         if sample_count < min_samples:
@@ -162,9 +169,9 @@ class MLRetrainer:
 
     async def _generate_new_samples(self) -> int:
         """Generate training samples from recent data."""
-        horizon_days = await self.settings.get("ml_prediction_horizon_days", 14)
-        lookback_years = await self.settings.get("ml_training_lookback_years", 8)
-        feature_lookback_days = await self.settings.get("ml_training_feature_lookback_days", 365)
+        horizon_days = _as_int(await self.settings.get("ml_prediction_horizon_days", 14), 14)
+        lookback_years = _as_int(await self.settings.get("ml_training_lookback_years", 8), 8)
+        feature_lookback_days = _as_int(await self.settings.get("ml_training_feature_lookback_days", 365), 365)
 
         df = await self.trainer.generate_incremental_samples(
             lookback_days=feature_lookback_days,

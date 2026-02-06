@@ -15,6 +15,7 @@ import logging
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any, cast
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -54,8 +55,8 @@ async def main() -> None:
         logger.info("Symbols: %d", len(symbols))
 
         detector = RegimeDetector(lookback_days=LOOKBACK_DAYS)
-        detector._db = db
-        detector._ml_db = ml_db
+        cast(Any, detector)._db = db
+        cast(Any, detector)._ml_db = ml_db
 
         current = datetime.strptime(min_date, "%Y-%m-%d").date()
         end = datetime.strptime(max_date, "%Y-%m-%d").date()

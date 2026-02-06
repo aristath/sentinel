@@ -1,3 +1,4 @@
+# pyright: reportMissingImports=false
 """
 Sentinel LED App - Trade recommendations display for Arduino UNO Q.
 

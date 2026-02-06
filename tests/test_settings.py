@@ -86,6 +86,7 @@ class TestSettingsDefaults:
             "ml_weight_ridge",
             "ml_weight_rf",
             "ml_weight_svr",
+            "ml_weight_wavelet",
             "ml_prediction_horizon_days",
             "ml_training_lookback_years",
             "ml_service_base_url",

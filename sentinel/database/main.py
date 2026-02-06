@@ -99,6 +99,18 @@ class Database(BaseDatabase):
         await self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json_value))
         await self.conn.commit()
 
+    async def set_settings_batch(self, values: dict[str, Any]) -> None:
+        """Set multiple settings atomically in one transaction."""
+        await self.conn.execute("BEGIN")
+        try:
+            for key, value in values.items():
+                json_value = json.dumps(value) if not isinstance(value, str) else value
+                await self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json_value))
+            await self.conn.commit()
+        except Exception:
+            await self.conn.execute("ROLLBACK")
+            raise
+
     async def get_all_settings(self) -> dict:
         """Get all settings as a dictionary."""
         cursor = await self.conn.execute("SELECT key, value FROM settings")
@@ -864,8 +876,8 @@ class Database(BaseDatabase):
             "SELECT COUNT(*) as total, COUNT(DISTINCT broker_trade_id) as unique_ids FROM trades"
         )
         counts = await cursor.fetchone()
-        total = counts[0] or 0
-        unique = counts[1] or 0
+        total = counts[0] if counts is not None else 0
+        unique = counts[1] if counts is not None else 0
         logger.info(f"  Before: {total} rows, {unique} unique broker_trade_ids ({total - unique} duplicates)")
 
         # Rebuild table with UNIQUE constraint, keeping only one row per broker_trade_id
@@ -911,7 +923,8 @@ class Database(BaseDatabase):
 
         # Verify
         cursor = await self.conn.execute("SELECT COUNT(*) FROM trades")
-        new_count = (await cursor.fetchone())[0]
+        row = await cursor.fetchone()
+        new_count = row[0] if row is not None else 0
         logger.info(f"  After: {new_count} rows (removed {total - new_count} duplicates)")
         logger.info("  trades table UNIQUE constraint migration complete")
 
