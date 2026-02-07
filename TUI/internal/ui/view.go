@@ -185,7 +185,7 @@ func (m Model) viewActions() string {
 	var rows []string
 	for _, rec := range m.recommendations {
 		action := strings.ToUpper(rec.Action)
-		cost := rec.Price * float64(rec.Quantity)
+		cost := rec.Price * rec.Quantity
 
 		sign := "+"
 		c := t.Success
@@ -269,7 +269,7 @@ func (m Model) viewCards() string {
 
 		// Score bars with labels
 		barWidth := w - 4
-		expLabel := lipgloss.NewStyle().Foreground(t.Accent).Render("EXP ")
+		expLabel := lipgloss.NewStyle().Foreground(t.Accent).Render("SCORE ")
 		expBar := expLabel + renderScoreBar(sec.ExpectedReturn, barWidth, t.Accent, t.Muted)
 
 		var cardLines []string

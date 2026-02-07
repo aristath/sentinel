@@ -63,7 +63,7 @@ type PnLSummary struct {
 type Recommendation struct {
 	Symbol   string  `json:"symbol"`
 	Action   string  `json:"action"`
-	Quantity int     `json:"quantity"`
+	Quantity float64 `json:"quantity"`
 	Price    float64 `json:"price"`
 	Reason   string  `json:"reason"`
 }
@@ -79,18 +79,15 @@ type Security struct {
 	ValueEUR          float64      `json:"value_eur"`
 	ProfitPct         float64      `json:"profit_pct"`
 	HasPosition       bool         `json:"has_position"`
-	PlannerScore      float64      `json:"planner_score"`
 	Quantity          float64      `json:"quantity"`
 	AvgCost           float64      `json:"avg_cost"`
 	CurrentPrice      float64      `json:"current_price"`
 	ProfitValueEUR    float64      `json:"profit_value_eur"`
 	CurrentAllocation float64      `json:"current_allocation"`
-	TargetAllocation  float64      `json:"target_allocation"`
-	Score             float64      `json:"score"`
-	ExpectedReturn    float64      `json:"expected_return"`
 	Geography         string       `json:"geography"`
 	Industry          string       `json:"industry"`
 	Currency          string       `json:"currency"`
+	ExpectedReturn    float64      `json:"contrarian_score"`
 	Prices            []PricePoint `json:"prices"`
 }
 
