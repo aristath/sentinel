@@ -528,9 +528,14 @@ class Backtester:
         """Run backtest using the ACTUAL Planner."""
         self._cancelled = False
         builder = None
+        real_db = None
+        opened_real_db_here = False
 
         try:
             real_db = Database()
+            if getattr(real_db, "_connection", None) is None:
+                await real_db.connect()
+                opened_real_db_here = True
 
             # Phase 1-3: Build temporary database with required securities
             builder = BacktestDatabaseBuilder(self.config, real_db)
@@ -685,6 +690,8 @@ class Backtester:
             self._currency = None
             if builder:
                 await builder.cleanup()
+            if real_db is not None and opened_real_db_here:
+                await real_db.close()
 
     def _should_rebalance(self, current_date: date, last: Optional[date], freq: str) -> bool:
         if last is None:
@@ -703,19 +710,23 @@ class Backtester:
         Uses trades table in simulation database with new schema.
         """
         assert self._sim_db is not None, "Simulation database not initialized"
-        # Use get_trades from the database which works with new schema
-        trades = await self._sim_db.get_trades(symbol=symbol, limit=1)
-
-        if not trades:
-            return False  # No trade history
-
-        last_trade = trades[0]
-        last_action = last_trade["side"]
-        executed_at = last_trade["executed_at"]
-        if isinstance(executed_at, int):
-            last_date = datetime.fromtimestamp(executed_at).date()
+        tracked = security_tracking.get(symbol) or {}
+        last_action = tracked.get("last_action")
+        last_date_raw = tracked.get("last_date")
+        if last_action and last_date_raw:
+            last_date = datetime.strptime(str(last_date_raw), "%Y-%m-%d").date()
         else:
-            last_date = datetime.fromisoformat(str(executed_at)[:10]).date()
+            # Fallback for symbols not yet seen in tracking.
+            trades = await self._sim_db.get_trades(symbol=symbol, limit=1)
+            if not trades:
+                return False  # No trade history
+            last_trade = trades[0]
+            last_action = last_trade["side"]
+            executed_at = last_trade["executed_at"]
+            if isinstance(executed_at, int):
+                last_date = datetime.fromtimestamp(executed_at).date()
+            else:
+                last_date = datetime.fromisoformat(str(executed_at)[:10]).date()
         current_date = datetime.strptime(self._simulation_date, "%Y-%m-%d").date()
         days_since = (current_date - last_date).days
 
@@ -766,18 +777,19 @@ class Backtester:
         cooloff_days = int(cooloff_setting["value"]) if cooloff_setting else 30
 
         # Execute each recommendation
-        for rec in recommendations:
-            if rec.action == "buy" and rec.sleeve == "opportunity":
-                opportunity_buy_count += 1
-                if rec.memory_entry:
-                    memory_entry_count += 1
-            # Check cool-off period
-            if await self._is_in_cooloff(rec.symbol, rec.action, security_tracking, cooloff_days):
-                continue  # Skip this trade
+        async with self._sim_db.deferred_writes():
+            for rec in recommendations:
+                if rec.action == "buy" and rec.sleeve == "opportunity":
+                    opportunity_buy_count += 1
+                    if rec.memory_entry:
+                        memory_entry_count += 1
+                # Check cool-off period
+                if await self._is_in_cooloff(rec.symbol, rec.action, security_tracking, cooloff_days):
+                    continue  # Skip this trade
 
-            trade = await self._execute_trade(rec, security_tracking, self._currency)
-            if trade:
-                trades.append(trade)
+                trade = await self._execute_trade(rec, security_tracking, self._currency)
+                if trade:
+                    trades.append(trade)
 
         return trades, memory_entry_count, opportunity_buy_count
 
@@ -805,6 +817,8 @@ class Backtester:
                 "total_sold": 0,
                 "num_buys": 0,
                 "num_sells": 0,
+                "last_action": None,
+                "last_date": None,
             }
 
         cost_local = quantity * price
@@ -881,6 +895,8 @@ class Backtester:
                 "simulated": True,
             },
         )
+        tracking[symbol]["last_action"] = action.upper()
+        tracking[symbol]["last_date"] = self._simulation_date
 
         return SimulatedTrade(
             date=self._simulation_date,
