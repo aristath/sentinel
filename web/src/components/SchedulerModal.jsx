@@ -98,7 +98,7 @@ function JobScheduleRow({ job, onUpdate, onRun, isUpdating }) {
 }
 
 function JobScheduleList({ schedules, onUpdate, onRun, isUpdating }) {
-  const categories = ['sync', 'scoring', 'analytics', 'trading', 'ml', 'backup'];
+  const categories = [...new Set(schedules.map((s) => s.category).filter(Boolean))];
 
   return (
     <Stack gap="lg">

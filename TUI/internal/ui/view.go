@@ -83,26 +83,53 @@ func (m *Model) rebuildContent() {
 
 	hero := pad.Render(m.viewHero())
 	actions := pad.Render(m.viewActions())
-	cards := pad.Render(m.viewCards())
+	cards, cardPauses := m.viewCardsSection()
+	cards = pad.Render(cards)
 
 	sep := pad.Render(lipgloss.NewStyle().Foreground(t.Primary).Render(
-		strings.Repeat("/", w)))
+		strings.Repeat("·", w)))
 
-	oneBlock := strings.Join([]string{
-		strings.Repeat("\n", m.height),
-		hero,
-		"", "",
-		sep,
-		"", "",
-		actions,
-		"", "",
-		sep,
-		"", "",
-		cards,
-	}, "\n")
+	parts := make([]string, 0, 20)
+	pauses := make([]int, 0, 8)
+	currentLine := 0
+	addPart := func(s string) int {
+		start := currentLine
+		if len(parts) > 0 {
+			currentLine++
+		}
+		parts = append(parts, s)
+		currentLine += lineCount(s)
+		return start
+	}
+
+	addPart(strings.Repeat("\n", m.height))
+	heroStart := addPart(hero)
+	pauses = append(pauses, heroStart)
+	addPart("")
+	addPart("")
+	addPart(sep)
+	addPart("")
+	addPart("")
+	actionsStart := addPart(actions)
+	pauses = append(pauses, actionsStart)
+
+	if cards != "" {
+		addPart("")
+		addPart("")
+		addPart(sep)
+		addPart("")
+		addPart("")
+		cardsStart := addPart(cards)
+		for _, p := range cardPauses {
+			pauses = append(pauses, cardsStart+p)
+		}
+	}
+
+	oneBlock := strings.Join(parts, "\n")
 
 	oneBlock = strings.TrimRight(oneBlock, "\n")
 	m.contentLines = strings.Count(oneBlock, "\n") + 1
+	m.scrollPauses = dedupeSortedInts(pauses)
 	m.viewport.SetContent(oneBlock + "\n" + oneBlock)
 }
 
@@ -214,7 +241,7 @@ func (m Model) viewActions() string {
 	return strings.Join(lines, "\n")
 }
 
-func (m Model) viewCards() string {
+func (m Model) viewCardsSection() (string, []int) {
 	t := theme.Default
 	w := m.contentWidth()
 
@@ -225,13 +252,27 @@ func (m Model) viewCards() string {
 		}
 	}
 	if len(positions) == 0 {
-		return ""
+		return "", nil
 	}
 
 	title := lipgloss.NewStyle().Foreground(t.Primary).
 		Render(bigtext.Render("HOLDINGS"))
 
-	lines := []string{title, ""}
+	parts := make([]string, 0, len(positions)*4+4)
+	pauses := make([]int, 0, len(positions))
+	currentLine := 0
+	addPart := func(s string) int {
+		start := currentLine
+		if len(parts) > 0 {
+			currentLine++
+		}
+		parts = append(parts, s)
+		currentLine += lineCount(s)
+		return start
+	}
+
+	addPart(title)
+	addPart("")
 
 	for i, sec := range positions {
 		symColor := t.Success
@@ -269,11 +310,7 @@ func (m Model) viewCards() string {
 
 		// Score bars with labels
 		barWidth := w - 4
-		wavLabel := lipgloss.NewStyle().Foreground(t.Info).Render("WAV ")
-		mlLabel := lipgloss.NewStyle().Foreground(t.Warning).Render("ML  ")
 		expLabel := lipgloss.NewStyle().Foreground(t.Accent).Render("EXP ")
-		wavBar := wavLabel + renderScoreBar(sec.WaveletScore, barWidth, t.Info, t.Muted)
-		mlBar := mlLabel + renderScoreBar(sec.MlScore, barWidth, t.Warning, t.Muted)
 		expBar := expLabel + renderScoreBar(sec.ExpectedReturn, barWidth, t.Accent, t.Muted)
 
 		var cardLines []string
@@ -281,17 +318,20 @@ func (m Model) viewCards() string {
 		if chartBlock != "" {
 			cardLines = append(cardLines, chartBlock, "")
 		}
-		cardLines = append(cardLines, wavBar, mlBar, expBar, "")
+		cardLines = append(cardLines, expBar, "")
 
-		lines = append(lines, strings.Join(cardLines, "\n"))
+		cardStart := addPart(strings.Join(cardLines, "\n"))
+		pauses = append(pauses, cardStart)
 		if i < len(positions)-1 {
 			cardSep := lipgloss.NewStyle().Foreground(t.Primary).Render(
-				strings.Repeat("/", w))
-			lines = append(lines, "", cardSep, "")
+				strings.Repeat("·", w))
+			addPart("")
+			addPart(cardSep)
+			addPart("")
 		}
 	}
 
-	return strings.Join(lines, "\n")
+	return strings.Join(parts, "\n"), pauses
 }
 
 // renderScoreBar renders a center-anchored horizontal bar for a score in [-1, 1].
@@ -376,4 +416,23 @@ func formatWithSeparators(v float64) string {
 		return "-" + result.String()
 	}
 	return result.String()
+}
+
+func lineCount(s string) int {
+	return strings.Count(s, "\n") + 1
+}
+
+func dedupeSortedInts(nums []int) []int {
+	if len(nums) == 0 {
+		return nil
+	}
+	out := make([]int, 0, len(nums))
+	prev := nums[0] - 1
+	for _, n := range nums {
+		if n != prev {
+			out = append(out, n)
+			prev = n
+		}
+	}
+	return out
 }

@@ -2,10 +2,9 @@
  * Security Expanded Row Component
  *
  * Inline expandable content for a security row showing:
- * - Price chart with projection
+ * - Price chart (historical)
  * - Position data
  * - Controls (buy/sell toggles, multiplier, geography/industry)
- * - ML Prediction settings
  */
 import { useState, useEffect } from 'react';
 import {
@@ -20,47 +19,24 @@ import {
   Box,
   Tooltip,
   ActionIcon,
-  Button,
-  Progress,
-  Collapse,
 } from '@mantine/core';
-import { IconTrash, IconAlertTriangle, IconBrain, IconPlayerPlay, IconRefresh } from '@tabler/icons-react';
+import { IconTrash, IconAlertTriangle } from '@tabler/icons-react';
 import { SecurityChart } from './SecurityChart';
 import { catppuccin } from '../theme';
 import { formatCurrencySymbol as formatCurrency, formatPercent } from '../utils/formatting';
 import { useCategories, parseCommaSeparated } from '../hooks/useCategories';
-import { useMLTraining } from '../hooks/useMLTraining';
 
 export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [localMultiplier, setLocalMultiplier] = useState(null);
-  const [localBlendRatio, setLocalBlendRatio] = useState(null);
   const { data: categories } = useCategories();
-
-  const {
-    status: mlStatus,
-    train: handleTrainMl,
-    isTraining: mlTraining,
-    progress: mlProgress,
-    message: mlMessage,
-    error: mlError,
-    setError: setMlError,
-    deleteTraining,
-  } = useMLTraining(security?.symbol, { enabled: security?.ml_enabled === 1 });
 
   // Reset local state when security changes
   useEffect(() => {
     setLocalMultiplier(null);
-    setLocalBlendRatio(null);
-    setMlError(null);
-  }, [security?.symbol, setMlError]);
+  }, [security?.symbol]);
 
   if (!security) return null;
-
-  const handleDeleteMlData = () => {
-    if (!confirm(`Delete all ML training data for ${security.symbol}?`)) return;
-    deleteTraining();
-  };
 
   const geographyOptions = categories?.geographies || [];
   const industryOptions = categories?.industries || [];
@@ -92,30 +68,22 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
     profit_pct,
     profit_value_eur,
     current_allocation,
-    target_allocation,
-    expected_return,
-    wavelet_score,
-    ml_score,
+    ideal_allocation,
+    opp_score,
+    dip_score,
+    capitulation_score,
+    cycle_turn,
+    freefall_block,
     prices,
     recommendation,
     price_warning,
-    ml_enabled,
-    ml_blend_ratio,
   } = security;
 
-  const allocationDelta = target_allocation - current_allocation;
+  const allocationDelta = ideal_allocation - current_allocation;
   const isUnderweight = allocationDelta > 0.5;
   const isOverweight = allocationDelta < -0.5;
 
-  const effectiveMultiplier = localMultiplier ?? user_multiplier ?? 1;
-  const effectiveBlendRatio = localBlendRatio ?? ml_blend_ratio ?? 0.5;
-
-  const baseBlended = ml_enabled === 1 && wavelet_score != null && ml_score != null
-    ? wavelet_score * (1 - effectiveBlendRatio) + ml_score * effectiveBlendRatio
-    : (wavelet_score ?? expected_return ?? 0);
-
-  const convictionBoost = (effectiveMultiplier - 1.0) * 0.3;
-  const optimisticExpectedReturn = baseBlended + convictionBoost;
+  const effectiveMultiplier = Math.max(0, Math.min(1, localMultiplier ?? user_multiplier ?? 0.5));
 
   return (
     <Box
@@ -157,9 +125,6 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
               <SecurityChart
                 prices={prices}
                 avgCost={avg_cost}
-                expectedReturn={optimisticExpectedReturn}
-                waveletScore={wavelet_score}
-                mlScore={ml_score}
                 hasPosition={has_position}
                 width={300}
                 height={150}
@@ -272,7 +237,7 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
             <Box>
               <Group justify="space-between" mb={4}>
                 <Text size="xs" c="dimmed">Conviction</Text>
-                <Text size="xs" fw={500}>{effectiveMultiplier.toFixed(1)}x</Text>
+                <Text size="xs" fw={500}>{effectiveMultiplier.toFixed(2)}</Text>
               </Group>
               <Slider
                 value={effectiveMultiplier}
@@ -281,14 +246,13 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
                   setLocalMultiplier(null);
                   handleUpdate('user_multiplier', v);
                 }}
-                min={0.25}
-                max={2}
-                step={0.1}
+                min={0}
+                max={1}
+                step={0.01}
                 marks={[
-                  { value: 0.5, label: '0.5x' },
-                  { value: 1, label: '1x' },
-                  { value: 1.5, label: '1.5x' },
-                  { value: 2, label: '2x' },
+                  { value: 0, label: '0.00' },
+                  { value: 0.5, label: '0.50' },
+                  { value: 1, label: '1.00' },
                 ]}
                 disabled={isUpdating}
                 size="xs"
@@ -297,7 +261,7 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
           </Stack>
         </Grid.Col>
 
-        {/* Right Column: ML & Recommendation */}
+        {/* Right Column: Recommendation */}
         <Grid.Col span={{ base: 12, lg: 4 }}>
           <Stack gap="md">
             {/* Recommendation */}
@@ -329,94 +293,28 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
               </Box>
             )}
 
-            {/* ML Prediction */}
+            {/* Deterministic Signals */}
             <Box>
-              <Group justify="space-between" mb="xs">
-                <Group gap="xs">
-                  <IconBrain size={14} style={{ opacity: 0.7 }} />
-                  <Text size="xs" fw={500}>ML Prediction</Text>
-                </Group>
-                <Switch
-                  size="xs"
-                  checked={ml_enabled === 1}
-                  onChange={(e) => handleUpdate('ml_enabled', e.currentTarget.checked ? 1 : 0)}
-                  disabled={isUpdating}
-                />
+              <Group justify="space-between" mb={4}>
+                <Text size="xs" c="dimmed">Opportunity score</Text>
+                <Text size="xs" fw={500}>{formatPercent((opp_score || 0) * 100, 1)}</Text>
               </Group>
-
-              <Collapse in={ml_enabled === 1}>
-                <Stack gap="xs">
-                  <Box>
-                    <Group justify="space-between" mb={4}>
-                      <Text size="xs" c="dimmed">Blend Ratio</Text>
-                      <Text size="xs" fw={500}>
-                        {(effectiveBlendRatio * 100).toFixed(0)}% ML
-                      </Text>
-                    </Group>
-                    <Slider
-                      value={effectiveBlendRatio}
-                      onChange={setLocalBlendRatio}
-                      onChangeEnd={(v) => {
-                        setLocalBlendRatio(null);
-                        handleUpdate('ml_blend_ratio', v);
-                      }}
-                      min={0}
-                      max={1}
-                      step={0.01}
-                      marks={[
-                        { value: 0, label: 'Wavelet' },
-                        { value: 0.5, label: '50/50' },
-                        { value: 1, label: 'ML' },
-                      ]}
-                      disabled={isUpdating}
-                      size="xs"
-                    />
-                  </Box>
-
-                  {mlStatus && (
-                    <Text size="xs" c="dimmed">
-                      {mlStatus.model_exists
-                        ? `Model trained (${mlStatus.sample_count || mlStatus.model_info?.training_samples || 0} samples)`
-                        : `${mlStatus.sample_count || 0} samples available`}
-                    </Text>
-                  )}
-
-                  {mlTraining && (
-                    <Box>
-                      <Progress value={mlProgress} size="xs" animated />
-                      <Text size="xs" c="dimmed" mt={4}>{mlMessage}</Text>
-                    </Box>
-                  )}
-
-                  {mlError && (
-                    <Text size="xs" c="red">{mlError}</Text>
-                  )}
-
-                  <Group gap="xs">
-                    <Button
-                      size="xs"
-                      variant="light"
-                      leftSection={mlStatus?.model_exists ? <IconRefresh size={12} /> : <IconPlayerPlay size={12} />}
-                      onClick={handleTrainMl}
-                      loading={mlTraining}
-                      disabled={isUpdating}
-                    >
-                      {mlStatus?.model_exists ? 'Retrain' : 'Train'}
-                    </Button>
-                    {mlStatus?.model_exists && (
-                      <Button
-                        size="xs"
-                        variant="subtle"
-                        color="red"
-                        onClick={handleDeleteMlData}
-                        disabled={mlTraining || isUpdating}
-                      >
-                        Delete
-                      </Button>
-                    )}
-                  </Group>
-                </Stack>
-              </Collapse>
+              <Group justify="space-between" mb={4}>
+                <Text size="xs" c="dimmed">Dip</Text>
+                <Text size="xs" fw={500}>{formatPercent((dip_score || 0) * 100, 1)}</Text>
+              </Group>
+              <Group justify="space-between" mb={4}>
+                <Text size="xs" c="dimmed">Capitulation</Text>
+                <Text size="xs" fw={500}>{formatPercent((capitulation_score || 0) * 100, 1)}</Text>
+              </Group>
+              <Group justify="space-between" mb={4}>
+                <Text size="xs" c="dimmed">Cycle turn</Text>
+                <Text size="xs" fw={500}>{cycle_turn ? 'Yes' : 'No'}</Text>
+              </Group>
+              <Group justify="space-between">
+                <Text size="xs" c="dimmed">Freefall blocked</Text>
+                <Text size="xs" fw={500}>{freefall_block ? 'Yes' : 'No'}</Text>
+              </Group>
             </Box>
           </Stack>
         </Grid.Col>

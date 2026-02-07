@@ -3,9 +3,6 @@
  */
 
 const API_BASE = import.meta.env.VITE_MONOLITH_API_BASE || '/api';
-const ML_API_BASE = import.meta.env.VITE_ML_API_BASE || '/ml-api';
-const ML_JOB_TYPES = new Set(['ml:retrain', 'ml:monitor', 'analytics:regime']);
-let mlBaseUrlCache = null;
 
 async function requestFrom(base, endpoint, options = {}) {
   const response = await fetch(`${base}${endpoint}`, {
@@ -35,38 +32,6 @@ async function requestFrom(base, endpoint, options = {}) {
 
 async function request(endpoint, options = {}) {
   return requestFrom(API_BASE, endpoint, options);
-}
-
-async function resolveMLBaseUrl() {
-  if (mlBaseUrlCache) {
-    return mlBaseUrlCache;
-  }
-
-  // If explicitly configured, trust that first.
-  if (ML_API_BASE && ML_API_BASE !== '/ml-api') {
-    mlBaseUrlCache = ML_API_BASE;
-    return mlBaseUrlCache;
-  }
-
-  // Runtime fallback for monolith-served frontend: read ML base URL from settings.
-  try {
-    const settings = await request('/settings');
-    const configured = (settings?.ml_service_base_url || '').trim();
-    if (configured) {
-      mlBaseUrlCache = configured.replace(/\/$/, '');
-      return mlBaseUrlCache;
-    }
-  } catch {
-    // Keep proxy default below when settings are temporarily unavailable.
-  }
-
-  mlBaseUrlCache = ML_API_BASE;
-  return mlBaseUrlCache;
-}
-
-async function requestML(endpoint, options = {}) {
-  const mlBase = await resolveMLBaseUrl();
-  return requestFrom(mlBase, endpoint, options);
 }
 
 // Version
@@ -102,80 +67,32 @@ export const getRecommendations = (minValue) => {
 };
 
 // Jobs/Scheduler
-const isMLJobType = (jobType) => ML_JOB_TYPES.has(jobType);
-
-const parseEpoch = (iso) => (iso ? new Date(iso).getTime() : 0);
-
-const mergeStatus = (mono = {}, ml = {}) => {
-  const current =
-    mono.current && ml.current
-      ? `${mono.current} | ${ml.current}`
-      : (mono.current || ml.current || null);
-
-  const upcoming = [...(mono.upcoming || []), ...(ml.upcoming || [])]
-    .sort((a, b) => parseEpoch(a.next_run) - parseEpoch(b.next_run))
-    .slice(0, 3);
-
-  const recent = [...(mono.recent || []), ...(ml.recent || [])]
-    .sort((a, b) => parseEpoch(b.executed_at) - parseEpoch(a.executed_at))
-    .slice(0, 3);
-
-  return { current, upcoming, recent };
-};
-
-export const getSchedulerStatus = async () => {
-  const [mono, ml] = await Promise.all([request('/jobs'), requestML('/jobs')]);
-  return mergeStatus(mono, ml);
-};
+export const getSchedulerStatus = () => request('/jobs');
 
 export const runJob = (jobName) => {
-  const runner = isMLJobType(jobName) ? requestML : request;
-  return runner(`/jobs/${encodeURIComponent(jobName)}/run`, { method: 'POST' });
+  return request(`/jobs/${encodeURIComponent(jobName)}/run`, { method: 'POST' });
 };
 
 export const refreshAll = async () => {
-  await Promise.all([
-    request('/jobs/refresh-all', { method: 'POST' }),
-    requestML('/jobs/refresh-all', { method: 'POST' }),
-  ]);
+  await request('/jobs/refresh-all', { method: 'POST' });
   return { status: 'ok', message: 'All jobs rescheduled' };
 };
 
 // Job Schedules
-export const getJobSchedules = async () => {
-  const [mono, ml] = await Promise.all([request('/jobs/schedules'), requestML('/jobs/schedules')]);
-  const merged = [...(mono.schedules || []), ...(ml.schedules || [])];
-  return { schedules: merged };
-};
+export const getJobSchedules = () => request('/jobs/schedules');
 
 export const updateJobSchedule = (jobType, data) => {
-  const updater = isMLJobType(jobType) ? requestML : request;
-  return updater(`/jobs/schedules/${encodeURIComponent(jobType)}`, {
+  return request(`/jobs/schedules/${encodeURIComponent(jobType)}`, {
     method: 'PUT',
     body: JSON.stringify(data),
   });
 };
 export const getJobHistory = (jobType = null, limit = 50) => {
-  if (jobType) {
-    const getter = isMLJobType(jobType) ? requestML : request;
-    const params = new URLSearchParams();
-    params.append('job_type', jobType);
-    if (limit) params.append('limit', limit);
-    return getter(`/jobs/history?${params.toString()}`);
-  }
-
   const params = new URLSearchParams();
+  if (jobType) params.append('job_type', jobType);
   if (limit) params.append('limit', limit);
   const query = params.toString();
-  return Promise.all([
-    request(`/jobs/history${query ? '?' + query : ''}`),
-    requestML(`/jobs/history${query ? '?' + query : ''}`),
-  ]).then(([mono, ml]) => {
-    const merged = [...(mono.history || []), ...(ml.history || [])]
-      .sort((a, b) => (b.executed_at || 0) - (a.executed_at || 0))
-      .slice(0, limit);
-    return { history: merged };
-  });
+  return request(`/jobs/history${query ? '?' + query : ''}`);
 };
 
 // Settings
@@ -189,18 +106,14 @@ export const updateSettingsBatch = (values) =>
   request('/settings', {
     method: 'PUT',
     body: JSON.stringify({ values }),
-  }).catch(async (error) => {
-    // Backward-compatible fallback when batch endpoint is not available yet.
-    if (!String(error?.message || '').includes('405')) {
-      throw error;
-    }
-    const entries = Object.entries(values);
-    await Promise.all(entries.map(([key, value]) => updateSetting(key, value)));
-    return { status: 'ok' };
   });
 
 // Unified view
-export const getUnifiedView = (period = '1Y') => request(`/unified?period=${period}`);
+export const getUnifiedView = (period = '1Y', asOf = null) => {
+  const params = new URLSearchParams({ period });
+  if (asOf) params.append('as_of', asOf);
+  return request(`/unified?${params.toString()}`);
+};
 
 // Update security
 export const updateSecurity = (symbol, data) => {
@@ -275,27 +188,6 @@ export const getTrades = (params = {}) => {
   return request(`/trades${query ? '?' + query : ''}`);
 };
 export const syncTrades = () => request('/trades/sync', { method: 'POST' });
-
-// ML Training (per-symbol)
-export const getMLTrainingStatus = (symbol) =>
-  requestML(`/ml/training-status/${encodeURIComponent(symbol)}`);
-export const deleteMLTrainingData = (symbol) =>
-  requestML(`/ml/training-data/${encodeURIComponent(symbol)}`, { method: 'DELETE' });
-// Note: trainSymbol uses SSE streaming and is handled in useMLTraining hook
-export const getMLTrainStreamUrl = (symbol) =>
-  `${ML_API_BASE}/ml/train/${encodeURIComponent(symbol)}/stream`;
-
-// ML Reset
-export const resetAndRetrain = () =>
-  requestML('/ml/reset-and-retrain', { method: 'POST' });
-export const getResetStatus = () => requestML('/ml/reset-status');
-export const getMLPortfolioOverlays = () => requestML('/ml/portfolio-overlays');
-export const getMLSecurityOverlays = (symbols, days = 365) => {
-  const list = Array.isArray(symbols) ? symbols.filter(Boolean) : [];
-  if (list.length === 0) return Promise.resolve({ series: {} });
-  const params = new URLSearchParams({ symbols: list.join(','), days: String(days) });
-  return requestML(`/ml/security-overlays?${params.toString()}`);
-};
 
 // Cash Flows
 export const getCashFlows = () => request('/cashflows');

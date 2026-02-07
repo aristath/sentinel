@@ -30,12 +30,23 @@ import { AllocationRadarCard } from '../components/AllocationRadarCard';
 import { JobsCard } from '../components/JobsCard';
 import { MarketsOpenCard } from '../components/MarketsOpenCard';
 import { PortfolioPnLChart } from '../components/PortfolioPnLChart';
-import { MLTuningModal } from '../components/MLTuningModal';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
-import { getUnifiedView, getSecurities, updateSecurity, addSecurity, deleteSecurity, getPortfolio, getRecommendations, getCashFlows, getPortfolioPnLHistory, getSettings, updateSetting, getMLPortfolioOverlays, updateSettingsBatch, getMLSecurityOverlays, getResetStatus, resetAndRetrain } from '../api/client';
+import {
+  getUnifiedView,
+  getSecurities,
+  updateSecurity,
+  addSecurity,
+  deleteSecurity,
+  getPortfolio,
+  getRecommendations,
+  getCashFlows,
+  getPortfolioPnLHistory,
+  getSettings,
+  updateSetting,
+} from '../api/client';
 
-import { formatEur, formatCurrencySymbol } from '../utils/formatting';
+import { formatEur, formatCurrencySymbol as formatCurrency } from '../utils/formatting';
 import './UnifiedPage.css';
 
 const PERIODS = [
@@ -44,9 +55,6 @@ const PERIODS = [
   { value: '5Y', label: '5Y' },
   { value: '10Y', label: '10Y' },
 ];
-
-// Alias for backwards compatibility in this file
-const formatCurrency = formatCurrencySymbol;
 
 const FILTERS = [
   { value: 'all', label: 'All Securities' },
@@ -66,37 +74,7 @@ const SORTS = [
   { value: 'symbol', label: 'Symbol (A-Z)' },
 ];
 
-const DEFAULT_PREDICTION_WEIGHTS = {
-  wavelet: 0.25,
-  xgboost: 0.25,
-  ridge: 0.25,
-  rf: 0.25,
-  svr: 0.25,
-};
-
-function getWeightsFromSettings(settings) {
-  return {
-    wavelet: Number(settings?.ml_weight_wavelet ?? DEFAULT_PREDICTION_WEIGHTS.wavelet),
-    xgboost: Number(settings?.ml_weight_xgboost ?? DEFAULT_PREDICTION_WEIGHTS.xgboost),
-    ridge: Number(settings?.ml_weight_ridge ?? DEFAULT_PREDICTION_WEIGHTS.ridge),
-    rf: Number(settings?.ml_weight_rf ?? DEFAULT_PREDICTION_WEIGHTS.rf),
-    svr: Number(settings?.ml_weight_svr ?? DEFAULT_PREDICTION_WEIGHTS.svr),
-  };
-}
-
-function weightsEqual(a, b) {
-  if (!a || !b) return false;
-  const isClose = (x, y) => Math.abs(Number(x) - Number(y)) < 1e-9;
-  return (
-    isClose(a.wavelet, b.wavelet) &&
-    isClose(a.xgboost, b.xgboost) &&
-    isClose(a.ridge, b.ridge) &&
-    isClose(a.rf, b.rf) &&
-    isClose(a.svr, b.svr)
-  );
-}
-
-function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
+function UnifiedPage() {
   const [period, setPeriod] = useState('1Y');
   const [filter, setFilter] = useState('all');
   const [sort, setSort] = useState('priority');
@@ -104,9 +82,6 @@ function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [securityToDelete, setSecurityToDelete] = useState(null);
-  const [weightsDraft, setWeightsDraft] = useState(DEFAULT_PREDICTION_WEIGHTS);
-  const [weightsBaseline, setWeightsBaseline] = useState(DEFAULT_PREDICTION_WEIGHTS);
-  const [weightsSaveError, setWeightsSaveError] = useState('');
 
   const queryClient = useQueryClient();
 
@@ -153,67 +128,15 @@ function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
     refetchInterval: 300000, // Refresh every 5 minutes
   });
 
-  const { data: mlOverlayData } = useQuery({
-    queryKey: ['portfolio-pnl-ml-overlays'],
-    queryFn: () => getMLPortfolioOverlays(),
-    refetchInterval: 300000,
-  });
-
-  const mergedPnlSnapshots = useMemo(() => {
-    const base = pnlData?.snapshots || [];
-    const overlays = mlOverlayData?.snapshots || [];
-    if (!base.length) return [];
-    if (!overlays.length) return base;
-
-    const byDate = new Map(overlays.map((o) => [o.date, o]));
-    return base.map((row) => {
-      const overlay = byDate.get(row.date);
-      if (!overlay) return row;
-      return {
-        ...row,
-        ml_xgboost: overlay.ml_xgboost,
-        ml_ridge: overlay.ml_ridge,
-        ml_rf: overlay.ml_rf,
-        ml_svr: overlay.ml_svr,
-      };
-    });
-  }, [pnlData?.snapshots, mlOverlayData?.snapshots]);
-
   // Settings for simulated cash
   const { data: settings } = useQuery({
     queryKey: ['settings'],
     queryFn: getSettings,
   });
-  const securitySymbols = useMemo(
-    () => (securities || []).map((s) => s.symbol).filter(Boolean).sort(),
-    [securities]
-  );
-  const { data: securityOverlayData } = useQuery({
-    queryKey: ['ml-security-overlays', securitySymbols.join(','), period],
-    queryFn: () => getMLSecurityOverlays(securitySymbols, period === '1M' ? 30 : period === '5Y' ? 1825 : period === '10Y' ? 3650 : 365),
-    enabled: mlModalOpen && securitySymbols.length > 0,
-    refetchInterval: 120000,
-  });
-  const { data: resetStatus } = useQuery({
-    queryKey: ['resetStatus'],
-    queryFn: getResetStatus,
-    refetchInterval: (query) => (query.state.data?.running ? 1000 : 10000),
-  });
   const isResearchMode = settings?.trading_mode === 'research';
   const simulatedCash = settings?.simulated_cash_eur;
   const [editingCash, setEditingCash] = useState(false);
   const [cashValue, setCashValue] = useState('');
-
-  const weightsDirty = !weightsEqual(weightsDraft, weightsBaseline);
-
-  useEffect(() => {
-    if (!settings) return;
-    const loaded = getWeightsFromSettings(settings);
-    setWeightsBaseline(loaded);
-    if (!weightsDirty) {
-      setWeightsDraft(loaded);
-    }
-  }, [settings, weightsDirty]);
 
   const cashMutation = useMutation({
     mutationFn: (value) => updateSetting('simulated_cash_eur', value),
@@ -255,43 +178,6 @@ function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
     },
   });
 
-  const weightsMutation = useMutation({
-    mutationFn: (weights) =>
-      updateSettingsBatch({
-        ml_weight_wavelet: weights.wavelet,
-        ml_weight_xgboost: weights.xgboost,
-        ml_weight_ridge: weights.ridge,
-        ml_weight_rf: weights.rf,
-        ml_weight_svr: weights.svr,
-      }),
-    onSuccess: (_, variables) => {
-      setWeightsBaseline(variables);
-      setWeightsSaveError('');
-      queryClient.invalidateQueries({ queryKey: ['settings'] });
-    },
-    onError: (err) => {
-      setWeightsSaveError(err?.message || 'Failed to save prediction weights');
-    },
-  });
-
-  const resetRetrainMutation = useMutation({
-    mutationFn: resetAndRetrain,
-    onSuccess: () => {
-      notifications.show({
-        title: 'Reset & Retrain Started',
-        message: 'ML models are being retrained in the background',
-        color: 'blue',
-      });
-      queryClient.invalidateQueries({ queryKey: ['resetStatus'] });
-    },
-    onError: (err) => {
-      notifications.show({
-        title: 'Error',
-        message: err?.message || 'Failed to start reset & retrain',
-        color: 'red',
-      });
-    },
-  });
 
   const addMutation = useMutation({
     mutationFn: ({ symbol, geography, industry }) => addSecurity(symbol, geography, industry),
@@ -345,27 +231,6 @@ function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
     await deleteMutation.mutateAsync({ symbol, sellPosition });
   };
 
-  const handleWeightChange = (key, value) => {
-    setWeightsSaveError('');
-    const clamped = Math.max(0, Math.min(1, Number(value)));
-    const rounded = Math.round(clamped * 100) / 100;
-    setWeightsDraft((prev) => ({ ...prev, [key]: rounded }));
-  };
-
-  const handleSaveWeights = async () => {
-    await weightsMutation.mutateAsync(weightsDraft);
-  };
-
-  const handleResetWeights = () => {
-    setWeightsSaveError('');
-    setWeightsDraft(weightsBaseline);
-  };
-
-  const handleResetRetrain = () => {
-    if (!window.confirm('Reset and retrain all ML models? This can take several minutes.')) return;
-    resetRetrainMutation.mutate();
-  };
-
   // Filter and sort securities
   const filteredSecurities = useMemo(() => {
     if (!securities) return [];
@@ -396,10 +261,10 @@ function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
         result = result.filter((s) => s.recommendation?.action === 'sell');
         break;
       case 'underweight':
-        result = result.filter((s) => s.target_allocation - s.current_allocation > 0.5);
+        result = result.filter((s) => s.ideal_allocation - s.current_allocation > 0.5);
         break;
       case 'overweight':
-        result = result.filter((s) => s.current_allocation - s.target_allocation > 0.5);
+        result = result.filter((s) => s.current_allocation - s.ideal_allocation > 0.5);
         break;
     }
 
@@ -413,8 +278,8 @@ function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
           return bPriority - aPriority || a.symbol.localeCompare(b.symbol);
         case 'allocation_delta':
           // Largest absolute deviation first
-          const aDelta = Math.abs(a.target_allocation - a.current_allocation);
-          const bDelta = Math.abs(b.target_allocation - b.current_allocation);
+          const aDelta = Math.abs(a.ideal_allocation - a.current_allocation);
+          const bDelta = Math.abs(b.ideal_allocation - b.current_allocation);
           return bDelta - aDelta;
         case 'profit_pct':
           return (b.profit_pct || 0) - (a.profit_pct || 0);
@@ -621,11 +486,9 @@ function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
           <Card shadow="sm" padding="sm" withBorder className="unified__pnl-chart">
             <Text size="sm" fw={500} mb="xs">Portfolio P&L</Text>
             <PortfolioPnLChart
-              snapshots={mergedPnlSnapshots}
+              snapshots={pnlData?.snapshots || []}
               summary={pnlData?.summary}
               height={300}
-              weightsDraft={weightsDraft}
-              showCombined
             />
           </Card>
 
@@ -742,22 +605,6 @@ function UnifiedPage({ mlModalOpen = false, onCloseMlModal = () => {} }) {
       </div>
 
       {/* Modals */}
-      <MLTuningModal
-        opened={mlModalOpen}
-        onClose={onCloseMlModal}
-        securities={securities || []}
-        weightsDraft={weightsDraft}
-        weightsBaseline={weightsBaseline}
-        onWeightChange={handleWeightChange}
-        onSaveWeights={handleSaveWeights}
-        onResetWeights={handleResetWeights}
-        isSavingWeights={weightsMutation.isPending}
-        weightsError={weightsSaveError}
-        onResetRetrain={handleResetRetrain}
-        isResetRetraining={resetRetrainMutation.isPending}
-        resetStatus={resetStatus}
-        securityOverlaysMap={securityOverlayData?.series || {}}
-      />
       <AddSecurityModal
         opened={addModalOpen}
         onClose={() => setAddModalOpen(false)}

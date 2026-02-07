@@ -88,8 +88,6 @@ type Security struct {
 	TargetAllocation  float64      `json:"target_allocation"`
 	Score             float64      `json:"score"`
 	ExpectedReturn    float64      `json:"expected_return"`
-	WaveletScore      float64      `json:"wavelet_score"`
-	MlScore           float64      `json:"ml_score"`
 	Geography         string       `json:"geography"`
 	Industry          string       `json:"industry"`
 	Currency          string       `json:"currency"`

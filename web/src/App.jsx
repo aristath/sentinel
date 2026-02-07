@@ -1,13 +1,13 @@
 import { AppShell, Group, Title, ActionIcon, Badge, Tooltip, Switch, Text } from '@mantine/core';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { IconSettings, IconClock, IconRefresh, IconChartLine, IconPlanet, IconReceipt, IconBrain } from '@tabler/icons-react';
+import { IconSettings, IconClock, IconRefresh, IconChartLine, IconPlanet, IconReceipt } from '@tabler/icons-react';
 
 import UnifiedPage from './pages/UnifiedPage';
 import { SchedulerModal } from './components/SchedulerModal';
 import { SettingsModal } from './components/SettingsModal';
 import { BacktestModal } from './components/BacktestModal';
 import { TradesModal } from './components/TradesModal';
-import { getSchedulerStatus, refreshAll, getSettings, updateSetting, getLedStatus, setLedEnabled, getVersion, getResetStatus } from './api/client';
+import { getSchedulerStatus, refreshAll, getSettings, updateSetting, getLedStatus, setLedEnabled, getVersion } from './api/client';
 import { useState } from 'react';
 
 function App() {
@@ -15,7 +15,6 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [backtestOpen, setBacktestOpen] = useState(false);
   const [tradesOpen, setTradesOpen] = useState(false);
-  const [mlModalOpen, setMlModalOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { data: schedulerStatus } = useQuery({
@@ -59,15 +58,6 @@ function App() {
     mutationFn: setLedEnabled,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['ledStatus'] });
-    },
-  });
-
-  const { data: resetStatus } = useQuery({
-    queryKey: ['resetStatus'],
-    queryFn: getResetStatus,
-    refetchInterval: (query) => {
-      // Only poll frequently when a reset is running
-      return query.state.data?.running ? 1000 : 10000;
     },
   });
 
@@ -148,7 +138,7 @@ function App() {
                   </ActionIcon>
                 </Tooltip>
 
-                <Tooltip label="Refresh All (sync rates, portfolio, prices, scores)">
+                <Tooltip label="Refresh All (sync rates, portfolio, prices)">
                   <ActionIcon
                     variant="subtle"
                     size="lg"
@@ -158,22 +148,6 @@ function App() {
                     className="app__action-btn app__action-btn--refresh"
                   >
                     <IconRefresh size={20} />
-                  </ActionIcon>
-                </Tooltip>
-
-                <Tooltip
-                  label={resetStatus?.running
-                    ? 'ML retraining in progress - open ML tuning'
-                    : 'ML tuning and per-security projections'}
-                >
-                  <ActionIcon
-                    variant="subtle"
-                    size="lg"
-                    color={resetStatus?.running ? 'orange' : undefined}
-                    onClick={() => setMlModalOpen(true)}
-                    className="app__action-btn app__action-btn--reset-retrain"
-                  >
-                    <IconBrain size={20} />
                   </ActionIcon>
                 </Tooltip>
 
@@ -218,7 +192,7 @@ function App() {
         </AppShell.Header>
 
         <AppShell.Main className="app__main">
-          <UnifiedPage mlModalOpen={mlModalOpen} onCloseMlModal={() => setMlModalOpen(false)} />
+          <UnifiedPage />
         </AppShell.Main>
       </AppShell>
 

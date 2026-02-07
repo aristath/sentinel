@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   Modal,
@@ -7,17 +8,18 @@ import {
   PasswordInput,
   NumberInput,
   Select,
-  Switch,
   Loader,
   Center,
   Tabs,
-  Divider,
+  Group,
+  Button,
 } from '@mantine/core';
-import { IconSettings, IconCoin, IconBrain, IconKey, IconChartDots, IconCloudUpload } from '@tabler/icons-react';
-import { getSettings, updateSetting } from '../api/client';
+import { IconSettings, IconCoin, IconBrain, IconKey, IconCloudUpload } from '@tabler/icons-react';
+import { getSettings, updateSetting, updateSettingsBatch } from '../api/client';
 
 export function SettingsModal({ opened, onClose }) {
   const queryClient = useQueryClient();
+  const [strategyDraft, setStrategyDraft] = useState(null);
 
   const { data: settings, isLoading, error } = useQuery({
     queryKey: ['settings'],
@@ -34,6 +36,42 @@ export function SettingsModal({ opened, onClose }) {
 
   const handleChange = (key, value) => {
     updateMutation.mutate({ key, value });
+  };
+
+  const strategyMutation = useMutation({
+    mutationFn: (values) => updateSettingsBatch(values),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+    },
+  });
+
+  useEffect(() => {
+    if (!settings) return;
+    setStrategyDraft({
+      strategy_core_target_pct: Number(settings.strategy_core_target_pct ?? 80),
+      strategy_opportunity_target_pct: Number(settings.strategy_opportunity_target_pct ?? 20),
+      strategy_opportunity_target_max_pct: Number(settings.strategy_opportunity_target_max_pct ?? 30),
+      strategy_min_opp_score: Number(settings.strategy_min_opp_score ?? 0.55),
+      strategy_core_floor_pct: Number(settings.strategy_core_floor_pct ?? 0.05),
+      strategy_entry_t1_dd: Number(settings.strategy_entry_t1_dd ?? -0.10),
+      strategy_entry_t2_dd: Number(settings.strategy_entry_t2_dd ?? -0.16),
+      strategy_entry_t3_dd: Number(settings.strategy_entry_t3_dd ?? -0.22),
+      strategy_entry_memory_days: Number(settings.strategy_entry_memory_days ?? 45),
+      strategy_memory_max_boost: Number(settings.strategy_memory_max_boost ?? 0.12),
+      strategy_opportunity_addon_threshold: Number(settings.strategy_opportunity_addon_threshold ?? 0.75),
+      strategy_max_opportunity_buys_per_cycle: Number(settings.strategy_max_opportunity_buys_per_cycle ?? 1),
+      strategy_max_new_opportunity_buys_per_cycle: Number(settings.strategy_max_new_opportunity_buys_per_cycle ?? 1),
+    });
+  }, [settings]);
+
+  const handleStrategyChange = (key, value) => {
+    if (value == null || Number.isNaN(value)) return;
+    setStrategyDraft((prev) => ({ ...(prev || {}), [key]: Number(value) }));
+  };
+
+  const applyStrategyTuning = () => {
+    if (!strategyDraft) return;
+    strategyMutation.mutate(strategyDraft);
   };
 
   return (
@@ -55,9 +93,6 @@ export function SettingsModal({ opened, onClose }) {
             </Tabs.Tab>
             <Tabs.Tab value="strategy" leftSection={<IconBrain size={16} />}>
               Strategy
-            </Tabs.Tab>
-            <Tabs.Tab value="analytics" leftSection={<IconChartDots size={16} />}>
-              Advanced Analytics
             </Tabs.Tab>
             <Tabs.Tab value="api" leftSection={<IconKey size={16} />}>
               API
@@ -172,14 +207,139 @@ export function SettingsModal({ opened, onClose }) {
           <Tabs.Panel value="strategy" pt="md">
             <Stack gap="md">
               <NumberInput
-                label="Score Lookback Years"
-                description="Years of historical data for scoring"
-                value={settings?.score_lookback_years || 10}
-                onChange={(value) => handleChange('score_lookback_years', value)}
-                min={1}
-                max={20}
-                suffix=" years"
+                label="Core Target %"
+                description="Baseline allocation sleeve for core holdings"
+                value={strategyDraft?.strategy_core_target_pct ?? settings?.strategy_core_target_pct ?? 80}
+                onChange={(value) => handleStrategyChange('strategy_core_target_pct', value)}
+                min={0}
+                max={100}
+                suffix="%"
               />
+
+              <NumberInput
+                label="Opportunity Target %"
+                description="Tactical sleeve for high-opportunity names"
+                value={strategyDraft?.strategy_opportunity_target_pct ?? settings?.strategy_opportunity_target_pct ?? 20}
+                onChange={(value) => handleStrategyChange('strategy_opportunity_target_pct', value)}
+                min={0}
+                max={100}
+                suffix="%"
+              />
+
+              <NumberInput
+                label="Opportunity Target Max %"
+                description="Dynamic cap for opportunity sleeve during broad/strong dip regimes"
+                value={strategyDraft?.strategy_opportunity_target_max_pct ?? settings?.strategy_opportunity_target_max_pct ?? 30}
+                onChange={(value) => handleStrategyChange('strategy_opportunity_target_max_pct', value)}
+                min={0}
+                max={100}
+                suffix="%"
+              />
+
+              <NumberInput
+                label="Minimum Opportunity Score"
+                description="Minimum opp score required to enter opportunity sleeve"
+                value={strategyDraft?.strategy_min_opp_score ?? settings?.strategy_min_opp_score ?? 0.55}
+                onChange={(value) => handleStrategyChange('strategy_min_opp_score', value)}
+                min={0}
+                max={1}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Core Floor %"
+                description="Minimum total portfolio share kept for core positions before trimming"
+                value={(strategyDraft?.strategy_core_floor_pct ?? settings?.strategy_core_floor_pct ?? 0.05) * 100}
+                onChange={(value) => handleStrategyChange('strategy_core_floor_pct', (value ?? 0) / 100)}
+                min={0}
+                max={100}
+                decimalScale={2}
+                suffix="%"
+              />
+
+              <NumberInput
+                label="Entry T1 Drawdown"
+                description="First opportunity tranche threshold (dd252)"
+                value={strategyDraft?.strategy_entry_t1_dd ?? settings?.strategy_entry_t1_dd ?? -0.10}
+                onChange={(value) => handleStrategyChange('strategy_entry_t1_dd', value)}
+                min={-0.9}
+                max={0}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Entry T2 Drawdown"
+                description="Second opportunity tranche threshold (dd252)"
+                value={strategyDraft?.strategy_entry_t2_dd ?? settings?.strategy_entry_t2_dd ?? -0.16}
+                onChange={(value) => handleStrategyChange('strategy_entry_t2_dd', value)}
+                min={-0.9}
+                max={0}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Entry T3 Drawdown"
+                description="Third opportunity tranche threshold (dd252)"
+                value={strategyDraft?.strategy_entry_t3_dd ?? settings?.strategy_entry_t3_dd ?? -0.22}
+                onChange={(value) => handleStrategyChange('strategy_entry_t3_dd', value)}
+                min={-0.9}
+                max={0}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Entry Memory Days"
+                description="Keep recent-dip memory active for post-turn entries"
+                value={strategyDraft?.strategy_entry_memory_days ?? settings?.strategy_entry_memory_days ?? 45}
+                onChange={(value) => handleStrategyChange('strategy_entry_memory_days', value)}
+                min={1}
+                max={252}
+                suffix=" days"
+              />
+
+              <NumberInput
+                label="Memory Max Boost"
+                description="Maximum boost added to opp score from recent dip memory"
+                value={strategyDraft?.strategy_memory_max_boost ?? settings?.strategy_memory_max_boost ?? 0.12}
+                onChange={(value) => handleStrategyChange('strategy_memory_max_boost', value)}
+                min={0}
+                max={0.5}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Opportunity Add-On Threshold"
+                description="Allow add-on buys for already-held opportunity names above this score"
+                value={strategyDraft?.strategy_opportunity_addon_threshold ?? settings?.strategy_opportunity_addon_threshold ?? 0.75}
+                onChange={(value) => handleStrategyChange('strategy_opportunity_addon_threshold', value)}
+                min={0}
+                max={1}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Max Opportunity Buys / Cycle"
+                description="Hard cap on total opportunity buys per rebalance cycle"
+                value={strategyDraft?.strategy_max_opportunity_buys_per_cycle ?? settings?.strategy_max_opportunity_buys_per_cycle ?? 1}
+                onChange={(value) => handleStrategyChange('strategy_max_opportunity_buys_per_cycle', value)}
+                min={0}
+                max={50}
+              />
+
+              <NumberInput
+                label="Max New Opportunity Buys / Cycle"
+                description="Hard cap on opening new opportunity positions per cycle"
+                value={strategyDraft?.strategy_max_new_opportunity_buys_per_cycle ?? settings?.strategy_max_new_opportunity_buys_per_cycle ?? 1}
+                onChange={(value) => handleStrategyChange('strategy_max_new_opportunity_buys_per_cycle', value)}
+                min={0}
+                max={50}
+              />
+
+              <Group justify="flex-end">
+                <Button onClick={applyStrategyTuning} loading={strategyMutation.isPending}>
+                  Apply Strategy Tuning
+                </Button>
+              </Group>
 
               <NumberInput
                 label="Rebalance Threshold %"
@@ -200,69 +360,64 @@ export function SettingsModal({ opened, onClose }) {
                 max={50}
                 suffix="%"
               />
-            </Stack>
-          </Tabs.Panel>
 
-          <Tabs.Panel value="analytics" pt="md">
-            <Stack gap="md">
-              <Text size="sm" c="dimmed">
-                Advanced quantitative finance techniques (all optional)
-              </Text>
-
-              <Divider label="Regime Detection" />
-
-              <Switch
-                label="Enable Regime Adjustment"
-                description="Adjust portfolio weights based on Bull/Bear/Sideways market regimes"
-                checked={settings?.use_regime_adjustment || false}
-                onChange={(e) => handleChange('use_regime_adjustment', e.currentTarget.checked)}
+              <NumberInput
+                label="Standard Lot Max %"
+                description="Max ticket size treated as standard lot class"
+                value={(settings?.strategy_lot_standard_max_pct ?? 0.08) * 100}
+                onChange={(value) => handleChange('strategy_lot_standard_max_pct', (value ?? 0) / 100)}
+                min={0}
+                max={100}
+                decimalScale={2}
+                suffix="%"
               />
 
-              {settings?.use_regime_adjustment && (
-                <>
-                  <NumberInput
-                    label="Number of Market States"
-                    description="Number of hidden states for regime detection (typically 3)"
-                    value={settings?.regime_n_states || 3}
-                    onChange={(value) => handleChange('regime_n_states', value)}
-                    min={2}
-                    max={5}
-                  />
-
-                  <NumberInput
-                    label="Regime Lookback Days"
-                    description="Historical data window for regime training"
-                    value={settings?.regime_lookback_days || 504}
-                    onChange={(value) => handleChange('regime_lookback_days', value)}
-                    min={252}
-                    max={2520}
-                    suffix=" days"
-                  />
-
-                  <NumberInput
-                    label="Regime Weight Adjustment %"
-                    description="Maximum weight adjustment based on regime"
-                    value={(settings?.regime_weight_adjustment || 0.2) * 100}
-                    onChange={(value) => handleChange('regime_weight_adjustment', value / 100)}
-                    min={0}
-                    max={50}
-                    suffix="%"
-                  />
-                </>
-              )}
-
-              <Divider label="Correlation & Dependencies" />
-
-              <Switch
-                label="Use Cleaned Correlation Matrix"
-                description="Apply Random Matrix Theory to filter noise from correlations"
-                checked={settings?.use_cleaned_correlation || false}
-                onChange={(e) => handleChange('use_cleaned_correlation', e.currentTarget.checked)}
+              <NumberInput
+                label="Coarse Lot Max %"
+                description="Max ticket size treated as coarse lot class"
+                value={(settings?.strategy_lot_coarse_max_pct ?? 0.30) * 100}
+                onChange={(value) => handleChange('strategy_lot_coarse_max_pct', (value ?? 0) / 100)}
+                min={0}
+                max={100}
+                decimalScale={2}
+                suffix="%"
               />
 
-              <Text size="xs" c="dimmed" mt="md">
-                Weekly jobs (Sundays 21:00-23:00) automatically update these analytics
-              </Text>
+              <NumberInput
+                label="Coarse Max New Lots"
+                description="Max new coarse lots per rebalance cycle (unless opp score is very strong)"
+                value={settings?.strategy_coarse_max_new_lots_per_cycle ?? 1}
+                onChange={(value) => handleChange('strategy_coarse_max_new_lots_per_cycle', value)}
+                min={1}
+                max={10}
+              />
+
+              <NumberInput
+                label="Opportunity Cool-Off Days"
+                description="Minimum days between opposite actions for opportunity sleeve"
+                value={settings?.strategy_opportunity_cooloff_days ?? 7}
+                onChange={(value) => handleChange('strategy_opportunity_cooloff_days', value)}
+                min={0}
+                max={365}
+              />
+
+              <NumberInput
+                label="Core Cool-Off Days"
+                description="Minimum days between opposite actions for core sleeve"
+                value={settings?.strategy_core_cooloff_days ?? 21}
+                onChange={(value) => handleChange('strategy_core_cooloff_days', value)}
+                min={0}
+                max={365}
+              />
+
+              <NumberInput
+                label="Rotation Time-Stop Days"
+                description="Exit opportunity positions if thesis stalls beyond this horizon"
+                value={settings?.strategy_rotation_time_stop_days ?? 90}
+                onChange={(value) => handleChange('strategy_rotation_time_stop_days', value)}
+                min={1}
+                max={365}
+              />
             </Stack>
           </Tabs.Panel>
 
@@ -284,20 +439,13 @@ export function SettingsModal({ opened, onClose }) {
                 placeholder="Enter API secret"
               />
 
-              <TextInput
-                label="ML Service Base URL"
-                description="Base URL for sentinel-ml (used by monolith orchestration and tooling)"
-                value={settings?.ml_service_base_url || 'http://localhost:8001'}
-                onChange={(e) => handleChange('ml_service_base_url', e.target.value)}
-                placeholder="http://localhost:8001"
-              />
             </Stack>
           </Tabs.Panel>
 
           <Tabs.Panel value="backup" pt="md">
             <Stack gap="md">
               <Text size="sm" c="dimmed">
-                Back up the data folder (database + ML models) to Cloudflare R2
+                Back up the data folder (database and runtime state) to Cloudflare R2
               </Text>
 
               <TextInput
@@ -347,6 +495,11 @@ export function SettingsModal({ opened, onClose }) {
           {updateMutation.isError && (
             <Text c="red" size="sm" mt="md">
               Error saving: {updateMutation.error.message}
+            </Text>
+          )}
+          {strategyMutation.isError && (
+            <Text c="red" size="sm" mt="md">
+              Error saving strategy tuning: {strategyMutation.error.message}
             </Text>
           )}
         </Tabs>

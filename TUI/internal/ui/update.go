@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/key"
 	"charm.land/bubbles/v2/viewport"
@@ -30,7 +31,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.contentDirty = true
 
 	case tea.KeyPressMsg:
-		if key.Matches(msg, keys.OpenSettings) {
+		if !m.inSettings && key.Matches(msg, keys.OpenSettings) {
 			m.inSettings = true
 			m.apiURLInput = m.apiURL
 			m.statusMsg = ""
@@ -106,6 +107,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.contentDirty = true
 			if !m.scrolling {
 				m.scrolling = true
+				m.scrollStart = time.Now()
 				cmds = append(cmds, tickCmd())
 			}
 		}
@@ -130,13 +132,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		if m.scrolling {
-			m.scrollAccum += scrollLinesPerSec * scrollInterval.Seconds()
+			now := time.Time(msg)
+			if now.Before(m.pausedUntil) {
+				cmds = append(cmds, tickCmd())
+				break
+			}
+
+			m.scrollAccum += m.currentScrollSpeed(now) * scrollInterval.Seconds()
 			lines := int(m.scrollAccum)
-			if lines > 0 {
+			if lines > 0 && m.contentLines > 0 {
 				m.scrollAccum -= float64(lines)
-				m.viewport.SetYOffset(m.viewport.YOffset() + lines)
-				if m.contentLines > 0 && m.viewport.YOffset() >= m.contentLines {
-					m.viewport.SetYOffset(m.viewport.YOffset() - m.contentLines)
+				for i := 0; i < lines; i++ {
+					y := m.viewport.YOffset() + 1
+					if y >= m.contentLines {
+						y -= m.contentLines
+					}
+					m.viewport.SetYOffset(y)
+
+					pauseHere := false
+					for _, stop := range m.scrollPauses {
+						if y == stop {
+							pauseHere = true
+							break
+						}
+					}
+					if pauseHere {
+						m.pausedUntil = now.Add(sectionPauseDuration)
+						m.scrollAccum = 0
+						break
+					}
 				}
 			}
 			cmds = append(cmds, tickCmd())

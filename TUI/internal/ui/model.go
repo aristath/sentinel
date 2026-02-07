@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"math"
 	"sort"
 	"time"
 
@@ -36,6 +37,9 @@ type Model struct {
 	// Auto-scroll
 	scrolling    bool
 	scrollAccum  float64
+	scrollStart  time.Time
+	pausedUntil  time.Time
+	scrollPauses []int
 	contentLines int // line count of one content block
 	contentDirty bool
 
@@ -70,8 +74,15 @@ type securitiesMsg struct {
 	err        error
 }
 
-// Scroll: ~43fps tick (matched to 43Hz display) with slow scroll for smooth kiosk viewing.
-const scrollLinesPerSec = 2.0
+// Scroll tuning for kiosk-like motion:
+// - faster base movement
+// - periodic cadence variation
+// - brief pauses at section/card boundaries
+const baseScrollLinesPerSec = 5.2
+const minScrollLinesPerSec = 2.8
+const cadenceAmplitude = 1.6
+const cadencePeriod = 34 * time.Second
+const sectionPauseDuration = 2 * time.Second
 const scrollInterval = 23 * time.Millisecond
 
 type tickMsg time.Time
@@ -152,6 +163,23 @@ func tickCmd() tea.Cmd {
 	return tea.Tick(scrollInterval, func(t time.Time) tea.Msg {
 		return tickMsg(t)
 	})
+}
+
+func (m Model) currentScrollSpeed(now time.Time) float64 {
+	if m.scrollStart.IsZero() {
+		return baseScrollLinesPerSec
+	}
+	elapsed := now.Sub(m.scrollStart).Seconds()
+	period := cadencePeriod.Seconds()
+
+	// Layer two waves for subtle cadence changes without abrupt jumps.
+	w1 := math.Sin((2 * math.Pi * elapsed) / period)
+	w2 := math.Sin((2 * math.Pi * elapsed) / (period * 0.42))
+	speed := baseScrollLinesPerSec + cadenceAmplitude*(0.72*w1+0.28*w2)
+	if speed < minScrollLinesPerSec {
+		return minScrollLinesPerSec
+	}
+	return speed
 }
 
 func scheduleRefresh() tea.Cmd {
