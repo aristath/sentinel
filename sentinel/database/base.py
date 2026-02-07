@@ -300,6 +300,41 @@ class BaseDatabase:
         row = await cursor.fetchone()
         return row[0] if row else 0
 
+    async def get_latest_trades_for_symbols(self, symbols: list[str]) -> dict[str, dict]:
+        """Get latest trade row per symbol.
+
+        Args:
+            symbols: Symbols to fetch latest trade for
+
+        Returns:
+            Dict mapping symbol -> latest trade row dict
+        """
+        if not symbols:
+            return {}
+        placeholders = ",".join("?" for _ in symbols)
+        query = f"""
+            SELECT t.*
+            FROM trades t
+            INNER JOIN (
+                SELECT symbol, MAX(executed_at) AS max_executed_at
+                FROM trades
+                WHERE symbol IN ({placeholders})
+                GROUP BY symbol
+            ) latest
+              ON latest.symbol = t.symbol
+             AND latest.max_executed_at = t.executed_at
+            WHERE t.symbol IN ({placeholders})
+            ORDER BY t.symbol ASC, t.executed_at DESC
+        """  # noqa: S608
+        cursor = await self.conn.execute(query, [*symbols, *symbols])
+        rows = await cursor.fetchall()
+        result: dict[str, dict] = {}
+        for row in rows:
+            symbol = row["symbol"]
+            if symbol not in result:
+                result[symbol] = dict(row)
+        return result
+
     async def get_total_fees(self) -> dict[str, float]:
         """
         Get total trading fees grouped by currency.
@@ -545,6 +580,68 @@ class BaseDatabase:
         cursor = await self.conn.execute(query, params)
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
+
+    async def get_prices_for_symbols(
+        self,
+        symbols: list[str],
+        days: int | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, list[dict]]:
+        """Get historical prices for multiple symbols in one query.
+
+        Args:
+            symbols: List of security symbols
+            days: Optional per-symbol limit on most recent rows
+            end_date: If set, only include rows with date <= end_date (YYYY-MM-DD)
+
+        Returns:
+            Dict mapping symbol -> list of price dicts (newest first)
+        """
+        if not symbols:
+            return {}
+
+        placeholders = ",".join("?" for _ in symbols)
+        where_parts = [f"symbol IN ({placeholders})"]  # noqa: S608
+        params: list[str | int] = list(symbols)
+        if end_date is not None:
+            where_parts.append("date <= ?")
+            params.append(end_date)
+        where_sql = " AND ".join(where_parts)
+
+        grouped: dict[str, list[dict]] = {symbol: [] for symbol in symbols}
+
+        if days and days > 0:
+            # Use a window function for per-symbol LIMIT.
+            query = f"""
+                WITH ranked AS (
+                    SELECT
+                        p.*,
+                        ROW_NUMBER() OVER (PARTITION BY p.symbol ORDER BY p.date DESC) AS rn
+                    FROM prices p
+                    WHERE {where_sql}
+                )
+                SELECT * FROM ranked
+                WHERE rn <= ?
+                ORDER BY symbol ASC, date DESC
+            """  # noqa: S608
+            try:
+                cursor = await self.conn.execute(query, [*params, days])
+                rows = await cursor.fetchall()
+                for row in rows:
+                    item = dict(row)
+                    item.pop("rn", None)
+                    grouped[row["symbol"]].append(item)
+                return grouped
+            except aiosqlite.OperationalError:
+                # Fallback for SQLite builds without window-function support.
+                pass
+
+        query = f"SELECT * FROM prices WHERE {where_sql} ORDER BY symbol ASC, date DESC"  # noqa: S608
+        cursor = await self.conn.execute(query, params)
+        rows = await cursor.fetchall()
+        for row in rows:
+            grouped[row["symbol"]].append(dict(row))
+        return grouped
 
     # -------------------------------------------------------------------------
     # Portfolio Snapshots
