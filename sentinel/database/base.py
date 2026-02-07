@@ -317,82 +317,6 @@ class BaseDatabase:
         return {row["commission_currency"]: row["total"] or 0.0 for row in rows}
 
     # -------------------------------------------------------------------------
-    # Scores
-    # -------------------------------------------------------------------------
-
-    async def get_score(self, symbol: str, as_of_date: int | None = None) -> float | None:
-        """Get the latest score for a single security, optionally as of a date.
-
-        Args:
-            symbol: Security symbol
-            as_of_date: If set (unix timestamp), return score where calculated_at <= as_of_date;
-                otherwise return latest score.
-
-        Returns:
-            Score value, or None if not found
-        """
-        if as_of_date is None:
-            cursor = await self.conn.execute(
-                "SELECT score FROM scores WHERE symbol = ? ORDER BY calculated_at DESC, id DESC LIMIT 1",
-                (symbol,),
-            )
-        else:
-            cursor = await self.conn.execute(
-                """SELECT score FROM scores WHERE symbol = ? AND calculated_at <= ?
-                   ORDER BY calculated_at DESC, id DESC LIMIT 1""",
-                (symbol, as_of_date),
-            )
-        row = await cursor.fetchone()
-        return row["score"] if row else None
-
-    async def get_scores(self, symbols: list[str], as_of_date: int | None = None) -> dict[str, float]:
-        """Get latest score per symbol for multiple securities, optionally as of a date.
-
-        Args:
-            symbols: List of security symbols
-            as_of_date: If set (unix timestamp), return latest score per symbol where
-                calculated_at <= as_of_date; otherwise return latest per symbol.
-
-        Returns:
-            Dict mapping symbol to score (only includes symbols that have scores)
-        """
-        if not symbols:
-            return {}
-        placeholders = ",".join("?" * len(symbols))
-        if as_of_date is None:
-            params = symbols + symbols + symbols
-            cursor = await self.conn.execute(
-                f"""SELECT s.symbol, s.score FROM scores s
-                   INNER JOIN (
-                     SELECT symbol, MAX(calculated_at) AS calculated_at FROM scores
-                     WHERE symbol IN ({placeholders}) GROUP BY symbol
-                   ) latest ON s.symbol = latest.symbol AND s.calculated_at = latest.calculated_at
-                   INNER JOIN (
-                     SELECT symbol, calculated_at, MAX(id) AS id FROM scores
-                     WHERE symbol IN ({placeholders}) GROUP BY symbol, calculated_at
-                   ) mid ON s.symbol = mid.symbol AND s.calculated_at = mid.calculated_at AND s.id = mid.id
-                   WHERE s.symbol IN ({placeholders})""",  # noqa: S608
-                params,
-            )
-        else:
-            params = symbols + [as_of_date] + symbols + [as_of_date] + symbols
-            cursor = await self.conn.execute(
-                f"""SELECT s.symbol, s.score FROM scores s
-                   INNER JOIN (
-                     SELECT symbol, MAX(calculated_at) AS calculated_at FROM scores
-                     WHERE symbol IN ({placeholders}) AND calculated_at <= ? GROUP BY symbol
-                   ) latest ON s.symbol = latest.symbol AND s.calculated_at = latest.calculated_at
-                   INNER JOIN (
-                     SELECT symbol, calculated_at, MAX(id) AS id FROM scores
-                     WHERE symbol IN ({placeholders}) AND calculated_at <= ? GROUP BY symbol, calculated_at
-                   ) mid ON s.symbol = mid.symbol AND s.calculated_at = mid.calculated_at AND s.id = mid.id
-                   WHERE s.symbol IN ({placeholders})""",  # noqa: S608
-                params,
-            )
-        rows = await cursor.fetchall()
-        return {row["symbol"]: row["score"] for row in rows}
-
-    # -------------------------------------------------------------------------
     # Cash Flows
     # -------------------------------------------------------------------------
 
@@ -666,17 +590,6 @@ class BaseDatabase:
         )
         await self.conn.commit()
 
-    async def get_all_scores_history(self) -> list[dict]:
-        """Get all wavelet scores ordered by symbol and date.
-
-        Returns:
-            List of {symbol, score, calculated_at} dicts
-        """
-        cursor = await self.conn.execute(
-            "SELECT symbol, score, calculated_at FROM scores ORDER BY symbol, calculated_at"
-        )
-        return [dict(row) for row in await cursor.fetchall()]
-
     async def get_latest_snapshot_date(self) -> int | None:
         """
         Get the date of the most recent portfolio snapshot.
@@ -687,3 +600,60 @@ class BaseDatabase:
         cursor = await self.conn.execute("SELECT date FROM portfolio_snapshots ORDER BY date DESC LIMIT 1")
         row = await cursor.fetchone()
         return row["date"] if row else None
+
+    async def get_portfolio_snapshot_as_of(self, as_of_ts: int) -> dict | None:
+        """Get the latest portfolio snapshot at or before a timestamp."""
+        import json
+
+        cursor = await self.conn.execute(
+            "SELECT date, data FROM portfolio_snapshots WHERE date <= ? ORDER BY date DESC LIMIT 1",
+            (as_of_ts,),
+        )
+        row = await cursor.fetchone()
+        if not row:
+            return None
+        return {"date": row["date"], "data": json.loads(row["data"])}
+
+    # -------------------------------------------------------------------------
+    # Strategy State
+    # -------------------------------------------------------------------------
+
+    async def get_strategy_state(self, symbol: str) -> dict | None:
+        """Get strategy state row for a symbol."""
+        cursor = await self.conn.execute("SELECT * FROM strategy_state WHERE symbol = ?", (symbol,))
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def get_strategy_states(self, symbols: list[str] | None = None) -> dict[str, dict]:
+        """Get strategy state rows keyed by symbol."""
+        if not symbols:
+            cursor = await self.conn.execute("SELECT * FROM strategy_state")
+        else:
+            placeholders = ",".join("?" for _ in symbols)
+            cursor = await self.conn.execute(
+                f"SELECT * FROM strategy_state WHERE symbol IN ({placeholders})",  # noqa: S608
+                symbols,
+            )
+        rows = await cursor.fetchall()
+        return {row["symbol"]: dict(row) for row in rows}
+
+    async def upsert_strategy_state(self, symbol: str, **fields) -> None:
+        """Insert or update strategy state for a symbol."""
+        existing = await self.get_strategy_state(symbol)
+        if existing:
+            if not fields:
+                return
+            sets = ", ".join(f"{k} = ?" for k in fields.keys())
+            await self.conn.execute(
+                f"UPDATE strategy_state SET {sets} WHERE symbol = ?",  # noqa: S608
+                (*fields.values(), symbol),
+            )
+        else:
+            data = {"symbol": symbol, **fields}
+            cols = ", ".join(data.keys())
+            placeholders = ", ".join("?" * len(data))
+            await self.conn.execute(
+                f"INSERT INTO strategy_state ({cols}) VALUES ({placeholders})",  # noqa: S608
+                tuple(data.values()),
+            )
+        await self.conn.commit()

@@ -37,7 +37,7 @@ echo "[3/5] Extracting on device..."
 sshpass -p "$SSH_PASS" ssh "$REMOTE_HOST" "mkdir -p $REMOTE_DIR && cd $REMOTE_DIR && tar -xzf /tmp/sentinel_code.tar.gz && rm /tmp/sentinel_code.tar.gz"
 
 if [ "$WITH_DATA" = true ]; then
-    echo "[4/5] Syncing data (database + ML models)..."
+    echo "[4/5] Syncing data directory..."
     rsync -avz --progress \
         -e "sshpass -p $SSH_PASS ssh" \
         data/ "$REMOTE_HOST:$REMOTE_DIR/data/"

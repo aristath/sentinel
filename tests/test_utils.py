@@ -180,41 +180,31 @@ class TestAdjustScoreForConviction:
     """Tests for adjust_score_for_conviction function."""
 
     def test_neutral_conviction_no_change(self):
-        """Multiplier 1.0 (neutral) should not change score."""
+        """Conviction 0.5 (neutral) should not change score."""
         base = 0.05  # 5% expected return
-        result = adjust_score_for_conviction(base, 1.0)
+        result = adjust_score_for_conviction(base, 0.5)
         assert result == base
 
-    def test_bullish_conviction_boost(self):
-        """Multiplier 2.0 (max bullish) adds +0.30."""
+    def test_high_conviction_boost(self):
+        """Conviction 1.0 (max) adds +0.20."""
         base = 0.05
-        result = adjust_score_for_conviction(base, 2.0)
-        # 0.05 + (2.0 - 1.0) * 0.3 = 0.05 + 0.30 = 0.35
-        assert abs(result - 0.35) < 0.001
-
-    def test_bearish_conviction_penalty(self):
-        """Multiplier 0.5 (bearish) subtracts -0.15."""
-        base = 0.05
-        result = adjust_score_for_conviction(base, 0.5)
-        # 0.05 + (0.5 - 1.0) * 0.3 = 0.05 - 0.15 = -0.10
-        assert abs(result - (-0.10)) < 0.001
-
-    def test_strong_bearish_conviction(self):
-        """Multiplier 0.25 (strong bearish) subtracts -0.225."""
-        base = 0.0
-        result = adjust_score_for_conviction(base, 0.25)
-        # 0.0 + (0.25 - 1.0) * 0.3 = 0.0 - 0.225 = -0.225
-        assert abs(result - (-0.225)) < 0.001
-
-    def test_moderate_bullish_conviction(self):
-        """Multiplier 1.5 adds +0.15."""
-        base = 0.10
-        result = adjust_score_for_conviction(base, 1.5)
-        # 0.10 + (1.5 - 1.0) * 0.3 = 0.10 + 0.15 = 0.25
+        result = adjust_score_for_conviction(base, 1.0)
         assert abs(result - 0.25) < 0.001
 
-    def test_none_multiplier_treated_as_neutral(self):
-        """None multiplier should be treated as 1.0 (neutral)."""
+    def test_low_conviction_penalty(self):
+        """Conviction 0.0 (min) subtracts -0.20."""
+        base = 0.05
+        result = adjust_score_for_conviction(base, 0.0)
+        assert abs(result - (-0.15)) < 0.001
+
+    def test_mid_high_conviction_boost(self):
+        """Conviction 0.75 adds +0.10."""
+        base = 0.0
+        result = adjust_score_for_conviction(base, 0.75)
+        assert abs(result - 0.10) < 0.001
+
+    def test_none_conviction_treated_as_neutral(self):
+        """None conviction should be treated as 0.5 (neutral)."""
         base = 0.05
         result = adjust_score_for_conviction(base, cast(float, None))
         assert result == base
@@ -222,20 +212,19 @@ class TestAdjustScoreForConviction:
     def test_negative_base_score(self):
         """Works correctly with negative base scores."""
         base = -0.10  # -10% expected return
-        result = adjust_score_for_conviction(base, 2.0)
-        # -0.10 + 0.30 = 0.20
-        assert abs(result - 0.20) < 0.001
+        result = adjust_score_for_conviction(base, 1.0)
+        assert abs(result - 0.10) < 0.001
 
     def test_conviction_can_flip_sign(self):
         """Strong conviction can flip a negative score to positive."""
         base = -0.05
-        result = adjust_score_for_conviction(base, 2.0)
+        result = adjust_score_for_conviction(base, 1.0)
         assert result > 0  # Became positive
 
     def test_conviction_can_make_negative(self):
-        """Bearish conviction can make a positive score negative."""
+        """Low conviction can make a positive score negative."""
         base = 0.05
-        result = adjust_score_for_conviction(base, 0.25)
+        result = adjust_score_for_conviction(base, 0.0)
         assert result < 0  # Became negative
 
 
@@ -451,22 +440,20 @@ class TestPositionCalculator:
 class TestEdgeCases:
     """Edge case tests for utilities."""
 
-    def test_conviction_with_extreme_multiplier(self):
-        """Extreme multipliers are handled gracefully."""
-        # Very high multiplier
+    def test_conviction_out_of_range_is_clamped(self):
+        """Out-of-range conviction values are clamped to [0, 1]."""
         result = adjust_score_for_conviction(0.0, 10.0)
-        assert abs(result - 2.7) < 0.001  # (10 - 1) * 0.3 = 2.7
+        assert abs(result - 0.2) < 0.001
 
-        # Very low multiplier
-        result = adjust_score_for_conviction(0.0, 0.0)
-        assert abs(result - (-0.3)) < 0.001  # (0 - 1) * 0.3 = -0.3
+        result = adjust_score_for_conviction(0.0, -5.0)
+        assert abs(result - (-0.2)) < 0.001
 
     def test_conviction_with_float_precision(self):
         """Float precision doesn't cause issues."""
         base = 0.123456789
-        multiplier = 1.333333333
-        result = adjust_score_for_conviction(base, multiplier)
-        expected = base + (multiplier - 1.0) * 0.3
+        conviction = 0.733333333
+        result = adjust_score_for_conviction(base, conviction)
+        expected = base + (conviction - 0.5) * 0.4
         assert abs(result - expected) < 0.0000001
 
     @pytest.mark.asyncio

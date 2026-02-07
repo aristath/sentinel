@@ -3,24 +3,35 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
-import math
 from dataclasses import asdict
 from datetime import datetime, timezone
 
-import httpx
-
-from sentinel.analyzer import Analyzer
 from sentinel.broker import Broker
 from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.portfolio import Portfolio
 from sentinel.price_validator import PriceValidator, check_trade_blocking
 from sentinel.settings import Settings
+from sentinel.strategy import (
+    classify_lot_size,
+    compute_contrarian_signal,
+    effective_opportunity_score,
+    recent_dd252_min,
+)
 from sentinel.utils.scoring import adjust_score_for_conviction
 
 from .models import TradeRecommendation
+from .rebalance_cash import apply_cash_constraint, generate_deficit_sells, get_deficit_sells
+from .rebalance_rules import (
+    calculate_priority,
+    desired_tranche_stage,
+    generate_buy_reason,
+    generate_sell_reason,
+    get_forced_opportunity_exit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +41,20 @@ class RebalanceEngine:
 
     # Buffer to maintain above zero when calculating deficit (avoid oscillating)
     BALANCE_BUFFER_EUR = 10.0
+
+    @staticmethod
+    def _recommendation_cache_key(min_trade_value: float) -> str:
+        """Build stable cache key for recommendation payloads."""
+        return f"planner:recommendations:{float(min_trade_value):.2f}"
+
+    @staticmethod
+    def _normalize_conviction(value: object) -> float:
+        """Normalize conviction into [0.0, 1.0]."""
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return 0.5
+        return max(0.0, min(1.0, parsed))
 
     def __init__(
         self,
@@ -53,7 +78,34 @@ class RebalanceEngine:
         self._portfolio = portfolio or Portfolio()
         self._settings = settings or Settings()
         self._currency = currency or Currency()
-        self._analyzer = Analyzer(db=self._db)
+
+    async def _load_runtime_settings(self) -> dict[str, float]:
+        defaults: dict[str, float] = {
+            "transaction_fee_fixed": 2.0,
+            "transaction_fee_percent": 0.2,
+            "strategy_lot_standard_max_pct": 0.08,
+            "strategy_lot_coarse_max_pct": 0.30,
+            "strategy_min_opp_score": 0.55,
+            "strategy_entry_t1_dd": -0.10,
+            "strategy_entry_t2_dd": -0.16,
+            "strategy_entry_t3_dd": -0.22,
+            "strategy_entry_memory_days": 42,
+            "strategy_memory_max_boost": 0.18,
+            "max_position_pct": 25,
+            "strategy_opportunity_addon_threshold": 0.75,
+            "strategy_rotation_time_stop_days": 90,
+            "strategy_opportunity_cooloff_days": 7,
+            "strategy_core_cooloff_days": 21,
+            "strategy_core_new_min_score": 0.30,
+            "strategy_core_new_min_dip_score": 0.20,
+            "strategy_coarse_max_new_lots_per_cycle": 1,
+            "strategy_core_floor_pct": 0.05,
+            "strategy_max_opportunity_buys_per_cycle": 4,
+            "strategy_max_new_opportunity_buys_per_cycle": 2,
+        }
+        keys = list(defaults.keys())
+        values = await asyncio.gather(*[self._settings.get(k, defaults[k]) for k in keys])
+        return {k: float(v if v is not None else defaults[k]) for k, v in zip(keys, values, strict=False)}
 
     async def get_recommendations(
         self,
@@ -83,16 +135,21 @@ class RebalanceEngine:
 
         # Skip cache when as_of_date is set (e.g. backtest)
         if as_of_date is None:
-            cache_key = f"planner:recommendations:{min_trade_value}"
-            cached = await self._db.cache_get(cache_key)
-            if cached is not None:
-                return [TradeRecommendation(**r) for r in json.loads(cached)]
+            cache_key = self._recommendation_cache_key(min_trade_value)
+            cache_getter = getattr(self._db, "cache_get", None)
+            if callable(cache_getter):
+                maybe_cached = cache_getter(cache_key)
+                if inspect.isawaitable(maybe_cached):
+                    cached = await maybe_cached
+                    if cached is not None:
+                        return [TradeRecommendation(**r) for r in json.loads(cached)]
 
         if total_value == 0:
             return []
+        settings_ctx = await self._load_runtime_settings()
 
-        # Get all expected returns and security data
-        expected_returns = {}
+        # Build per-symbol signal scores and market context for recommendation rules.
+        contrarian_scores = {}
         security_data = {}
 
         all_symbols = list(set(list(ideal.keys()) + list(current.keys())))
@@ -103,25 +160,22 @@ class RebalanceEngine:
         else:
             current_quotes = await self._broker.get_quotes(all_symbols)
 
-        # Batch-fetch securities, positions, and scores
+        # Batch-fetch securities and positions
         all_securities = await self._db.get_all_securities(active_only=False)
         securities_map = {s["symbol"]: s for s in all_securities}
 
-        all_positions = await self._db.get_all_positions()
+        all_positions = await self._get_positions_for_context(as_of_date=as_of_date, securities_map=securities_map)
         positions_map = {p["symbol"]: p for p in all_positions}
 
-        end_of_day_ts: int | None = None
-        # Scores: when as_of_date is set (e.g. backtest), request scores as of that date explicitly.
-        if as_of_date is not None:
-            end_of_day_ts = int(
-                datetime.strptime(as_of_date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
-                .replace(tzinfo=timezone.utc)
-                .timestamp()
-            )
-            scores_map = await self._db.get_scores(all_symbols, as_of_date=end_of_day_ts)
-        else:
-            scores_map = await self._db.get_scores(all_symbols)
-        ml_scores_map = await self._get_ml_weighted_scores(all_symbols, as_of_ts=end_of_day_ts)
+        fee_fixed = settings_ctx["transaction_fee_fixed"]
+        fee_pct = settings_ctx["transaction_fee_percent"] / 100.0
+        lot_standard_max_pct = settings_ctx["strategy_lot_standard_max_pct"]
+        lot_coarse_max_pct = settings_ctx["strategy_lot_coarse_max_pct"]
+        min_opp_score = settings_ctx["strategy_min_opp_score"]
+        entry_t1_dd = settings_ctx["strategy_entry_t1_dd"]
+        entry_t3_dd = settings_ctx["strategy_entry_t3_dd"]
+        entry_memory_days = int(settings_ctx["strategy_entry_memory_days"])
+        memory_max_boost = settings_ctx["strategy_memory_max_boost"]
 
         # Fetch historical prices: single path via get_prices(end_date=as_of_date).
         # When as_of_date is None we get latest 250; when set we get only data on or before that date.
@@ -143,16 +197,46 @@ class RebalanceEngine:
         hist_prices_list = await asyncio.gather(*[get_historical_ohlcv(s) for s in all_symbols])
         hist_prices_map = {all_symbols[i]: hist_prices_list[i] for i in range(len(all_symbols))}
 
+        symbol_signals: dict[str, dict[str, float | int | str]] = {}
+        sleeves_map = {}
+        cache_getter = getattr(self._db, "cache_get", None)
+        if callable(cache_getter):
+            maybe_sleeves = cache_getter("planner:contrarian_sleeves")
+            if inspect.isawaitable(maybe_sleeves):
+                sleeves_cache = await maybe_sleeves
+                sleeves_map = json.loads(sleeves_cache) if sleeves_cache else {}
+        strategy_states_getter = getattr(self._db, "get_strategy_states", None)
+        strategy_states = {}
+        if callable(strategy_states_getter):
+            maybe_states = strategy_states_getter(all_symbols)
+            if inspect.isawaitable(maybe_states):
+                strategy_states = await maybe_states
+        currencies = {(securities_map.get(symbol) or {}).get("currency", "EUR") for symbol in all_symbols}
+        fx_rates = {currency: await self._currency.get_rate(currency) for currency in currencies}
         # Process each symbol
         for symbol in all_symbols:
             sec = securities_map.get(symbol)
             pos = positions_map.get(symbol)
-            user_multiplier = sec.get("user_multiplier", 1.0) if sec else 1.0
+            conviction = self._normalize_conviction(sec.get("user_multiplier", 0.5) if sec else 0.5)
 
-            wavelet_score = scores_map.get(symbol, 0)
             hist_rows = hist_prices_map.get(symbol, [])
-            base_score = ml_scores_map.get(symbol, wavelet_score)
-            expected_returns[symbol] = adjust_score_for_conviction(base_score, user_multiplier or 1.0)
+            closes = [float(r["close"]) for r in reversed(hist_rows) if r.get("close") is not None]
+            signal: dict[str, float | int | str] = dict(compute_contrarian_signal(closes))
+            signal["dd252_recent_min"] = recent_dd252_min(closes, window_days=entry_memory_days)
+            raw_score = float(signal.get("opp_score", 0.0) or 0.0)
+            effective_score = effective_opportunity_score(
+                raw_opp_score=raw_score,
+                cycle_turn=int(signal.get("cycle_turn", 0) or 0),
+                freefall_block=int(signal.get("freefall_block", 0) or 0),
+                recent_dd252_min_value=float(signal.get("dd252_recent_min", 0.0) or 0.0),
+                entry_t1_dd=entry_t1_dd,
+                entry_t3_dd=entry_t3_dd,
+                max_boost=memory_max_boost,
+            )
+            signal["opp_score_raw"] = raw_score
+            signal["opp_score"] = effective_score
+            signal["memory_boosted"] = 1 if effective_score > raw_score else 0
+            contrarian_scores[symbol] = adjust_score_for_conviction(effective_score, conviction)
 
             # Get price
             price = self._get_price(symbol, current_quotes, pos, hist_rows)
@@ -160,15 +244,43 @@ class RebalanceEngine:
             # Check for price anomaly
             trade_blocked, block_reason = self._check_price_anomaly(price, hist_rows, symbol)
 
+            symbol_currency = sec.get("currency", "EUR") if sec else "EUR"
+            fx_rate = fx_rates.get(symbol_currency, 1.0)
+            lot_profile = classify_lot_size(
+                price=price,
+                lot_size=sec.get("min_lot", 1) if sec else 1,
+                fx_rate_to_eur=fx_rate,
+                portfolio_value_eur=total_value,
+                fee_fixed_eur=fee_fixed,
+                fee_pct=fee_pct,
+                standard_max_pct=lot_standard_max_pct,
+                coarse_max_pct=lot_coarse_max_pct,
+            )
+            signal["ticket_pct"] = float(lot_profile["ticket_pct"])
+            signal["lot_class"] = str(lot_profile["lot_class"])
+            signal["lot_size"] = int(sec.get("min_lot", 1) if sec else 1)
+            cached_sleeve = sleeves_map.get(symbol)
+            if cached_sleeve is None:
+                cached_sleeve = "opportunity" if effective_score >= min_opp_score else "core"
+            signal["sleeve"] = str(cached_sleeve)
+            signal["state_tranche_stage"] = int((strategy_states.get(symbol) or {}).get("tranche_stage", 0) or 0)
+            signal["state_scaleout_stage"] = int((strategy_states.get(symbol) or {}).get("scaleout_stage", 0) or 0)
+            symbol_signals[symbol] = signal
+
             security_data[symbol] = {
                 "price": price,
                 "currency": sec.get("currency", "EUR") if sec else "EUR",
                 "lot_size": sec.get("min_lot", 1) if sec else 1,
                 "current_qty": pos.get("quantity", 0) if pos else 0,
+                "avg_cost": pos.get("avg_cost", 0) if pos else 0,
                 "allow_buy": sec.get("allow_buy", 1) if sec else 1,
                 "allow_sell": sec.get("allow_sell", 1) if sec else 1,
                 "trade_blocked": trade_blocked,
                 "block_reason": block_reason,
+                "lot_class": lot_profile["lot_class"],
+                "ticket_pct": lot_profile["ticket_pct"],
+                "min_ticket_eur": lot_profile["min_ticket_eur"],
+                "state": strategy_states.get(symbol) or {},
             }
 
         # Generate recommendations
@@ -181,8 +293,10 @@ class RebalanceEngine:
                 current,
                 total_value,
                 security_data,
-                expected_returns,
+                contrarian_scores,
+                symbol_signals,
                 min_trade_value,
+                settings_ctx=settings_ctx,
                 as_of_date=as_of_date,
             )
             if rec:
@@ -192,24 +306,89 @@ class RebalanceEngine:
         recommendations.sort(key=lambda x: (0 if x.action == "sell" else 1, -x.priority))
 
         # Add deficit-fix sells at the front
-        deficit_sells = await self._get_deficit_sells(as_of_date=as_of_date)
+        deficit_sells = await self._get_deficit_sells(
+            as_of_date=as_of_date,
+            ideal=ideal,
+            current=current,
+            total_value=total_value,
+        )
         if deficit_sells:
             deficit_symbols = {s.symbol for s in deficit_sells}
             recommendations = [r for r in recommendations if r.symbol not in deficit_symbols or r.action != "sell"]
             recommendations = deficit_sells + recommendations
 
-        # Apply cash constraint
-        recommendations = await self._apply_cash_constraint(recommendations, min_trade_value)
+        # Throttle aggressive opportunity buy count per cycle.
+        recommendations = await self._apply_opportunity_buy_throttle(
+            recommendations,
+            max_opp_buys=int(settings_ctx["strategy_max_opportunity_buys_per_cycle"]),
+            max_new_opp_buys=int(settings_ctx["strategy_max_new_opportunity_buys_per_cycle"]),
+        )
+
+        # Apply cash constraint (including optional funding sells)
+        recommendations = await self._apply_cash_constraint(
+            recommendations,
+            min_trade_value,
+            as_of_date=as_of_date,
+            ideal=ideal,
+            current=current,
+            total_value=total_value,
+            symbol_convictions={
+                symbol: self._normalize_conviction(sec.get("user_multiplier", 0.5))
+                for symbol, sec in securities_map.items()
+            },
+        )
 
         # Cache result only when live (not as_of_date)
         if as_of_date is None:
-            cache_key = f"planner:recommendations:{min_trade_value}"
-            await self._db.cache_set(
-                cache_key,
-                json.dumps([asdict(r) for r in recommendations]),
-                ttl_seconds=300,
-            )
+            cache_key = self._recommendation_cache_key(min_trade_value)
+            cache_setter = getattr(self._db, "cache_set", None)
+            if callable(cache_setter):
+                maybe_set = cache_setter(
+                    cache_key,
+                    json.dumps([asdict(r) for r in recommendations]),
+                    ttl_seconds=300,
+                )
+                if inspect.isawaitable(maybe_set):
+                    await maybe_set
         return recommendations
+
+    async def _apply_opportunity_buy_throttle(
+        self,
+        recommendations: list[TradeRecommendation],
+        max_opp_buys: int | None = None,
+        max_new_opp_buys: int | None = None,
+    ) -> list[TradeRecommendation]:
+        """Limit opportunity buys per cycle to reduce churn and concentrated risk."""
+        if max_opp_buys is None:
+            max_opp_buys = int(await self._settings.get("strategy_max_opportunity_buys_per_cycle", 4))
+        if max_new_opp_buys is None:
+            max_new_opp_buys = int(await self._settings.get("strategy_max_new_opportunity_buys_per_cycle", 2))
+        if max_opp_buys < 0:
+            max_opp_buys = 0
+        if max_new_opp_buys < 0:
+            max_new_opp_buys = 0
+
+        sells = [r for r in recommendations if r.action == "sell"]
+        non_opp_buys = [r for r in recommendations if r.action == "buy" and r.sleeve != "opportunity"]
+        opp_buys = [r for r in recommendations if r.action == "buy" and r.sleeve == "opportunity"]
+        if not opp_buys:
+            return recommendations
+
+        def rank_key(rec: TradeRecommendation) -> tuple[float, float, float]:
+            return (float(rec.priority), float(rec.contrarian_score), float(rec.value_delta_eur))
+
+        new_opp = [r for r in opp_buys if float(r.current_allocation) <= 1e-6]
+        add_opp = [r for r in opp_buys if float(r.current_allocation) > 1e-6]
+        new_opp.sort(key=rank_key, reverse=True)
+        add_opp.sort(key=rank_key, reverse=True)
+
+        kept_new = new_opp[:max_new_opp_buys]
+        remaining = max(0, max_opp_buys - len(kept_new))
+        kept_add = add_opp[:remaining]
+
+        buys = non_opp_buys + kept_new + kept_add
+        buys.sort(key=lambda r: float(r.priority), reverse=True)
+        return sells + buys
 
     def _get_price(
         self,
@@ -251,17 +430,16 @@ class RebalanceEngine:
         current: dict[str, float],
         total_value: float,
         security_data: dict,
-        expected_returns: dict[str, float],
+        contrarian_scores: dict[str, float],
+        signal_data: dict[str, dict[str, float | int | str]],
         min_trade_value: float,
+        settings_ctx: dict[str, float],
         as_of_date: str | None = None,
     ) -> TradeRecommendation | None:
         """Build a single trade recommendation for a symbol."""
         current_alloc = current.get(symbol, 0)
         target_alloc = ideal.get(symbol, 0)
         delta = target_alloc - current_alloc
-
-        if abs(delta) < 0.0001:  # No significant change needed
-            return None
 
         raw_value_delta = delta * total_value
         sec_data = security_data.get(symbol)
@@ -273,8 +451,23 @@ class RebalanceEngine:
         currency = sec_data["currency"]
         lot_size = sec_data["lot_size"]
         current_qty = sec_data["current_qty"]
+        avg_cost = sec_data.get("avg_cost", 0)
         allow_buy = sec_data.get("allow_buy", 1)
         allow_sell = sec_data.get("allow_sell", 1)
+        lot_class = sec_data.get("lot_class", "standard")
+        ticket_pct = float(sec_data.get("ticket_pct", 0.0) or 0.0)
+        signal = signal_data.get(symbol, {})
+        sleeve = str(signal.get("sleeve", "core"))
+        state = sec_data.get("state", {}) or {}
+        opp_score = float(signal.get("opp_score", 0.0) or 0.0)
+        raw_opp_score = float(signal.get("opp_score_raw", opp_score) or 0.0)
+        memory_boosted = bool(int(signal.get("memory_boosted", 0) or 0) == 1)
+        min_opp_score = settings_ctx["strategy_min_opp_score"]
+        max_position_pct = settings_ctx["max_position_pct"] / 100.0
+        addon_threshold = settings_ctx["strategy_opportunity_addon_threshold"]
+        entry_t1_dd = settings_ctx["strategy_entry_t1_dd"]
+        entry_t2_dd = settings_ctx["strategy_entry_t2_dd"]
+        entry_t3_dd = settings_ctx["strategy_entry_t3_dd"]
 
         if price <= 0:
             return None
@@ -282,20 +475,45 @@ class RebalanceEngine:
         if sec_data.get("trade_blocked"):
             return None
 
+        # Opportunity sleeve forced exits/rotation can trigger sells even without allocation drift.
+        forced_exit = get_forced_opportunity_exit(
+            signal=signal,
+            state=state,
+            current_qty=current_qty,
+            price=price,
+            avg_cost=avg_cost,
+            as_of_date=as_of_date,
+            time_stop_days=int(settings_ctx["strategy_rotation_time_stop_days"]),
+        )
+        forced_sell_qty = 0
+        forced_reason = ""
+        forced_reason_code = None
+        if forced_exit and sleeve == "opportunity":
+            forced_sell_qty = forced_exit["quantity"]
+            forced_reason = forced_exit["reason"]
+            forced_reason_code = forced_exit["reason_code"]
+
+        if abs(delta) < 0.0001 and forced_sell_qty <= 0:  # No significant change needed
+            return None
+
         # Check cool-off period
-        cooloff_days = await self._settings.get("trade_cooloff_days", 30)
+        if sleeve == "opportunity":
+            cooloff_days = int(settings_ctx["strategy_opportunity_cooloff_days"])
+        else:
+            cooloff_days = int(settings_ctx["strategy_core_cooloff_days"])
+        action_for_cooloff = "sell" if forced_sell_qty > 0 else ("buy" if delta > 0 else "sell")
         is_blocked, _ = await self._check_cooloff_violation(
             symbol,
-            "buy" if delta > 0 else "sell",
+            action_for_cooloff,
             cooloff_days,
             as_of_date=as_of_date,
         )
         if is_blocked:
             return None
 
-        if delta > 0 and not allow_buy:
+        if delta > 0 and forced_sell_qty <= 0 and not allow_buy:
             return None
-        if delta < 0 and not allow_sell:
+        if (delta < 0 or forced_sell_qty > 0) and not allow_sell:
             return None
 
         # Convert to local currency
@@ -306,16 +524,89 @@ class RebalanceEngine:
             local_value_delta = raw_value_delta
 
         # Calculate quantity
-        raw_qty = abs(local_value_delta) / price
-        rounded_qty = (int(raw_qty) // lot_size) * lot_size
+        if forced_sell_qty > 0:
+            rounded_qty = forced_sell_qty
+        else:
+            raw_qty = abs(local_value_delta) / price
+            rounded_qty = (int(raw_qty) // lot_size) * lot_size
 
         if rounded_qty < lot_size:
             return None
 
-        if delta < 0:
+        if delta < 0 or forced_sell_qty > 0:
             rounded_qty = min(rounded_qty, current_qty)
             if rounded_qty < lot_size:
                 return None
+
+        if delta > 0 and forced_sell_qty <= 0:
+            # For new core names, require minimum contrarian quality to avoid pure drift-driven churn.
+            if sleeve == "core" and current_alloc <= 1e-6 and lot_class == "standard":
+                core_new_min_score = settings_ctx["strategy_core_new_min_score"]
+                core_new_min_dip = settings_ctx["strategy_core_new_min_dip_score"]
+                dip_score = float(signal.get("dip_score", 0.0) or 0.0)
+                cycle_turn = int(signal.get("cycle_turn", 0) or 0)
+                if opp_score < core_new_min_score:
+                    return None
+                if dip_score < core_new_min_dip and cycle_turn == 0:
+                    return None
+
+            # Tranche entry control for opportunity sleeve.
+            desired_stage = 0
+            if sleeve == "opportunity":
+                desired_stage = desired_tranche_stage(
+                    float(signal.get("dd252", 0.0) or 0.0),
+                    entry_t1_dd,
+                    entry_t2_dd,
+                    entry_t3_dd,
+                )
+                recent_stage = desired_tranche_stage(
+                    float(signal.get("dd252_recent_min", signal.get("dd252", 0.0)) or 0.0),
+                    entry_t1_dd,
+                    entry_t2_dd,
+                    entry_t3_dd,
+                )
+                # Event memory: allow entry after rebound if a qualifying dip happened recently.
+                if desired_stage <= 0 and int(signal.get("cycle_turn", 0) or 0) == 1 and recent_stage > 0:
+                    desired_stage = max(1, recent_stage - 1)
+                current_stage = int(state.get("tranche_stage", 0) or 0)
+                if desired_stage <= 0:
+                    return None
+                if desired_stage <= current_stage and current_qty > 0:
+                    # Allow additional accumulation on very strong opportunities if under hard cap.
+                    if not (opp_score >= addon_threshold and current_alloc < max_position_pct):
+                        return None
+            if lot_class == "jumbo" and current_qty <= 0:
+                return None
+            if lot_class == "coarse":
+                # Allow stacking for very strong opportunities.
+                if opp_score < 0.8:
+                    max_new_lots = int(settings_ctx["strategy_coarse_max_new_lots_per_cycle"])
+                    rounded_qty = min(rounded_qty, max_new_lots * lot_size)
+                    if rounded_qty < lot_size:
+                        return None
+
+        core_floor_active = False
+        if delta < 0 or forced_sell_qty > 0:
+            # Protect core holdings from over-trimming.
+            floor_pct = settings_ctx["strategy_core_floor_pct"]
+            if sleeve == "core":
+                current_value = current_alloc * total_value
+                max_sell_value_eur = max(0.0, current_value - (floor_pct * total_value))
+                core_floor_active = current_value <= (floor_pct * total_value)
+                if max_sell_value_eur <= 0:
+                    return None
+                if currency != "EUR":
+                    rate = await self._currency.get_rate(currency)
+                    max_sell_local = max_sell_value_eur / rate if rate > 0 else max_sell_value_eur
+                else:
+                    max_sell_local = max_sell_value_eur
+                max_sell_qty = (int(max_sell_local / price) // lot_size) * lot_size
+                # Keep at least one lot for held core positions.
+                if current_qty >= lot_size:
+                    max_sell_qty = min(max_sell_qty, max(0, current_qty - lot_size))
+                rounded_qty = min(rounded_qty, max_sell_qty)
+                if rounded_qty < lot_size:
+                    return None
 
         # Recalculate EUR value
         local_value = rounded_qty * price
@@ -324,19 +615,71 @@ class RebalanceEngine:
         else:
             actual_value_eur = local_value
 
+        # Enforce hard per-symbol cap for buys.
+        if delta > 0 and forced_sell_qty <= 0:
+            current_value_eur = current_alloc * total_value
+            max_target_value_eur = max_position_pct * total_value
+            max_buy_eur = max(0.0, max_target_value_eur - current_value_eur)
+            if max_buy_eur <= 0:
+                return None
+            if actual_value_eur > max_buy_eur:
+                if currency != "EUR":
+                    rate = await self._currency.get_rate(currency)
+                    max_buy_local = max_buy_eur / rate if rate > 0 else max_buy_eur
+                else:
+                    max_buy_local = max_buy_eur
+                capped_qty = (int(max_buy_local / price) // lot_size) * lot_size
+                if capped_qty < lot_size:
+                    return None
+                rounded_qty = capped_qty
+                local_value = rounded_qty * price
+                if currency != "EUR":
+                    actual_value_eur = await self._currency.to_eur(local_value, currency)
+                else:
+                    actual_value_eur = local_value
+
         if actual_value_eur < min_trade_value:
             return None
 
-        expected_return = expected_returns.get(symbol, 0)
+        contrarian_score = contrarian_scores.get(symbol, 0)
+        reason_code = None
+        memory_entry = False
 
-        if delta > 0:
+        if forced_sell_qty > 0:
+            action = "sell"
+            reason = forced_reason
+            reason_code = forced_reason_code
+        elif delta > 0:
             action = "buy"
-            reason = self._generate_buy_reason(symbol, expected_return, current_alloc, target_alloc)
+            reason_code = "rebalance_buy"
+            if sleeve == "opportunity":
+                reason_stage = desired_stage if desired_stage > 0 else 1
+                reason_code = f"entry_t{reason_stage}"
+                memory_entry = memory_boosted and raw_opp_score < min_opp_score <= opp_score
+            reason = generate_buy_reason(
+                symbol=symbol,
+                contrarian_score=contrarian_score,
+                current_alloc=current_alloc,
+                target_alloc=target_alloc,
+                signal=signal,
+                lot_class=lot_class,
+            )
         else:
             action = "sell"
-            reason = self._generate_sell_reason(symbol, expected_return, current_alloc, target_alloc)
+            reason_code = "rebalance_sell"
+            reason = generate_sell_reason(
+                symbol=symbol,
+                contrarian_score=contrarian_score,
+                current_alloc=current_alloc,
+                target_alloc=target_alloc,
+                signal=signal,
+            )
 
-        priority = self._calculate_priority(action, delta, expected_return)
+        priority = calculate_priority(
+            action=action,
+            allocation_delta=delta,
+            contrarian_score=contrarian_score,
+        )
 
         return TradeRecommendation(
             symbol=symbol,
@@ -351,9 +694,15 @@ class RebalanceEngine:
             price=price,
             currency=currency,
             lot_size=lot_size,
-            expected_return=expected_return,
+            contrarian_score=contrarian_score,
             priority=priority,
             reason=reason,
+            reason_code=reason_code,
+            sleeve=sleeve,
+            lot_class=lot_class,
+            ticket_pct=ticket_pct,
+            core_floor_active=core_floor_active,
+            memory_entry=memory_entry,
         )
 
     async def _check_cooloff_violation(
@@ -368,13 +717,18 @@ class RebalanceEngine:
         Returns:
             Tuple of (is_blocked, reason)
         """
-        from datetime import datetime
 
         if cooloff_days <= 0:
             return False, ""
 
         # Get last trade for this symbol
-        trades = await self._db.get_trades(symbol=symbol, limit=1)
+        trades_fn = getattr(self._db, "get_trades", None)
+        if not callable(trades_fn):
+            return False, ""
+        maybe_trades = trades_fn(symbol=symbol, limit=1)
+        if not inspect.isawaitable(maybe_trades):
+            return False, ""
+        trades = await maybe_trades
 
         if not trades:
             return False, ""  # No trade history, allow trade
@@ -403,446 +757,121 @@ class RebalanceEngine:
         # Same direction as last trade, or enough time has passed
         return False, ""
 
-    def _calculate_priority(self, action: str, allocation_delta: float, expected_return: float) -> float:
-        """Calculate priority score for a recommendation."""
-        base = abs(allocation_delta) * 10
-
-        if action == "buy":
-            return base + expected_return
-        else:
-            return base - expected_return
-
-    def _generate_buy_reason(
-        self, symbol: str, expected_return: float, current_alloc: float, target_alloc: float
-    ) -> str:
-        """Generate human-readable reason for buy recommendation."""
-        underweight = (target_alloc - current_alloc) * 100
-
-        if current_alloc == 0:
-            return f"New position: {symbol} has expected return of {expected_return:.2f}"
-
-        if expected_return > 0.3:
-            return f"Underweight by {underweight:.1f}%. High expected return ({expected_return:.2f})"
-        elif expected_return > 0:
-            return f"Underweight by {underweight:.1f}%. Positive expected return ({expected_return:.2f})"
-        else:
-            return f"Underweight by {underweight:.1f}% despite neutral outlook"
-
-    def _generate_sell_reason(
-        self, symbol: str, expected_return: float, current_alloc: float, target_alloc: float
-    ) -> str:
-        """Generate human-readable reason for sell recommendation."""
-        overweight = (current_alloc - target_alloc) * 100
-
-        if target_alloc == 0:
-            if expected_return < 0:
-                return f"Exit position: {symbol} has negative expected return ({expected_return:.2f})"
-            else:
-                return f"Exit position: {symbol} not in ideal portfolio"
-
-        if expected_return < 0:
-            return f"Overweight by {overweight:.1f}%. Negative expected return ({expected_return:.2f})"
-        else:
-            return f"Overweight by {overweight:.1f}%. Reduce to target allocation"
-
     async def _apply_cash_constraint(
         self,
         recommendations: list[TradeRecommendation],
         min_trade_value: float,
+        as_of_date: str | None = None,
+        ideal: dict[str, float] | None = None,
+        current: dict[str, float] | None = None,
+        total_value: float | None = None,
+        symbol_convictions: dict[str, float] | None = None,
     ) -> list[TradeRecommendation]:
         """Scale down buy recommendations to fit within available cash."""
-        fixed_fee = await self._settings.get("transaction_fee_fixed", 2.0)
-        pct_fee = await self._settings.get("transaction_fee_percent", 0.2) / 100
-
-        sells = [r for r in recommendations if r.action == "sell"]
-        buys = [r for r in recommendations if r.action == "buy"]
-
-        if not buys:
-            return recommendations
-
-        # Calculate available budget
-        current_cash = await self._portfolio.total_cash_eur()
-        net_sell_proceeds = sum(
-            abs(r.value_delta_eur) - self._calculate_transaction_cost(abs(r.value_delta_eur), fixed_fee, pct_fee)
-            for r in sells
-        )
-        available_budget = current_cash + net_sell_proceeds
-
-        # Calculate total buy costs
-        total_buy_costs = sum(
-            r.value_delta_eur + self._calculate_transaction_cost(r.value_delta_eur, fixed_fee, pct_fee) for r in buys
+        return await apply_cash_constraint(
+            engine=self,
+            recommendations=recommendations,
+            min_trade_value=min_trade_value,
+            as_of_date=as_of_date,
+            ideal=ideal,
+            current=current,
+            total_value=total_value,
+            symbol_convictions=symbol_convictions,
         )
 
-        if total_buy_costs <= available_budget:
-            return recommendations
-
-        # Scale down buys
-        buys_by_priority = sorted(buys, key=lambda x: -x.priority)
-        remaining_budget = available_budget
-
-        buy_minimums = []
-        for buy in buys_by_priority:
-            one_lot_local = buy.lot_size * buy.price
-            if buy.currency != "EUR":
-                one_lot_eur = await self._currency.to_eur(one_lot_local, buy.currency)
-            else:
-                one_lot_eur = one_lot_local
-
-            if one_lot_eur >= min_trade_value:
-                min_qty = buy.lot_size
-                min_eur = one_lot_eur
-            elif one_lot_eur <= 0:
-                continue
-            else:
-                lots_needed = int(min_trade_value / one_lot_eur) + 1
-                min_qty = lots_needed * buy.lot_size
-                min_eur = lots_needed * one_lot_eur
-
-            if min_qty > buy.quantity:
-                min_qty = buy.quantity
-                min_local_value = min_qty * buy.price
-                if buy.currency != "EUR":
-                    min_eur = await self._currency.to_eur(min_local_value, buy.currency)
-                else:
-                    min_eur = min_local_value
-
-            min_cost_with_tx = min_eur + self._calculate_transaction_cost(min_eur, fixed_fee, pct_fee)
-            ideal_cost_with_tx = buy.value_delta_eur + self._calculate_transaction_cost(
-                buy.value_delta_eur, fixed_fee, pct_fee
-            )
-            buy_minimums.append(
-                {
-                    "buy": buy,
-                    "min_qty": min_qty,
-                    "min_eur": min_eur,
-                    "min_cost": min_cost_with_tx,
-                    "ideal_eur": buy.value_delta_eur,
-                    "ideal_cost": ideal_cost_with_tx,
-                }
-            )
-
-        included_buys = []
-        for item in buy_minimums:
-            if item["min_cost"] <= remaining_budget:
-                included_buys.append(item)
-                remaining_budget -= item["min_cost"]
-
-        if not included_buys:
-            return sells
-
-        # Distribute remaining budget proportionally
-        total_extra_needed = sum(max(0, item["ideal_cost"] - item["min_cost"]) for item in included_buys)
-
-        final_buys = []
-        for item in included_buys:
-            buy = item["buy"]
-            min_eur = item["min_eur"]
-            ideal_cost = item["ideal_cost"]
-            allocated_eur = min_eur
-
-            if total_extra_needed > 0 and remaining_budget > 0:
-                extra_needed = max(0, ideal_cost - item["min_cost"])
-                proportion = extra_needed / total_extra_needed
-                extra_budget = proportion * remaining_budget
-                extra_trade_value = extra_budget / (1 + pct_fee)
-                allocated_eur += extra_trade_value
-
-            # Convert back to quantity
-            if buy.currency != "EUR":
-                rate = await self._currency.get_rate(buy.currency)
-                local_value = allocated_eur / rate if rate > 0 else allocated_eur
-            else:
-                local_value = allocated_eur
-
-            raw_qty = local_value / buy.price
-            rounded_qty = (int(raw_qty) // buy.lot_size) * buy.lot_size
-
-            if rounded_qty < buy.lot_size:
-                continue
-
-            actual_local = rounded_qty * buy.price
-            if buy.currency != "EUR":
-                actual_eur = await self._currency.to_eur(actual_local, buy.currency)
-            else:
-                actual_eur = actual_local
-
-            if actual_eur < min_trade_value:
-                continue
-
-            final_buys.append(
-                TradeRecommendation(
-                    symbol=buy.symbol,
-                    action="buy",
-                    current_allocation=buy.current_allocation,
-                    target_allocation=buy.target_allocation,
-                    allocation_delta=buy.allocation_delta,
-                    current_value_eur=buy.current_value_eur,
-                    target_value_eur=buy.target_value_eur,
-                    value_delta_eur=actual_eur,
-                    quantity=rounded_qty,
-                    price=buy.price,
-                    currency=buy.currency,
-                    lot_size=buy.lot_size,
-                    expected_return=buy.expected_return,
-                    priority=buy.priority,
-                    reason=buy.reason,
-                )
-            )
-
-        final_buys.sort(key=lambda x: -x.priority)
-
-        # Top-up with leftover budget
-        total_buy_cost = sum(
-            b.value_delta_eur + self._calculate_transaction_cost(b.value_delta_eur, fixed_fee, pct_fee)
-            for b in final_buys
-        )
-        leftover = available_budget - total_buy_cost
-
-        iterations = 0
-        while leftover > 0 and iterations < 1000:
-            iterations += 1
-            added_any = False
-            for i, buy in enumerate(final_buys):
-                one_lot_local = buy.lot_size * buy.price
-                if buy.currency != "EUR":
-                    one_lot_eur = await self._currency.to_eur(one_lot_local, buy.currency)
-                else:
-                    one_lot_eur = one_lot_local
-                one_lot_cost = one_lot_eur + self._calculate_transaction_cost(one_lot_eur, fixed_fee, pct_fee)
-
-                if one_lot_cost <= leftover:
-                    new_qty = buy.quantity + buy.lot_size
-                    new_local_value = new_qty * buy.price
-                    if buy.currency != "EUR":
-                        new_eur = await self._currency.to_eur(new_local_value, buy.currency)
-                    else:
-                        new_eur = new_local_value
-
-                    final_buys[i] = TradeRecommendation(
-                        symbol=buy.symbol,
-                        action="buy",
-                        current_allocation=buy.current_allocation,
-                        target_allocation=buy.target_allocation,
-                        allocation_delta=buy.allocation_delta,
-                        current_value_eur=buy.current_value_eur,
-                        target_value_eur=buy.target_value_eur,
-                        value_delta_eur=new_eur,
-                        quantity=new_qty,
-                        price=buy.price,
-                        currency=buy.currency,
-                        lot_size=buy.lot_size,
-                        expected_return=buy.expected_return,
-                        priority=buy.priority,
-                        reason=buy.reason,
-                    )
-                    leftover -= one_lot_cost
-                    added_any = True
-
-            if not added_any:
-                break
-
-        return sells + final_buys
-
-    def _calculate_transaction_cost(self, value: float, fixed_fee: float, pct_fee: float) -> float:
-        """Calculate transaction cost for a trade."""
-        return fixed_fee + (value * pct_fee)
-
-    async def _get_deficit_sells(self, as_of_date: str | None = None) -> list[TradeRecommendation]:
+    async def _get_deficit_sells(
+        self,
+        as_of_date: str | None = None,
+        ideal: dict[str, float] | None = None,
+        current: dict[str, float] | None = None,
+        total_value: float | None = None,
+    ) -> list[TradeRecommendation]:
         """Generate sell recommendations if negative balances can't be covered."""
-        balances = await self._portfolio.get_cash_balances()
-
-        total_deficit_eur = 0.0
-        for currency, amount in balances.items():
-            if amount < 0:
-                if currency == "EUR":
-                    total_deficit_eur += abs(amount) + self.BALANCE_BUFFER_EUR
-                else:
-                    total_deficit_eur += await self._currency.to_eur(abs(amount), currency) + self.BALANCE_BUFFER_EUR
-
-        if total_deficit_eur == 0:
-            return []
-
-        total_positive_eur = 0.0
-        for currency, amount in balances.items():
-            if amount > 0:
-                total_positive_eur += await self._currency.to_eur(amount, currency)
-
-        uncovered_deficit = total_deficit_eur - total_positive_eur
-        if uncovered_deficit <= 0:
-            return []
-
-        return await self._generate_deficit_sells(uncovered_deficit, as_of_date=as_of_date)
+        return await get_deficit_sells(
+            engine=self,
+            as_of_date=as_of_date,
+            ideal=ideal,
+            current=current,
+            total_value=total_value,
+        )
 
     async def _generate_deficit_sells(
         self,
         deficit_eur: float,
         as_of_date: str | None = None,
+        ideal: dict[str, float] | None = None,
+        current: dict[str, float] | None = None,
+        total_value: float | None = None,
+        reason_kind: str = "cash_deficit",
+        max_sell_conviction: float | None = None,
     ) -> list[TradeRecommendation]:
         """Generate sell recommendations to cover remaining deficit."""
-        sells: list[TradeRecommendation] = []
-        remaining_deficit = deficit_eur
+        return await generate_deficit_sells(
+            engine=self,
+            deficit_eur=deficit_eur,
+            as_of_date=as_of_date,
+            ideal=ideal,
+            current=current,
+            total_value=total_value,
+            reason_kind=reason_kind,
+            max_sell_conviction=max_sell_conviction,
+        )
 
-        positions = await self._db.get_all_positions()
-        if not positions:
-            return sells
+    async def _get_positions_for_context(
+        self,
+        *,
+        as_of_date: str | None,
+        securities_map: dict[str, dict],
+    ) -> list[dict]:
+        """Get positions either from live DB state or as-of snapshot state."""
+        if as_of_date is None:
+            return await self._db.get_all_positions()
 
-        all_securities = await self._db.get_all_securities(active_only=False)
-        securities_map = {s["symbol"]: s for s in all_securities}
+        get_snapshot = getattr(self._db, "get_portfolio_snapshot_as_of", None)
+        if get_snapshot is None:
+            return await self._db.get_all_positions()
+        as_of_ts = int(datetime.strptime(as_of_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+        maybe_snapshot = get_snapshot(as_of_ts)
+        if not inspect.isawaitable(maybe_snapshot):
+            return await self._db.get_all_positions()
+        snapshot = await maybe_snapshot
+        if not snapshot and self._db.__class__.__name__ == "SimulationDatabase":
+            return await self._db.get_all_positions()
+        if not snapshot:
+            return []
 
-        all_symbols = [pos["symbol"] for pos in positions]
-        end_of_day_ts: int | None = None
-        if as_of_date is not None:
-            end_of_day_ts = int(
-                datetime.strptime(as_of_date + " 23:59:59", "%Y-%m-%d %H:%M:%S")
-                .replace(tzinfo=timezone.utc)
-                .timestamp()
-            )
-            scores_map = await self._db.get_scores(all_symbols, as_of_date=end_of_day_ts)
-        else:
-            scores_map = await self._db.get_scores(all_symbols)
-        ml_scores_map = await self._get_ml_weighted_scores(all_symbols, as_of_ts=end_of_day_ts)
-
-        position_data = []
-        for pos in positions:
-            symbol = pos["symbol"]
-            qty = pos.get("quantity", 0)
-            if qty <= 0:
+        positions_blob = snapshot.get("data", {}).get("positions", {}) or {}
+        result: list[dict] = []
+        for symbol, payload in positions_blob.items():
+            quantity = float((payload or {}).get("quantity", 0) or 0)
+            if quantity <= 0:
                 continue
-
-            price = pos.get("current_price", 0)
-            if as_of_date is not None:
-                hist = await self._db.get_prices(symbol, days=1, end_date=as_of_date)
-                if hist:
-                    close = hist[0].get("close")
-                    if close is not None:
-                        try:
-                            price = float(close)
-                        except (TypeError, ValueError):
-                            price = 0
-
-            if price <= 0:
-                continue
-
-            sec = securities_map.get(symbol)
-            if not sec:
-                continue
-
-            if not sec.get("allow_sell", 1):
-                continue
-
-            currency = sec.get("currency", "EUR")
-            lot_size = sec.get("min_lot", 1)
-            score = ml_scores_map.get(symbol, scores_map.get(symbol, 0))
-
-            local_value = qty * price
-            eur_value = await self._currency.to_eur(local_value, currency)
-
-            position_data.append(
+            sec = securities_map.get(symbol) or {}
+            result.append(
                 {
                     "symbol": symbol,
-                    "quantity": qty,
-                    "price": price,
-                    "currency": currency,
-                    "lot_size": lot_size,
-                    "score": score,
-                    "eur_value": eur_value,
+                    "quantity": quantity,
+                    "currency": sec.get("currency", "EUR"),
+                    "current_price": 0.0,
                 }
             )
-
-        position_data.sort(key=lambda x: (x["score"], x["eur_value"]))
-        total_value = await self._portfolio.total_value()
-
-        for pos in position_data:
-            if remaining_deficit <= 0:
-                break
-
-            symbol = pos["symbol"]
-            qty = pos["quantity"]
-            price = pos["price"]
-            currency = pos["currency"]
-            lot_size = pos["lot_size"]
-            eur_value = pos["eur_value"]
-            score = pos["score"]
-
-            if eur_value <= remaining_deficit:
-                sell_qty = (qty // lot_size) * lot_size
-            else:
-                rate = await self._currency.get_rate(currency)
-                if rate > 0:
-                    local_needed = remaining_deficit / rate
-                else:
-                    local_needed = remaining_deficit
-                shares_needed = local_needed / price
-                sell_qty = math.ceil(shares_needed / lot_size) * lot_size
-                sell_qty = min(sell_qty, qty)
-
-            if sell_qty < lot_size:
-                continue
-
-            current_alloc = eur_value / total_value if total_value > 0 else 0
-            sell_value_local = sell_qty * price
-            sell_value_eur = await self._currency.to_eur(sell_value_local, currency)
-
-            sells.append(
-                TradeRecommendation(
-                    symbol=symbol,
-                    action="sell",
-                    current_allocation=current_alloc,
-                    target_allocation=0,
-                    allocation_delta=-current_alloc,
-                    current_value_eur=eur_value,
-                    target_value_eur=eur_value - sell_value_eur,
-                    value_delta_eur=-sell_value_eur,
-                    quantity=sell_qty,
-                    price=price,
-                    currency=currency,
-                    lot_size=lot_size,
-                    expected_return=score,
-                    priority=1000,
-                    reason=f"Sell to cover negative balance deficit ({remaining_deficit:.0f} EUR remaining)",
-                )
-            )
-
-            remaining_deficit -= sell_value_eur
-
-        return sells
-
-    async def _get_ml_weighted_scores(self, symbols: list[str], as_of_ts: int | None = None) -> dict[str, float]:
-        """Fetch blended ML scores from sentinel-ml for planner prioritization.
-
-        Falls back to empty map on connectivity issues so planner still works with
-        wavelet-only scoring.
-        """
-        if not symbols:
-            return {}
-
-        try:
-            base_url_setting = self._settings.get("ml_service_base_url", "http://localhost:8001")
-            if asyncio.iscoroutine(base_url_setting):
-                base_url_setting = await base_url_setting
-            base_url = str(base_url_setting or "http://localhost:8001").rstrip("/")
-
-            params: dict[str, str | int] = {"symbols": ",".join(symbols)}
-            if as_of_ts is not None:
-                params["as_of_ts"] = as_of_ts
-
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                response = await client.get(f"{base_url}/ml/latest-scores", params=params)
-                response.raise_for_status()
-                payload = response.json()
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Planner ML score fetch failed: %s", exc)
-            return {}
-
-        scores = payload.get("scores", {})
-        if not isinstance(scores, dict):
-            return {}
-
-        result: dict[str, float] = {}
-        for symbol, score_payload in scores.items():
-            if not isinstance(score_payload, dict):
-                continue
-            value = score_payload.get("final_score", score_payload.get("ml_score"))
-            if isinstance(value, int | float):
-                result[symbol] = float(value)
         return result
+
+    async def _get_cash_balances_for_context(self, as_of_date: str | None = None) -> dict[str, float]:
+        """Get cash balances from live portfolio or as-of snapshot."""
+        if as_of_date is None:
+            return await self._portfolio.get_cash_balances()
+
+        get_snapshot = getattr(self._db, "get_portfolio_snapshot_as_of", None)
+        if get_snapshot is None:
+            return await self._portfolio.get_cash_balances()
+        as_of_ts = int(datetime.strptime(as_of_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+        maybe_snapshot = get_snapshot(as_of_ts)
+        if not inspect.isawaitable(maybe_snapshot):
+            return await self._portfolio.get_cash_balances()
+        snapshot = await maybe_snapshot
+        if not snapshot and self._db.__class__.__name__ == "SimulationDatabase":
+            return await self._portfolio.get_cash_balances()
+        if not snapshot:
+            return {"EUR": 0.0}
+        return {"EUR": float(snapshot.get("data", {}).get("cash_eur", 0.0) or 0.0)}

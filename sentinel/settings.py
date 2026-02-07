@@ -25,15 +25,13 @@ DEFAULTS = {
     "transaction_fee_fixed": 2.0,  # Fixed fee per trade (EUR)
     "transaction_fee_percent": 0.2,  # Percentage fee (0.2%)
     # Position limits (for planner)
-    "max_position_pct": 20,  # Max 20% of portfolio in one position
+    "max_position_pct": 25,  # Hard cap per security
     "min_position_pct": 2,  # Min 2% position size
     "min_trade_value": 100.0,  # Minimum trade value (EUR)
     # Cash management
     "min_cash_buffer": 0.005,  # Keep 0.5% cash minimum
-    "target_cash_pct": 5,  # Target 5% cash
+    "target_cash_pct": 0,  # Fully invested strategy
     "simulated_cash_eur": None,  # Override cash in research mode (None = use real)
-    # Scoring
-    "score_lookback_years": 10,  # Years of history for scoring
     # Rebalancing
     "rebalance_threshold_pct": 5,  # Rebalance when 5% off target
     # Diversification
@@ -45,13 +43,31 @@ DEFAULTS = {
     # API
     "tradernet_api_key": "",
     "tradernet_api_secret": "",
-    "ml_service_base_url": "http://localhost:8001",
-    # Advanced Analytics
-    "use_regime_adjustment": False,
-    # Regime Detection
-    "regime_n_states": 3,
-    "regime_lookback_days": 504,
-    "regime_weight_adjustment": 0.2,  # ±20% weight adjustments
+    # Contrarian strategy
+    "strategy_core_target_pct": 80,
+    "strategy_opportunity_target_pct": 20,
+    "strategy_opportunity_target_max_pct": 30,
+    "strategy_min_opp_score": 0.55,
+    "strategy_entry_t1_dd": -0.10,
+    "strategy_entry_t2_dd": -0.16,
+    "strategy_entry_t3_dd": -0.22,
+    "strategy_entry_memory_days": 45,
+    "strategy_memory_max_boost": 0.12,
+    "strategy_opportunity_addon_threshold": 0.75,
+    "strategy_max_opportunity_buys_per_cycle": 1,
+    "strategy_max_new_opportunity_buys_per_cycle": 1,
+    "strategy_lot_standard_max_pct": 0.08,
+    "strategy_lot_coarse_max_pct": 0.30,
+    "strategy_coarse_max_new_lots_per_cycle": 1,
+    "strategy_core_floor_pct": 0.05,
+    "strategy_opportunity_cooloff_days": 7,
+    "strategy_core_cooloff_days": 21,
+    "strategy_rotation_time_stop_days": 90,
+    "strategy_core_new_min_score": 0.30,
+    "strategy_core_new_min_dip_score": 0.20,
+    "strategy_max_funding_sells_per_cycle": 2,
+    "strategy_max_funding_turnover_pct": 0.12,
+    "strategy_funding_conviction_bias": 1.0,
     # LED Display (Arduino UNO Q orbital visualization)
     "led_display_enabled": False,  # Disabled by default for dev environments
     "led_brightness": 200,  # Global LED brightness 0-255
@@ -61,16 +77,6 @@ DEFAULTS = {
     "r2_secret_key": "",
     "r2_bucket_name": "",
     "r2_backup_retention_days": 30,
-    # ML Per-Security Prediction (per-security settings in securities table)
-    "ml_weight_xgboost": 0.25,
-    "ml_weight_ridge": 0.25,
-    "ml_weight_rf": 0.25,
-    "ml_weight_svr": 0.25,
-    "ml_weight_wavelet": 0.25,
-    "ml_prediction_horizon_days": 21,  # Predict 21 days ahead (~1 month)
-    "ml_training_lookback_years": 8,
-    "ml_validation_split": 0.2,
-    "ml_min_samples_per_symbol": 100,  # Min samples to train a model for a symbol
 }
 
 

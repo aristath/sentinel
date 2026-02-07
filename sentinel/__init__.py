@@ -19,7 +19,6 @@ Usage:
     value = await portfolio.total_value()
 """
 
-from sentinel.analyzer import Analyzer
 from sentinel.broker import Broker
 from sentinel.cache import Cache
 from sentinel.currency import Currency
@@ -46,7 +45,6 @@ __all__ = [
     "Broker",
     "Security",
     "Portfolio",
-    "Analyzer",
     "Currency",
     "Cache",
     "LEDController",

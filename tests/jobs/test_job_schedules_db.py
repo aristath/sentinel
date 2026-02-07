@@ -200,7 +200,7 @@ async def test_seed_default_job_schedules_inserts_all(db):
     await db.seed_default_job_schedules()
 
     schedules = await db.get_job_schedules()
-    assert len(schedules) == 16  # ML/analytics jobs moved to sentinel-ml service
+    assert len(schedules) == 15
 
     # Check some specific defaults
     portfolio = await db.get_job_schedule("sync:portfolio")
@@ -237,23 +237,23 @@ async def test_get_last_job_completion_by_prefix(db):
         """INSERT INTO job_history
            (job_id, job_type, status, duration_ms, executed_at)
            VALUES (?, ?, 'completed', 100, ?)""",
-        ("ml:retrain:AAPL.US", "ml:retrain", now - 3600),  # 1 hour ago
+        ("sync:prices:AAPL.US", "sync:prices", now - 3600),  # 1 hour ago
     )
     await db.conn.execute(
         """INSERT INTO job_history
            (job_id, job_type, status, duration_ms, executed_at)
            VALUES (?, ?, 'completed', 100, ?)""",
-        ("ml:retrain:MSFT.US", "ml:retrain", now - 1800),  # 30 min ago
+        ("sync:prices:MSFT.US", "sync:prices", now - 1800),  # 30 min ago
     )
     await db.conn.execute(
         """INSERT INTO job_history
            (job_id, job_type, status, duration_ms, executed_at)
            VALUES (?, ?, 'completed', 100, ?)""",
-        ("ml:retrain:GOOG.US", "ml:retrain", now - 600),  # 10 min ago (most recent)
+        ("sync:prices:GOOG.US", "sync:prices", now - 600),  # 10 min ago (most recent)
     )
     await db.conn.commit()
 
-    last = await db.get_last_job_completion_by_prefix("ml:retrain")
+    last = await db.get_last_job_completion_by_prefix("sync:prices")
     assert last is not None
     # Should return the most recent (GOOG.US, 10 min ago)
     assert (now - last.timestamp()) < 700  # Within ~11 minutes
@@ -328,20 +328,20 @@ async def test_get_job_history_for_type_with_prefix(db):
         """INSERT INTO job_history
            (job_id, job_type, status, duration_ms, executed_at)
            VALUES (?, ?, 'completed', 100, ?)""",
-        ("ml:retrain:AAPL.US", "ml:retrain", now - 3600),
+        ("sync:prices:AAPL.US", "sync:prices", now - 3600),
     )
     await db.conn.execute(
         """INSERT INTO job_history
            (job_id, job_type, status, duration_ms, executed_at)
            VALUES (?, ?, 'completed', 150, ?)""",
-        ("ml:retrain:MSFT.US", "ml:retrain", now - 1800),
+        ("sync:prices:MSFT.US", "sync:prices", now - 1800),
     )
     await db.conn.commit()
 
-    history = await db.get_job_history_for_type("ml:retrain")
+    history = await db.get_job_history_for_type("sync:prices")
     assert len(history) == 2
 
     # Also test specific symbol
-    history_aapl = await db.get_job_history_for_type("ml:retrain:AAPL.US")
+    history_aapl = await db.get_job_history_for_type("sync:prices:AAPL.US")
     assert len(history_aapl) == 1
-    assert history_aapl[0]["job_id"] == "ml:retrain:AAPL.US"
+    assert history_aapl[0]["job_id"] == "sync:prices:AAPL.US"

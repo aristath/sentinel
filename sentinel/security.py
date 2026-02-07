@@ -6,7 +6,6 @@ Usage:
     await security.load()
     price = await security.get_price()
     await security.buy(10)
-    score = await security.get_score()
 """
 
 from datetime import datetime, timedelta
@@ -322,43 +321,6 @@ class Security:
         order_id = await self._broker.sell(self.symbol, quantity, price=limit_price)
         # Note: Trades are synced from broker, not recorded locally
         return order_id
-
-    # -------------------------------------------------------------------------
-    # Scoring
-    # -------------------------------------------------------------------------
-
-    async def get_score(self, as_of_date: int | None = None) -> Optional[float]:
-        """Get the calculated score for this security, optionally as of a date.
-
-        Args:
-            as_of_date: If set (unix timestamp), return score where calculated_at <= as_of_date.
-        """
-        return await self._db.get_score(self.symbol, as_of_date=as_of_date)
-
-    async def set_score(
-        self,
-        score: float,
-        components: dict | None = None,
-        calculated_at: int | None = None,
-    ) -> None:
-        """Set the calculated score for this security.
-
-        Args:
-            score: Score value (0-1).
-            components: Optional components dict (stored as JSON).
-            calculated_at: Optional Unix timestamp for the score date (e.g. end-of-day for backtest).
-                If None, uses current time (live).
-        """
-        import json
-        import time
-
-        ts = calculated_at if calculated_at is not None else int(time.time())
-        await self._db.conn.execute(
-            """INSERT INTO scores (symbol, score, components, calculated_at)
-               VALUES (?, ?, ?, ?)""",
-            (self.symbol, score, json.dumps(components) if components else None, ts),
-        )
-        await self._db.conn.commit()
 
     # -------------------------------------------------------------------------
     # Management

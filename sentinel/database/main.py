@@ -418,7 +418,7 @@ class Database(BaseDatabase):
     async def get_last_job_completion_by_id(self, job_id: str) -> Optional[datetime]:
         """Get the timestamp of the last successful completion for a specific job ID.
 
-        Use this for parameterized jobs like ML jobs where job_id includes the symbol.
+        Use this for parameterized jobs where job_id includes a specific target.
         """
         cursor = await self.conn.execute(
             """SELECT executed_at FROM job_history
@@ -449,12 +449,6 @@ class Database(BaseDatabase):
                ORDER BY executed_at DESC LIMIT ?""",
             (limit,),
         )
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
-
-    async def get_ml_enabled_securities(self) -> list[dict]:
-        """Get securities with ML enabled."""
-        cursor = await self.conn.execute("SELECT symbol FROM securities WHERE ml_enabled = 1 AND active = 1")
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
 
@@ -620,7 +614,6 @@ class Database(BaseDatabase):
             ("sync:cashflows", 1440, 1440, 0, "sync", "Sync cash flows from broker"),
             ("sync:dividends", 1440, 1440, 0, "sync", "Sync dividends from broker"),
             ("aggregate:compute", 1440, 1440, 1, "sync", "Compute aggregate price series"),
-            ("scoring:calculate", 1440, 1440, 0, "scoring", "Calculate security scores"),
             ("trading:check_markets", 30, 30, 2, "trading", "Check which markets are open"),
             ("trading:execute", 30, 15, 2, "trading", "Execute pending trade recommendations"),
             ("trading:rebalance", 60, 60, 0, "trading", "Check portfolio rebalance needs"),
@@ -678,330 +671,7 @@ class Database(BaseDatabase):
     async def _init_schema(self) -> None:
         """Initialize database schema."""
         await self.conn.executescript(SCHEMA)
-        await self._apply_migrations()
         await self.conn.commit()
-
-    async def _add_column_if_missing(self, table: str, column: str, definition: str) -> None:
-        """Add a column to a table if it doesn't already exist."""
-        cursor = await self.conn.execute(f"PRAGMA table_info({table})")
-        columns = {row[1] for row in await cursor.fetchall()}
-        if column not in columns:
-            await self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
-
-    async def _apply_migrations(self) -> None:
-        """Apply schema migrations for existing tables."""
-        # Add missing columns to securities table
-        migrations = [
-            ("market_id", "TEXT"),
-            ("data", "TEXT"),
-            ("last_synced", "INTEGER"),
-            ("user_multiplier", "REAL DEFAULT 1.0"),
-            ("ml_enabled", "INTEGER DEFAULT 0"),
-            ("ml_blend_ratio", "REAL DEFAULT 0.5"),
-            ("quote_data", "TEXT"),
-            ("quote_updated_at", "INTEGER"),
-            ("aliases", "TEXT"),
-        ]
-
-        for col_name, definition in migrations:
-            await self._add_column_if_missing("securities", col_name, definition)
-
-        # Create job system tables
-        await self.conn.executescript("""
-        -- Job History (for job system)
-        CREATE TABLE IF NOT EXISTS job_history (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            job_id TEXT NOT NULL,
-            job_type TEXT NOT NULL,
-            status TEXT NOT NULL CHECK(status IN ('completed', 'failed')),
-            error TEXT,
-            duration_ms INTEGER,
-            executed_at INTEGER NOT NULL,
-            retry_count INTEGER DEFAULT 0
-        );
-        CREATE INDEX IF NOT EXISTS idx_job_history_job_id ON job_history(job_id, executed_at DESC);
-        CREATE INDEX IF NOT EXISTS idx_job_history_job_type ON job_history(job_type, status, executed_at DESC);
-
-        -- Job Schedules (configurable job intervals and settings)
-        CREATE TABLE IF NOT EXISTS job_schedules (
-            job_type TEXT PRIMARY KEY,
-            interval_minutes INTEGER NOT NULL,
-            interval_market_open_minutes INTEGER,
-            market_timing INTEGER DEFAULT 0,
-            description TEXT,
-            category TEXT,
-            last_run INTEGER DEFAULT 0,
-            consecutive_failures INTEGER DEFAULT 0,
-            created_at INTEGER NOT NULL,
-            updated_at INTEGER NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS idx_job_schedules_category ON job_schedules(category, job_type);
-        """)
-
-        # Migration: Migrate trades table to new schema
-        await self._migrate_trades_table()
-
-        # Migration: Remove deprecated columns from job_schedules if they exist
-        await self._migrate_job_schedules()
-
-        # Migration: add last_run column to job_schedules if missing
-        cursor = await self.conn.execute("PRAGMA table_info(job_schedules)")
-        columns = {row[1] for row in await cursor.fetchall()}
-        if "last_run" not in columns:
-            await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN last_run INTEGER DEFAULT 0")
-        if "consecutive_failures" not in columns:
-            await self.conn.execute("ALTER TABLE job_schedules ADD COLUMN consecutive_failures INTEGER DEFAULT 0")
-
-        # Drop orphaned tables (ML/regime moved to ml.db; others unused)
-        for old_table in [
-            "ml_training_samples",
-            "ml_models",
-            "ml_predictions",
-            "ml_performance_tracking",
-            "regime_states",
-            "regime_models",
-            "correlation_matrices",
-            "hidden_categories",
-            "optimization_results",
-        ]:
-            await self.conn.execute(f"DROP TABLE IF EXISTS {old_table}")
-
-        # Migration: add sync:cashflows job schedule if missing (only for existing databases)
-        # Check if job_schedules has any data (indicating an existing database, not fresh install)
-        cursor = await self.conn.execute("SELECT COUNT(*) FROM job_schedules")
-        count_row = await cursor.fetchone()
-        if count_row and count_row[0] > 0:
-            # Existing database - check if sync:cashflows is missing
-            cursor = await self.conn.execute("SELECT 1 FROM job_schedules WHERE job_type = 'sync:cashflows'")
-            if not await cursor.fetchone():
-                now = int(datetime.now().timestamp())
-                await self.conn.execute(
-                    """INSERT INTO job_schedules
-                       (job_type, interval_minutes, interval_market_open_minutes,
-                        market_timing, description, category, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    ("sync:cashflows", 1440, 1440, 0, "Sync cash flows from broker", "sync", now, now),
-                )
-                logger.info("Added sync:cashflows job schedule")
-
-            # Check if sync:dividends is missing
-            cursor = await self.conn.execute("SELECT 1 FROM job_schedules WHERE job_type = 'sync:dividends'")
-            if not await cursor.fetchone():
-                now = int(datetime.now().timestamp())
-                await self.conn.execute(
-                    """INSERT INTO job_schedules
-                       (job_type, interval_minutes, interval_market_open_minutes,
-                        market_timing, description, category, created_at, updated_at)
-                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    ("sync:dividends", 1440, 1440, 0, "Sync dividends from broker", "sync", now, now),
-                )
-                logger.info("Added sync:dividends job schedule")
-
-        # Migration: portfolio_snapshots old schema → new JSON schema
-        await self._migrate_portfolio_snapshots()
-
-        # Migration: deduplicate trades and enforce UNIQUE on broker_trade_id
-        await self._migrate_trades_unique_constraint()
-
-        # Migration: add commission columns to trades table if missing
-        cursor = await self.conn.execute("PRAGMA table_info(trades)")
-        trade_columns = {row[1] for row in await cursor.fetchall()}
-        if "commission" not in trade_columns:
-            await self.conn.execute("ALTER TABLE trades ADD COLUMN commission REAL DEFAULT 0")
-            await self.conn.execute("ALTER TABLE trades ADD COLUMN commission_currency TEXT DEFAULT 'EUR'")
-            # Backfill commission from raw_data for existing trades
-            cursor = await self.conn.execute("SELECT id, raw_data FROM trades")
-            rows = await cursor.fetchall()
-            for row in rows:
-                try:
-                    data = json.loads(row["raw_data"])
-                    commission = float(data.get("commission", 0) or 0)
-                    commission_currency = data.get("commission_currency", "EUR")
-                    await self.conn.execute(
-                        "UPDATE trades SET commission = ?, commission_currency = ? WHERE id = ?",
-                        (commission, commission_currency, row["id"]),
-                    )
-                except (json.JSONDecodeError, ValueError, TypeError):
-                    pass
-            logger.info("Added commission columns to trades table and backfilled data")
-
-    async def _migrate_trades_table(self) -> None:
-        """Migrate trades table to new schema with broker_trade_id and raw_data."""
-        cursor = await self.conn.execute("PRAGMA table_info(trades)")
-        columns = {row[1] for row in await cursor.fetchall()}
-
-        # Check if we need to migrate (old schema has 'quantity' and 'price' columns)
-        if "quantity" in columns and "broker_trade_id" not in columns:
-            logger.info("Migrating trades table to new schema...")
-
-            # Drop old table and recreate with new schema
-            # Note: We lose old local trades, but that's expected - broker trades are now the source of truth
-            await self.conn.execute("DROP TABLE IF EXISTS trades")
-            await self.conn.execute("""
-                CREATE TABLE trades (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    broker_trade_id TEXT UNIQUE NOT NULL,
-                    symbol TEXT NOT NULL,
-                    side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL')),
-                    quantity REAL NOT NULL,
-                    price REAL NOT NULL,
-                    executed_at INTEGER NOT NULL,
-                    raw_data TEXT NOT NULL,
-                    FOREIGN KEY (symbol) REFERENCES securities(symbol)
-                )
-            """)
-            await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_broker_id ON trades(broker_trade_id)")
-            await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
-            await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_executed_at ON trades(executed_at)")
-            await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_side ON trades(side)")
-            await self.conn.commit()
-            logger.info("trades table migration complete")
-
-    async def _migrate_trades_unique_constraint(self) -> None:
-        """Ensure broker_trade_id has a UNIQUE constraint and deduplicate existing rows."""
-        # Check the actual CREATE TABLE statement for UNIQUE on broker_trade_id
-        cursor = await self.conn.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='trades'")
-        row = await cursor.fetchone()
-        if not row:
-            return
-
-        create_sql = row[0] or ""
-        if "broker_trade_id TEXT UNIQUE" in create_sql:
-            return  # Already correct
-
-        logger.info("Fixing trades table: adding UNIQUE constraint on broker_trade_id...")
-
-        # Count duplicates before fix
-        cursor = await self.conn.execute(
-            "SELECT COUNT(*) as total, COUNT(DISTINCT broker_trade_id) as unique_ids FROM trades"
-        )
-        counts = await cursor.fetchone()
-        total = counts[0] if counts is not None else 0
-        unique = counts[1] if counts is not None else 0
-        logger.info(f"  Before: {total} rows, {unique} unique broker_trade_ids ({total - unique} duplicates)")
-
-        # Rebuild table with UNIQUE constraint, keeping only one row per broker_trade_id
-        await self.conn.execute("""
-            CREATE TABLE trades_new (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                broker_trade_id TEXT UNIQUE NOT NULL,
-                symbol TEXT NOT NULL,
-                side TEXT NOT NULL CHECK(side IN ('BUY', 'SELL')),
-                quantity REAL NOT NULL,
-                price REAL NOT NULL,
-                commission REAL DEFAULT 0,
-                commission_currency TEXT DEFAULT 'EUR',
-                executed_at INTEGER NOT NULL,
-                raw_data TEXT,
-                FOREIGN KEY (symbol) REFERENCES securities(symbol)
-            )
-        """)
-
-        # Copy deduplicated data
-        await self.conn.execute("""
-            INSERT INTO trades_new
-                (broker_trade_id, symbol, side, quantity, price, commission,
-                 commission_currency, executed_at, raw_data)
-            SELECT broker_trade_id, symbol, side, quantity, price, commission,
-                   commission_currency, executed_at, raw_data
-            FROM trades
-            WHERE id IN (
-                SELECT MAX(id) FROM trades GROUP BY broker_trade_id
-            )
-        """)
-
-        await self.conn.execute("DROP TABLE trades")
-        await self.conn.execute("ALTER TABLE trades_new RENAME TO trades")
-
-        # Recreate indexes
-        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_broker_id ON trades(broker_trade_id)")
-        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol)")
-        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_executed_at ON trades(executed_at)")
-        await self.conn.execute("CREATE INDEX IF NOT EXISTS idx_trades_side ON trades(side)")
-
-        await self.conn.commit()
-
-        # Verify
-        cursor = await self.conn.execute("SELECT COUNT(*) FROM trades")
-        row = await cursor.fetchone()
-        new_count = row[0] if row is not None else 0
-        logger.info(f"  After: {new_count} rows (removed {total - new_count} duplicates)")
-        logger.info("  trades table UNIQUE constraint migration complete")
-
-    async def _migrate_job_schedules(self) -> None:
-        """Migrate job_schedules table to remove deprecated columns."""
-        # Check if old columns exist
-        cursor = await self.conn.execute("PRAGMA table_info(job_schedules)")
-        columns = {row[1] for row in await cursor.fetchall()}
-
-        # Columns to remove (if they exist)
-        deprecated_columns = {"enabled", "dependencies", "is_parameterized", "parameter_source", "parameter_field"}
-
-        if not deprecated_columns & columns:
-            # No migration needed
-            return
-
-        logger.info("Migrating job_schedules table to remove deprecated columns...")
-
-        # SQLite doesn't support DROP COLUMN directly (before 3.35), so we need to:
-        # 1. Create new table with clean schema
-        # 2. Copy data
-        # 3. Drop old table
-        # 4. Rename new table
-
-        await self.conn.execute("""
-            CREATE TABLE IF NOT EXISTS job_schedules_new (
-                job_type TEXT PRIMARY KEY,
-                interval_minutes INTEGER NOT NULL,
-                interval_market_open_minutes INTEGER,
-                market_timing INTEGER DEFAULT 0,
-                description TEXT,
-                category TEXT,
-                last_run INTEGER DEFAULT 0,
-                consecutive_failures INTEGER DEFAULT 0,
-                created_at INTEGER NOT NULL,
-                updated_at INTEGER NOT NULL
-            )
-        """)
-
-        await self.conn.execute("""
-            INSERT OR REPLACE INTO job_schedules_new
-                (job_type, interval_minutes, interval_market_open_minutes,
-                 market_timing, description, category, last_run,
-                 consecutive_failures, created_at, updated_at)
-            SELECT
-                job_type, interval_minutes, interval_market_open_minutes,
-                market_timing, description, category,
-                COALESCE(last_run, 0),
-                COALESCE(consecutive_failures, 0),
-                created_at, updated_at
-            FROM job_schedules
-        """)
-
-        await self.conn.execute("DROP TABLE job_schedules")
-        await self.conn.execute("ALTER TABLE job_schedules_new RENAME TO job_schedules")
-        await self.conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_job_schedules_category ON job_schedules(category, job_type)"
-        )
-
-        await self.conn.commit()
-        logger.info("job_schedules migration complete")
-
-    async def _migrate_portfolio_snapshots(self) -> None:
-        """Drop old wide-column portfolio_snapshots and recreate with JSON schema."""
-        cursor = await self.conn.execute("PRAGMA table_info(portfolio_snapshots)")
-        columns = {row[1] for row in await cursor.fetchall()}
-        if "total_value_eur" in columns:
-            logger.info("Migrating portfolio_snapshots to JSON schema (dropping old table)...")
-            await self.conn.execute("DROP TABLE portfolio_snapshots")
-            await self.conn.execute("""
-                CREATE TABLE portfolio_snapshots (
-                    date INTEGER PRIMARY KEY,
-                    data TEXT NOT NULL
-                )
-            """)
-            await self.conn.commit()
-            logger.info("portfolio_snapshots migration complete")
 
 
 SCHEMA = """
@@ -1023,9 +693,7 @@ CREATE TABLE IF NOT EXISTS securities (
     active INTEGER DEFAULT 1,
     allow_buy INTEGER DEFAULT 1,
     allow_sell INTEGER DEFAULT 1,
-    user_multiplier REAL DEFAULT 1.0,  -- User conviction multiplier (0.5 = bearish, 1.0 = neutral, 2.0 = bullish)
-    ml_enabled INTEGER DEFAULT 0,  -- Per-security ML toggle (0 = disabled, 1 = enabled)
-    ml_blend_ratio REAL DEFAULT 0.5,  -- ML/wavelet blend (0.0 = pure wavelet, 1.0 = pure ML)
+    user_multiplier REAL DEFAULT 0.5,  -- User conviction (0.0 low conviction, 0.5 neutral, 1.0 high conviction)
     aliases TEXT,  -- Comma-separated alternative names for news/sentiment search
     data TEXT,  -- Raw Tradernet API response (JSON)
     last_synced INTEGER,
@@ -1079,17 +747,6 @@ CREATE TABLE IF NOT EXISTS allocation_targets (
     PRIMARY KEY (type, name)
 );
 
--- Scores (historical; one row per calculation, latest per symbol via query)
-CREATE TABLE IF NOT EXISTS scores (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    symbol TEXT NOT NULL,
-    score REAL,
-    components TEXT,  -- JSON with breakdown
-    calculated_at INTEGER NOT NULL,
-    FOREIGN KEY (symbol) REFERENCES securities(symbol)
-);
-CREATE INDEX IF NOT EXISTS idx_scores_symbol_calculated_at ON scores (symbol, calculated_at);
-
 -- Cash balances per currency
 CREATE TABLE IF NOT EXISTS cash_balances (
     currency TEXT PRIMARY KEY,
@@ -1116,6 +773,32 @@ CREATE TABLE IF NOT EXISTS cash_flows (
     raw_data TEXT NOT NULL
 );
 
+-- Job schedules (runtime cadence configuration)
+CREATE TABLE IF NOT EXISTS job_schedules (
+    job_type TEXT PRIMARY KEY,
+    interval_minutes INTEGER NOT NULL DEFAULT 60,
+    interval_market_open_minutes INTEGER,
+    market_timing INTEGER NOT NULL DEFAULT 0,
+    description TEXT,
+    category TEXT,
+    last_run INTEGER DEFAULT 0,
+    consecutive_failures INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+-- Job execution history
+CREATE TABLE IF NOT EXISTS job_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id TEXT NOT NULL,
+    job_type TEXT NOT NULL,
+    status TEXT NOT NULL,
+    error TEXT,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    executed_at INTEGER NOT NULL,
+    retry_count INTEGER NOT NULL DEFAULT 0
+);
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_prices_symbol_date ON prices(symbol, date);
 CREATE INDEX IF NOT EXISTS idx_trades_broker_id ON trades(broker_trade_id);
@@ -1125,12 +808,28 @@ CREATE INDEX IF NOT EXISTS idx_trades_side ON trades(side);
 CREATE INDEX IF NOT EXISTS idx_cache_expires_at ON cache(expires_at);
 CREATE INDEX IF NOT EXISTS idx_cash_flows_date ON cash_flows(date);
 CREATE INDEX IF NOT EXISTS idx_cash_flows_type ON cash_flows(type_id);
+CREATE INDEX IF NOT EXISTS idx_job_history_job_type_executed_at ON job_history(job_type, executed_at DESC);
+CREATE INDEX IF NOT EXISTS idx_job_history_job_id_executed_at ON job_history(job_id, executed_at DESC);
 
 -- Portfolio snapshots (daily composition tracking — JSON blob)
 CREATE TABLE IF NOT EXISTS portfolio_snapshots (
     date INTEGER PRIMARY KEY,  -- unix timestamp, midnight UTC
     data TEXT NOT NULL          -- JSON: {positions: {symbol: {quantity, value_eur}}, cash_eur}
 );
+
+-- Strategy state (deterministic contrarian tranche/rotation state per symbol)
+CREATE TABLE IF NOT EXISTS strategy_state (
+    symbol TEXT PRIMARY KEY,
+    sleeve TEXT DEFAULT 'core',  -- core/opportunity
+    tranche_stage INTEGER DEFAULT 0,  -- 0..3
+    scaleout_stage INTEGER DEFAULT 0,  -- 0..2
+    last_entry_price REAL,
+    last_entry_ts INTEGER,
+    last_rotation_ts INTEGER,
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now')),
+    FOREIGN KEY (symbol) REFERENCES securities(symbol)
+);
+CREATE INDEX IF NOT EXISTS idx_strategy_state_sleeve ON strategy_state(sleeve);
 
 -- Dividends (synced from broker corporate actions)
 CREATE TABLE IF NOT EXISTS dividends (

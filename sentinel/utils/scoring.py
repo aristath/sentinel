@@ -8,26 +8,25 @@ Usage:
 
 def adjust_score_for_conviction(base_score: float, user_multiplier: float) -> float:
     """
-    Apply user conviction multiplier to a score.
+    Apply user conviction (0..1) to a score.
 
-    The conviction adjustment is additive rather than multiplicative,
-    allowing users to override negative/missing signals with high conviction:
-    - multiplier 1.0 = no change (neutral)
-    - multiplier 2.0 = +0.3 boost (strong bullish conviction)
-    - multiplier 0.5 = -0.15 penalty (bearish conviction)
+    Conviction is additive (not multiplicative) and centered at 0.5:
+    - 0.50 = neutral (no change)
+    - 1.00 = +0.20 boost
+    - 0.00 = -0.20 penalty
 
     Args:
         base_score: The original score (e.g., expected return)
-        user_multiplier: User's conviction multiplier (0.25 to 2.0)
+        user_multiplier: User conviction in range [0.0, 1.0]
 
     Returns:
         Adjusted score with conviction applied
     """
-    # Handle None or missing multiplier
+    # Handle None or missing conviction
     if user_multiplier is None:
-        user_multiplier = 1.0
+        user_multiplier = 0.5
 
-    # Calculate additive boost: (multiplier - 1.0) * 0.3
-    conviction_boost = (user_multiplier - 1.0) * 0.3
+    conviction = max(0.0, min(1.0, float(user_multiplier)))
+    conviction_boost = (conviction - 0.5) * 0.4
 
     return base_score + conviction_boost

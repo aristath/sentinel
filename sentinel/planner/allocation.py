@@ -2,12 +2,22 @@
 
 from __future__ import annotations
 
+import asyncio
+import inspect
 import json
+from datetime import datetime, timezone
 
 from sentinel.currency import Currency
 from sentinel.database import Database
+from sentinel.planner.analyzer import PortfolioAnalyzer
 from sentinel.portfolio import Portfolio
 from sentinel.settings import Settings
+from sentinel.strategy import (
+    compute_contrarian_signal,
+    compute_symbol_targets,
+    effective_opportunity_score,
+    recent_dd252_min,
+)
 from sentinel.utils.strings import parse_csv_field
 
 
@@ -85,14 +95,41 @@ class AllocationCalculator:
         # Clamp to [-1, +1]
         return max(-1.0, min(1.0, avg_deviation))
 
-    async def calculate_ideal_portfolio(self) -> dict[str, float]:
-        """Calculate ideal portfolio allocations using classic wavelet-based approach.
+    @staticmethod
+    def _normalize_conviction(value: object) -> float:
+        """Normalize conviction into [0.0, 1.0]."""
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return 0.5
+        return max(0.0, min(1.0, parsed))
 
-        The user_multiplier is applied to each security's score:
-        - 1.0 = neutral (default)
-        - 2.0 = user is very bullish (doubles the score weight)
-        - 0.5 = user is bearish (halves the score weight)
-        - 0.0 = user wants to exit entirely
+    async def _load_strategy_settings(self) -> dict[str, float]:
+        keys_defaults: dict[str, float] = {
+            "diversification_impact_pct": 10,
+            "strategy_entry_t1_dd": -0.10,
+            "strategy_entry_t3_dd": -0.22,
+            "strategy_entry_memory_days": 42,
+            "strategy_memory_max_boost": 0.18,
+            "max_dividend_reinvestment_boost": 0.15,
+            "strategy_core_target_pct": 70,
+            "strategy_opportunity_target_pct": 30,
+            "strategy_opportunity_target_max_pct": 45,
+            "strategy_min_opp_score": 0.55,
+            "max_position_pct": 35,
+            "min_position_pct": 1,
+        }
+        keys = list(keys_defaults.keys())
+        values = await asyncio.gather(*[self._settings.get(k, keys_defaults[k]) for k in keys])
+        return {k: float(v if v is not None else keys_defaults[k]) for k, v in zip(keys, values, strict=False)}
+
+    async def calculate_ideal_portfolio(self, as_of_date: str | None = None) -> dict[str, float]:
+        """Calculate ideal portfolio allocations using deterministic contrarian strategy.
+
+        Per-security conviction (0..1) is used as a core preference weight:
+        - 0.5 = neutral
+        - 1.0 = strongest "keep/add" preference
+        - 0.0 = weakest preference (eligible to be deprioritized)
 
         Diversification adjustment:
         - Securities in underweight categories get a boost
@@ -102,131 +139,136 @@ class AllocationCalculator:
         Returns:
             dict: symbol -> target allocation percentage (0-1)
         """
-        # Check cache first (10 minute TTL)
-        cached = await self._db.cache_get("planner:ideal_portfolio")
-        if cached is not None:
-            return json.loads(cached)
+        # Cache only live calculations; as-of runs must be point-in-time deterministic.
+        if as_of_date is None:
+            cache_getter = getattr(self._db, "cache_get", None)
+            if callable(cache_getter):
+                maybe_cached = cache_getter("planner:ideal_portfolio")
+                if inspect.isawaitable(maybe_cached):
+                    maybe_cached = await maybe_cached
+                if isinstance(maybe_cached, (str, bytes, bytearray)):
+                    return json.loads(maybe_cached)
 
-        # Get all securities with scores and user multipliers
+        # Get all securities with user conviction values
         securities = await self._db.get_all_securities(active_only=True)
-        securities_by_sym = {sec["symbol"]: sec for sec in securities}
-        scores = {}
-
-        # Batch-fetch all scores to avoid N+1 queries
-        all_symbols = [sec["symbol"] for sec in securities]
-        scores_map = await self._db.get_scores(all_symbols)
+        if not securities:
+            return {}
 
         # Get current allocations and targets for diversification
-        current_allocs = await self._portfolio.get_allocations()
+        if as_of_date is None:
+            current_allocs = await self._portfolio.get_allocations()
+        else:
+            analyzer = PortfolioAnalyzer(db=self._db, portfolio=self._portfolio, currency=self._currency)
+            by_security = await analyzer.get_current_allocations(as_of_date=as_of_date)
+            current_allocs = {
+                "by_security": by_security,
+                "by_geography": {},
+                "by_industry": {},
+            }
         target_allocs = await self._portfolio.get_target_allocations()
-        div_impact = await self._settings.get("diversification_impact_pct", 10) / 100
+        config = await self._load_strategy_settings()
+        div_impact = config["diversification_impact_pct"] / 100.0
+        entry_t1_dd = config["strategy_entry_t1_dd"]
+        entry_t3_dd = config["strategy_entry_t3_dd"]
+        entry_memory_days = int(config["strategy_entry_memory_days"])
+        memory_max_boost = config["strategy_memory_max_boost"]
 
+        symbol_signals: dict[str, dict[str, float | int]] = {}
+        user_multipliers: dict[str, float] = {}
+        symbols = [sec["symbol"] for sec in securities]
+        all_prices = await asyncio.gather(
+            *[self._db.get_prices(symbol, days=300, end_date=as_of_date) for symbol in symbols]
+        )
+        prices_by_symbol = {symbol: prices for symbol, prices in zip(symbols, all_prices, strict=False)}
         for sec in securities:
             symbol = sec["symbol"]
-            user_multiplier = sec.get("user_multiplier", 1.0) or 1.0
+            conviction = self._normalize_conviction(sec.get("user_multiplier", 0.5))
+            # Continuous preference multiplier (no binary cutoff).
+            user_multipliers[symbol] = 0.2 + (1.8 * conviction)
 
-            # Skip securities where user wants to exit (multiplier = 0)
-            if user_multiplier <= 0:
-                continue
-
-            base_score = scores_map.get(symbol, 0)
-
-            # Apply user multiplier as conviction adjustment
-            from sentinel.utils.scoring import adjust_score_for_conviction
-
-            adjusted_score = adjust_score_for_conviction(base_score, user_multiplier)
+            raw = prices_by_symbol.get(symbol, [])
+            closes = [float(p["close"]) for p in reversed(raw) if p.get("close") is not None]
+            signal = compute_contrarian_signal(closes)
+            raw_opp = float(signal.get("opp_score", 0.0) or 0.0)
+            recent_min = recent_dd252_min(closes, window_days=entry_memory_days)
+            effective_opp = effective_opportunity_score(
+                raw_opp_score=raw_opp,
+                cycle_turn=int(signal.get("cycle_turn", 0) or 0),
+                freefall_block=int(signal.get("freefall_block", 0) or 0),
+                recent_dd252_min_value=recent_min,
+                entry_t1_dd=entry_t1_dd,
+                entry_t3_dd=entry_t3_dd,
+                max_boost=memory_max_boost,
+            )
+            signal["opp_score_raw"] = raw_opp
+            signal["dd252_recent_min"] = recent_min
+            signal["opp_score"] = effective_opp
+            signal["memory_boosted"] = 1 if effective_opp > raw_opp else 0
+            # Conviction influences tactical opportunity intensity continuously.
+            signal["opp_score"] = max(0.0, min(1.0, float(signal["opp_score"]) * (0.2 + (0.8 * conviction))))
 
             # Apply diversification multiplier
             if div_impact > 0:
                 div_score = self._calculate_diversification_score(sec, current_allocs, target_allocs)
                 div_multiplier = 1.0 + (div_score * div_impact)
-                adjusted_score = adjusted_score * div_multiplier
+                signal["core_rank"] = float(signal.get("core_rank", 0.0)) * div_multiplier
+                signal["opp_score"] = max(0.0, min(1.0, float(signal.get("opp_score", 0.0)) * div_multiplier))
 
-            scores[symbol] = adjusted_score
+            symbol_signals[symbol] = signal
 
         # Apply dividend reinvestment boost
-        max_div_boost = await self._settings.get("max_dividend_reinvestment_boost", 0.15)
+        max_div_boost = config["max_dividend_reinvestment_boost"]
         if max_div_boost > 0:
             uninvested = await self._db.get_uninvested_dividends()
             total_pool = sum(uninvested.values())
             if total_pool > 0:
                 for symbol, pool in uninvested.items():
-                    if symbol in scores:
+                    if symbol in symbol_signals:
                         share = pool / total_pool
-                        scores[symbol] = scores[symbol] + share * max_div_boost
+                        boosted = float(symbol_signals[symbol].get("opp_score", 0.0)) + share * max_div_boost
+                        symbol_signals[symbol]["opp_score"] = max(0.0, min(1.0, boosted))
 
-        # Filter to positive scores or strong user conviction
-        scores = {
-            sym: sc
-            for sym, sc in scores.items()
-            if sc > 0 or (securities_by_sym.get(sym, {}).get("user_multiplier", 1.0) or 1.0) > 1.0
-        }
+        core_target = config["strategy_core_target_pct"] / 100.0
+        opportunity_target = config["strategy_opportunity_target_pct"] / 100.0
+        max_opportunity_target = config["strategy_opportunity_target_max_pct"] / 100.0
+        min_opp_score = config["strategy_min_opp_score"]
 
-        if not scores:
-            return {}
+        allocations, sleeves = compute_symbol_targets(
+            symbol_signals,
+            user_multipliers,
+            core_target=core_target,
+            opportunity_target=opportunity_target,
+            min_opp_score=min_opp_score,
+            max_opportunity_target=max_opportunity_target,
+        )
 
-        # Get constraints from settings
-        max_position = await self._settings.get("max_position_pct", 20)
-        min_position = await self._settings.get("min_position_pct", 2)
-        cash_target = await self._settings.get("target_cash_pct", 5)
+        # Enforce position bounds and renormalize to 100% invested
+        max_position = config["max_position_pct"] / 100.0
+        min_position = config["min_position_pct"] / 100.0
+        bounded = {s: max(min_position, min(max_position, w)) for s, w in allocations.items() if w > 0}
+        total = sum(bounded.values())
+        if total > 0:
+            bounded = {s: w / total for s, w in bounded.items()}
 
-        constraints = {
-            "max_position": max_position,
-            "min_position": min_position,
-            "cash_target": cash_target,
-        }
-
-        return await self._classic_allocation(scores, constraints)
-
-    async def _classic_allocation(self, scores: dict, constraints: dict) -> dict[str, float]:
-        """Classic wavelet-based allocation algorithm.
-
-        Args:
-            scores: symbol -> score mapping
-            constraints: dict with max_position, min_position, cash_target (percentages)
-
-        Returns:
-            dict: symbol -> target allocation percentage (0-1)
-        """
-        max_position = constraints.get("max_position", 20) / 100
-        min_position = constraints.get("min_position", 2) / 100
-        cash_target = constraints.get("cash_target", 5) / 100
-
-        # Filter to positive expected returns only
-        positive_scores = {k: v for k, v in scores.items() if v > 0}
-
-        if not positive_scores:
-            return {}
-
-        # Calculate allocations proportional to expected returns
-        min_score = min(positive_scores.values())
-        max_score = max(positive_scores.values())
-        score_range = max_score - min_score if max_score != min_score else 1.0
-
-        # Normalize scores to 0-1 range, then square to emphasize differences
-        normalized = {}
-        for symbol, score in positive_scores.items():
-            norm = (score - min_score) / score_range if score_range > 0 else 0.5
-            normalized[symbol] = (norm + 0.1) ** 2
-
-        # Allocate proportionally
-        total_weight = sum(normalized.values())
-        if total_weight <= 0:
-            return {}
-        allocable = 1.0 - cash_target
-
-        allocations = {}
-        for symbol, weight in normalized.items():
-            raw_alloc = (weight / total_weight) * allocable
-            capped = max(min_position, min(max_position, raw_alloc))
-            allocations[symbol] = capped
-
-        # Renormalize to sum to allocable amount
-        alloc_sum = sum(allocations.values())
-        if alloc_sum > 0:
-            scale = allocable / alloc_sum
-            allocations = {k: v * scale for k, v in allocations.items()}
-
-        # Cache result (10 minutes = 600 seconds)
-        await self._db.cache_set("planner:ideal_portfolio", json.dumps(allocations), ttl_seconds=600)
-        return allocations
+        # Cache live allocations/diagnostics for downstream APIs/rebalance.
+        # Do not cache as-of signals to avoid polluting live state.
+        if as_of_date is None:
+            cache_setter = getattr(self._db, "cache_set", None)
+            if callable(cache_setter):
+                maybe_set = cache_setter("planner:ideal_portfolio", json.dumps(bounded), ttl_seconds=600)
+                if inspect.isawaitable(maybe_set):
+                    await maybe_set
+                maybe_set = cache_setter("planner:contrarian_signals", json.dumps(symbol_signals), ttl_seconds=600)
+                if inspect.isawaitable(maybe_set):
+                    await maybe_set
+                maybe_set = cache_setter("planner:contrarian_sleeves", json.dumps(sleeves), ttl_seconds=600)
+                if inspect.isawaitable(maybe_set):
+                    await maybe_set
+                maybe_set = cache_setter(
+                    "planner:contrarian_signals_ts",
+                    str(int(datetime.now(timezone.utc).timestamp())),
+                    ttl_seconds=600,
+                )
+                if inspect.isawaitable(maybe_set):
+                    await maybe_set
+        return bounded

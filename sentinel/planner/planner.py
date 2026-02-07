@@ -1,4 +1,4 @@
-"""Planner - Generate trade recommendations based on expected returns.
+"""Planner - Generate deterministic contrarian trade recommendations.
 
 This is a facade that delegates to specialized components:
 - AllocationCalculator: ideal portfolio computation
@@ -23,11 +23,7 @@ from .rebalance import RebalanceEngine
 
 
 class Planner:
-    """Generates trade recommendations based on expected returns.
-
-    This class acts as a facade over specialized planner components,
-    maintaining backward compatibility with existing code.
-    """
+    """Facade over allocation, analysis, and rebalance components."""
 
     def __init__(
         self,
@@ -68,21 +64,21 @@ class Planner:
             currency=self._currency,
         )
 
-    async def calculate_ideal_portfolio(self) -> dict[str, float]:
+    async def calculate_ideal_portfolio(self, as_of_date: Optional[str] = None) -> dict[str, float]:
         """Calculate ideal portfolio allocations.
 
         Returns:
             dict: symbol -> target allocation percentage (0-1)
         """
-        return await self._allocation_calculator.calculate_ideal_portfolio()
+        return await self._allocation_calculator.calculate_ideal_portfolio(as_of_date=as_of_date)
 
-    async def get_current_allocations(self) -> dict[str, float]:
+    async def get_current_allocations(self, as_of_date: Optional[str] = None) -> dict[str, float]:
         """Get current portfolio allocations by symbol.
 
         Returns:
             dict: symbol -> allocation percentage (0-1)
         """
-        return await self._portfolio_analyzer.get_current_allocations()
+        return await self._portfolio_analyzer.get_current_allocations(as_of_date=as_of_date)
 
     async def get_recommendations(
         self,
@@ -99,10 +95,9 @@ class Planner:
         Returns:
             List of TradeRecommendation, sorted by priority
         """
-        ideal = await self.calculate_ideal_portfolio()
-        current = await self.get_current_allocations()
-
-        total_value = await self._portfolio.total_value()
+        ideal = await self.calculate_ideal_portfolio(as_of_date=as_of_date)
+        current = await self.get_current_allocations(as_of_date=as_of_date)
+        total_value = await self._portfolio_analyzer.get_total_value(as_of_date=as_of_date)
 
         return await self._rebalance_engine.get_recommendations(
             ideal=ideal,

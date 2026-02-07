@@ -1,6 +1,7 @@
 """Data models for the planner package."""
 
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -19,9 +20,15 @@ class TradeRecommendation:
     price: float  # Current price per share
     currency: str  # Security's trading currency
     lot_size: int  # Minimum lot size
-    expected_return: float  # The security's expected return score
+    contrarian_score: float  # Deterministic contrarian signal strength
     priority: float  # Higher = more urgent to act on
     reason: str  # Human-readable explanation
+    reason_code: Optional[str] = None
+    sleeve: Optional[str] = None
+    lot_class: Optional[str] = None
+    ticket_pct: Optional[float] = None
+    core_floor_active: Optional[bool] = None
+    memory_entry: Optional[bool] = None
 
 
 @dataclass

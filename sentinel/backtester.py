@@ -28,11 +28,32 @@ from typing import AsyncGenerator, Optional, cast
 
 import numpy as np
 
-from sentinel.analyzer import Analyzer
 from sentinel.broker import Broker
 from sentinel.database import Database
 from sentinel.database.simulation import SimulationDatabase
 from sentinel.price_validator import PriceValidator
+
+
+def _calculate_max_drawdown(values: np.ndarray) -> float:
+    if len(values) == 0:
+        return 0.0
+    peak = values[0]
+    max_dd = 0.0
+    for v in values:
+        peak = max(peak, v)
+        if peak > 0:
+            dd = (peak - v) / peak
+            max_dd = max(max_dd, dd)
+    return float(max_dd)
+
+
+def _calculate_sharpe(returns: np.ndarray) -> float:
+    if len(returns) < 2:
+        return 0.0
+    vol = float(np.std(returns))
+    if vol <= 1e-12:
+        return 0.0
+    return float((np.mean(returns) / vol) * np.sqrt(252))
 
 
 class RebalanceFrequency:
@@ -132,6 +153,8 @@ class BacktestResult:
     max_drawdown: float
     sharpe_ratio: float
     security_performance: list[SecurityPerformance]
+    memory_entry_count: int = 0
+    opportunity_buy_count: int = 0
 
 
 class BacktestDatabaseBuilder:
@@ -209,20 +232,6 @@ class BacktestDatabaseBuilder:
             )
             await self._populate_symbol(symbol)
 
-        # Phase 4: Calculate scores for all securities
-        yield BacktestProgress(
-            current_date="",
-            progress_pct=100,
-            portfolio_value=0,
-            status="preparing",
-            phase="calculate_scores",
-            message="Calculating scores...",
-            current_item="",
-            items_done=total,
-            items_total=total,
-        )
-        await self._calculate_scores()
-
     async def _copy_settings(self) -> None:
         """Copy settings and allocation targets from real database."""
         assert self.temp_db is not None
@@ -276,13 +285,19 @@ class BacktestDatabaseBuilder:
     async def _copy_symbol_data(self, symbol: str, security: dict, prices: list[dict]) -> None:
         """Copy security and price data from real database to temp database."""
         assert self.temp_db is not None
-        # Insert security
-        cols = list(security.keys())
+        # Insert security using only columns that exist in the temp DB schema.
+        cursor = await self.temp_db.conn.execute("PRAGMA table_info(securities)")
+        temp_cols = {row["name"] for row in await cursor.fetchall()}
+        filtered = {k: v for k, v in security.items() if k in temp_cols}
+        if "symbol" not in filtered:
+            filtered["symbol"] = symbol
+
+        cols = list(filtered.keys())
         placeholders = ",".join(["?" for _ in cols])
         cols_str = ",".join(cols)
         await self.temp_db.conn.execute(
             f"INSERT OR REPLACE INTO securities ({cols_str}) VALUES ({placeholders})",  # noqa: S608
-            tuple(security.values()),
+            tuple(filtered.values()),
         )
 
         # Insert prices
@@ -298,25 +313,6 @@ class BacktestDatabaseBuilder:
                     price.get("low"),
                     price["close"],
                     price.get("volume"),
-                ),
-            )
-
-        # Copy latest score for this symbol from real DB (tie-break by id)
-        cursor = await self.real_db.conn.execute(
-            """SELECT symbol, score, components, calculated_at FROM scores
-               WHERE symbol = ? ORDER BY calculated_at DESC, id DESC LIMIT 1""",
-            (symbol,),
-        )
-        score_row = await cursor.fetchone()
-        if score_row:
-            await self.temp_db.conn.execute(
-                """INSERT OR REPLACE INTO scores (symbol, score, components, calculated_at)
-                   VALUES (?, ?, ?, ?)""",
-                (
-                    score_row["symbol"],
-                    score_row["score"],
-                    score_row["components"],
-                    score_row["calculated_at"],
                 ),
             )
 
@@ -366,21 +362,6 @@ class BacktestDatabaseBuilder:
                     ),
                 )
             await self.temp_db.conn.commit()
-
-    async def _calculate_scores(self) -> None:
-        """
-        Calculate scores for all securities in temp database.
-
-        Uses the Analyzer with temp_db to calculate scores based on price data.
-        This ensures the backtest uses real calculated scores, not defaults.
-        """
-        from sentinel.analyzer import Analyzer
-
-        # Create analyzer with temp_db
-        analyzer = Analyzer(db=self.temp_db)
-
-        # Calculate scores for all active securities
-        await analyzer.update_scores(use_cache=False)
 
     async def cleanup(self) -> None:
         """Close and remove temporary database file and directory."""
@@ -536,6 +517,9 @@ class Backtester:
         self._sim_db: Optional[SimulationDatabase] = None
         self._sim_broker: Optional[BacktestBroker] = None
         self._simulation_date: str = ""
+        self._planner = None
+        self._portfolio = None
+        self._currency = None
 
     def cancel(self):
         self._cancelled = True
@@ -579,6 +563,18 @@ class Backtester:
             assert self._sim_db is not None
             assert self._sim_broker is not None
 
+            from sentinel.currency import Currency
+            from sentinel.planner import Planner
+            from sentinel.portfolio import Portfolio
+
+            self._currency = Currency()
+            self._portfolio = Portfolio(db=self._sim_db, broker=self._sim_broker)
+            self._planner = Planner(
+                db=cast(Database, self._sim_db),
+                broker=cast(Broker, self._sim_broker),
+                portfolio=self._portfolio,
+            )
+
             # Initialize cash
             await self._sim_db.set_cash_balance("EUR", self.config.initial_capital)
 
@@ -589,6 +585,8 @@ class Backtester:
             trades: list[SimulatedTrade] = []
             total_deposits = self.config.initial_capital
             security_tracking: dict[str, dict] = {}
+            memory_entry_count = 0
+            opportunity_buy_count = 0
 
             total_days = (end_date - start_date).days
             days_processed = 0
@@ -631,8 +629,10 @@ class Backtester:
                 )
 
                 if should_rebalance:
-                    new_trades = await self._execute_rebalance(security_tracking)
+                    new_trades, memory_buys, opp_buys = await self._execute_rebalance(security_tracking)
                     trades.extend(new_trades)
+                    memory_entry_count += memory_buys
+                    opportunity_buy_count += opp_buys
                     last_rebalance_date = current_date
 
                 # Update prices
@@ -655,7 +655,14 @@ class Backtester:
                 current_date += timedelta(days=1)
                 days_processed += 1
 
-            result = self._calculate_results(snapshots, trades, total_deposits, security_tracking)
+            result = self._calculate_results(
+                snapshots,
+                trades,
+                total_deposits,
+                security_tracking,
+                memory_entry_count,
+                opportunity_buy_count,
+            )
             yield result
 
         except Exception as e:
@@ -673,6 +680,9 @@ class Backtester:
             if self._sim_db:
                 await self._sim_db.close()
                 self._sim_db = None
+            self._planner = None
+            self._portfolio = None
+            self._currency = None
             if builder:
                 await builder.cleanup()
 
@@ -733,40 +743,22 @@ class Backtester:
             if quote and quote.get("price"):
                 await self._sim_db.upsert_position(pos["symbol"], current_price=quote["price"])
 
-    async def _execute_rebalance(self, security_tracking: dict) -> list[SimulatedTrade]:
+    async def _execute_rebalance(self, security_tracking: dict) -> tuple[list[SimulatedTrade], int, int]:
         """
         Execute rebalance using the ACTUAL Planner via dependency injection.
 
         Just like the real app, this:
-        1. Recalculates scores based on current price data
-        2. Gets recommendations from the Planner
-        3. Executes the recommended trades
+        1. Gets recommendations from the Planner
+        2. Executes the recommended trades
         """
-        from sentinel.analyzer import Analyzer
-        from sentinel.currency import Currency
-        from sentinel.planner import Planner
-        from sentinel.portfolio import Portfolio
-
         assert self._sim_db is not None and self._sim_broker is not None
+        assert self._planner is not None and self._currency is not None
         trades = []
-        currency = Currency()
-
-        # Recalculate scores based on price data available up to simulation date.
-        # Pass as_of_date so scores are stored with calculated_at = end-of-day(simulation_date),
-        # enabling get_scores(..., as_of_date=ts) to return them explicitly.
-        analyzer = Analyzer(db=self._sim_db)
-        await analyzer.update_scores(use_cache=False, as_of_date=self._simulation_date)
-
-        # Create Portfolio and Planner using simulation database/broker
-        portfolio = Portfolio(db=self._sim_db, broker=self._sim_broker)
-        planner = Planner(
-            db=cast(Database, self._sim_db),
-            broker=cast(Broker, self._sim_broker),
-            portfolio=portfolio,
-        )
+        memory_entry_count = 0
+        opportunity_buy_count = 0
 
         # Get recommendations using the ACTUAL Planner logic (as_of_date = simulation date)
-        recommendations = await planner.get_recommendations(as_of_date=self._simulation_date)
+        recommendations = await self._planner.get_recommendations(as_of_date=self._simulation_date)
 
         # Get cool-off setting
         settings_data = await self._sim_db.conn.execute("SELECT value FROM settings WHERE key = 'trade_cooloff_days'")
@@ -775,15 +767,19 @@ class Backtester:
 
         # Execute each recommendation
         for rec in recommendations:
+            if rec.action == "buy" and rec.sleeve == "opportunity":
+                opportunity_buy_count += 1
+                if rec.memory_entry:
+                    memory_entry_count += 1
             # Check cool-off period
             if await self._is_in_cooloff(rec.symbol, rec.action, security_tracking, cooloff_days):
                 continue  # Skip this trade
 
-            trade = await self._execute_trade(rec, security_tracking, currency)
+            trade = await self._execute_trade(rec, security_tracking, self._currency)
             if trade:
                 trades.append(trade)
 
-        return trades
+        return trades, memory_entry_count, opportunity_buy_count
 
     async def _execute_trade(self, rec, tracking: dict, currency) -> Optional[SimulatedTrade]:
         """Execute a trade recommendation in the simulation."""
@@ -939,8 +935,10 @@ class Backtester:
         trades: list[SimulatedTrade],
         total_deposits: float,
         security_tracking: dict,
+        memory_entry_count: int = 0,
+        opportunity_buy_count: int = 0,
     ) -> BacktestResult:
-        """Calculate results using Analyzer methods."""
+        """Calculate result metrics from portfolio value history."""
         if not snapshots:
             return BacktestResult(
                 config=self.config,
@@ -955,6 +953,8 @@ class Backtester:
                 max_drawdown=0,
                 sharpe_ratio=0,
                 security_performance=[],
+                memory_entry_count=memory_entry_count,
+                opportunity_buy_count=opportunity_buy_count,
             )
 
         initial_value = snapshots[0].total_value
@@ -970,13 +970,11 @@ class Backtester:
         else:
             cagr = 0
 
-        # Use Analyzer methods
-        analyzer = Analyzer()
-        max_drawdown = analyzer._calculate_max_drawdown(values) * 100
+        max_drawdown = _calculate_max_drawdown(values) * 100
 
         if len(values) >= 2:
             returns = np.diff(values) / values[:-1]
-            sharpe_ratio = analyzer._calculate_sharpe(returns)
+            sharpe_ratio = _calculate_sharpe(returns)
         else:
             sharpe_ratio = 0
 
@@ -1019,6 +1017,8 @@ class Backtester:
             max_drawdown=max_drawdown,
             sharpe_ratio=sharpe_ratio,
             security_performance=security_performance,
+            memory_entry_count=memory_entry_count,
+            opportunity_buy_count=opportunity_buy_count,
         )
 
 

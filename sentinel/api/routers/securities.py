@@ -1,14 +1,15 @@
 """Securities and prices API routes."""
 
-from datetime import datetime, timezone
+import inspect
+import json
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.security import Security
+from sentinel.strategy import classify_lot_size, compute_contrarian_signal
 
 router = APIRouter(prefix="/securities", tags=["securities"])
 prices_router = APIRouter(prefix="/prices", tags=["prices"])
@@ -81,7 +82,7 @@ async def delete_security(
     """Remove a security from the active universe. Optionally sells any existing position first.
 
     Soft-deletes: marks the security as inactive (active=0, allow_buy=0, allow_sell=0).
-    Deletes current-state data (positions, scores) but preserves historical prices and trades.
+    Deletes current-state data (positions) but preserves historical prices and trades.
     """
     # Check if exists
     existing = await deps.db.get_security(symbol)
@@ -107,7 +108,6 @@ async def delete_security(
     )
     # Delete current-state data (not historical)
     await deps.db.conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
-    await deps.db.conn.execute("DELETE FROM scores WHERE symbol = ?", (symbol,))
     await deps.db.conn.commit()
 
     return {"status": "ok", "sold_quantity": quantity if sell_position else 0}
@@ -145,7 +145,6 @@ async def get_security(symbol: str) -> dict[str, Any]:
         "aliases": security.aliases,
         "quantity": security.quantity,
         "current_price": security.current_price,
-        "score": await security.get_score(),
     }
 
 
@@ -155,7 +154,7 @@ async def update_security(
     data: dict,
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, str]:
-    """Update security metadata (geography, industry, allow_buy/sell, user_multiplier, ml settings)."""
+    """Update security metadata and execution controls."""
     existing = await deps.db.get_security(symbol)
     if not existing:
         raise HTTPException(status_code=404, detail="Security not found")
@@ -169,8 +168,6 @@ async def update_security(
         "allow_sell",
         "user_multiplier",
         "active",
-        "ml_enabled",
-        "ml_blend_ratio",
     ]
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
@@ -221,46 +218,6 @@ async def sync_all_prices(
 unified_router = APIRouter(prefix="/unified", tags=["unified"])
 
 
-def _end_of_day_utc_ts(date_str: str) -> int:
-    """Unix timestamp for end of date_str (YYYY-MM-DD) in UTC."""
-    dt = datetime.strptime(date_str + " 23:59:59", "%Y-%m-%d %H:%M:%S").replace(tzinfo=timezone.utc)
-    return int(dt.timestamp())
-
-
-async def _get_blended_prediction(
-    deps: CommonDependencies,
-    symbol: str,
-    as_of_ts: int | None = None,
-) -> dict:
-    predictions = await _get_blended_predictions(deps, [symbol], as_of_ts=as_of_ts)
-    return predictions.get(symbol, {})
-
-
-async def _get_blended_predictions(
-    deps: CommonDependencies,
-    symbols: list[str],
-    as_of_ts: int | None = None,
-) -> dict[str, dict]:
-    """Load blended ML scores for symbols from sentinel-ml service."""
-    if not symbols:
-        return {}
-
-    base_url = str(await deps.db.get_setting("ml_service_base_url", "http://localhost:8001")).rstrip("/")
-    params: dict[str, str | int] = {"symbols": ",".join(symbols)}
-    if as_of_ts is not None:
-        params["as_of_ts"] = as_of_ts
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.get(f"{base_url}/ml/latest-scores", params=params)
-            resp.raise_for_status()
-            payload = resp.json()
-            scores = payload.get("scores", {})
-            return scores if isinstance(scores, dict) else {}
-    except Exception:  # noqa: BLE001
-        return {}
-
-
 @unified_router.get("")
 async def get_unified_view(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
@@ -272,15 +229,13 @@ async def get_unified_view(
 
     Args:
         period: Price history period - 1M, 1Y, 5Y, 10Y
-        as_of: Optional date (YYYY-MM-DD). When set, scores and ML predictions
-            are returned as of that date (wavelet score and ML prediction on or before that date).
+        as_of: Optional date (YYYY-MM-DD). When set, historical prices are scoped on or before that date.
 
-    Returns all securities with positions, prices, scores, allocations,
-    and recommendations.
+    Returns all securities with positions, prices, allocations, and recommendations.
     """
-    import json
-
     from sentinel.planner import Planner
+    from sentinel.planner.analyzer import PortfolioAnalyzer
+    from sentinel.portfolio import Portfolio
     from sentinel.price_validator import PriceValidator, get_price_anomaly_warning
     from sentinel.utils.scoring import adjust_score_for_conviction
 
@@ -291,51 +246,39 @@ async def get_unified_view(
 
     all_symbols = [sec["symbol"] for sec in securities]
 
-    planner = Planner()
+    planner = Planner(db=deps.db, broker=deps.broker)
 
     # Fetch all data sources
-    positions = await deps.db.get_all_positions()
+    portfolio = Portfolio(db=deps.db, broker=deps.broker)
+    analyzer = PortfolioAnalyzer(db=deps.db, portfolio=portfolio, currency=deps.currency)
+    if as_of is None:
+        positions = await deps.db.get_all_positions()
+    else:
+        positions = await analyzer.get_positions_as_of(as_of)
     positions_map = {p["symbol"]: p for p in positions}
 
-    if as_of is not None:
-        as_of_ts = _end_of_day_utc_ts(as_of)
-        # Scores as of date: latest row per symbol with calculated_at <= as_of_ts
-        cursor = await deps.db.conn.execute(
-            """SELECT * FROM (
-                   SELECT *, ROW_NUMBER() OVER (PARTITION BY symbol ORDER BY calculated_at DESC, id DESC) AS rn
-                   FROM scores WHERE calculated_at <= ?
-               ) WHERE rn = 1""",
-            (as_of_ts,),
-        )
-        scores = await cursor.fetchall()
-        scores_map = {}
-        for s in scores:
-            d = dict(s)
-            d.pop("rn", None)
-            scores_map[d["symbol"]] = d
-        ml_preds_map = await _get_blended_predictions(deps, all_symbols, as_of_ts=as_of_ts)
-    else:
-        cursor = await deps.db.conn.execute("SELECT * FROM scores")
-        scores = await cursor.fetchall()
-        scores_map = {s["symbol"]: dict(s) for s in scores}
-
-        ml_preds_map = await _get_blended_predictions(deps, all_symbols)
-
     # Recommendations using settings default for min_trade_value
-    recommendations = await planner.get_recommendations()
+    recommendations = await planner.get_recommendations(as_of_date=as_of)
     recommendations_map = {r.symbol: r for r in recommendations}
 
     # Ideal and current allocations
-    ideal = await planner.calculate_ideal_portfolio()
-    current_allocs = await planner.get_current_allocations()
+    ideal = await planner.calculate_ideal_portfolio(as_of_date=as_of)
+    current_allocs = await planner.get_current_allocations(as_of_date=as_of)
 
-    # Live quotes
-    current_quotes = await deps.broker.get_quotes(all_symbols)
+    # Live quotes only for live view. As-of views are valued from historical prices.
+    current_quotes = await deps.broker.get_quotes(all_symbols) if as_of is None else {}
+
+    latest_prices_map: dict[str, float] = {}
+    if as_of is not None:
+        latest_prices_raw = await deps.db.get_prices_bulk(all_symbols, days=1, end_date=as_of)
+        for symbol, rows in latest_prices_raw.items():
+            if rows:
+                latest_prices_map[symbol] = rows[0].get("close", 0)
 
     # Total portfolio value in EUR
     total_value = 0.0
     for pos in positions:
-        price = pos.get("current_price", 0)
+        price = latest_prices_map.get(pos["symbol"], pos.get("current_price", 0))
         qty = pos.get("quantity", 0)
         pos_currency = pos.get("currency", "EUR")
         total_value += await deps.currency.to_eur(price * qty, pos_currency)
@@ -348,19 +291,39 @@ async def get_unified_view(
     # Bulk-fetch and validate prices
     days_map = {"1M": 30, "1Y": 365, "5Y": 1825, "10Y": 3650}
     days = days_map.get(period, 365)
-    all_prices_raw = await deps.db.get_prices_bulk(all_symbols, days=days)
+    all_prices_raw = await deps.db.get_prices_bulk(all_symbols, days=days, end_date=as_of)
 
     validator = PriceValidator()
     all_prices_validated = {}
     for symbol, raw_prices in all_prices_raw.items():
         all_prices_validated[symbol] = validator.validate_price_series_desc(raw_prices)
 
+    fee_fixed_raw = await deps.settings.get("transaction_fee_fixed", 2.0)
+    fee_pct_raw = await deps.settings.get("transaction_fee_percent", 0.2)
+    lot_standard_raw = await deps.settings.get("strategy_lot_standard_max_pct", 0.08)
+    lot_coarse_raw = await deps.settings.get("strategy_lot_coarse_max_pct", 0.30)
+    core_floor_raw = await deps.settings.get("strategy_core_floor_pct", 0.05)
+    min_opp_raw = await deps.settings.get("strategy_min_opp_score", 0.55)
+    fee_fixed = float(2.0 if fee_fixed_raw is None else fee_fixed_raw)
+    fee_pct = float(0.2 if fee_pct_raw is None else fee_pct_raw) / 100.0
+    lot_standard_max_pct = float(0.08 if lot_standard_raw is None else lot_standard_raw)
+    lot_coarse_max_pct = float(0.30 if lot_coarse_raw is None else lot_coarse_raw)
+    core_floor_pct = float(0.05 if core_floor_raw is None else core_floor_raw)
+    min_opp_score = float(0.55 if min_opp_raw is None else min_opp_raw)
+    cache_getter = getattr(deps.db, "cache_get", None)
+    sleeves_map = {}
+    if callable(cache_getter):
+        maybe_cache = cache_getter("planner:contrarian_sleeves")
+        if inspect.isawaitable(maybe_cache):
+            maybe_cache = await maybe_cache
+        if isinstance(maybe_cache, (str, bytes, bytearray)):
+            sleeves_map = json.loads(maybe_cache) if maybe_cache else {}
+
     # Build unified response
     result = []
     for sec in securities:
         symbol = sec["symbol"]
         position = positions_map.get(symbol)
-        score_data = scores_map.get(symbol, {})
         recommendation = recommendations_map.get(symbol)
         prices = all_prices_validated.get(symbol, [])
 
@@ -372,10 +335,15 @@ async def get_unified_view(
         # Current price: prefer live quote, fallback to position, then historical
         quote = current_quotes.get(symbol)
         current_price = quote.get("price", 0) if quote else 0
-        if current_price <= 0 and position:
-            current_price = position.get("current_price", 0)
-        if current_price <= 0 and prices:
-            current_price = prices[0]["close"]
+        if as_of is not None:
+            current_price = latest_prices_map.get(symbol, 0)
+            if current_price <= 0 and prices:
+                current_price = prices[0]["close"]
+        else:
+            if current_price <= 0 and position:
+                current_price = position.get("current_price", 0)
+            if current_price <= 0 and prices:
+                current_price = prices[0]["close"]
 
         # Price anomaly warning
         price_warning = None
@@ -386,6 +354,7 @@ async def get_unified_view(
 
         # Profit / loss
         sec_currency = sec.get("currency", "EUR")
+        min_lot = sec.get("min_lot", 1)
         if has_position and avg_cost > 0:
             profit_pct = ((current_price - avg_cost) / avg_cost) * 100
             profit_value = (current_price - avg_cost) * quantity
@@ -409,26 +378,36 @@ async def get_unified_view(
             post_plan_value = value_eur
         post_plan_alloc = (post_plan_value / post_plan_total_value * 100) if post_plan_total_value > 0 else 0
 
-        # Parse score components
-        components = {}
-        if score_data.get("components"):
-            try:
-                components = (
-                    json.loads(score_data["components"])
-                    if isinstance(score_data["components"], str)
-                    else score_data["components"]
-                )
-            except (json.JSONDecodeError, TypeError, ValueError):
-                pass
+        closes = [float(p["close"]) for p in reversed(prices) if p.get("close") is not None]
+        signal = compute_contrarian_signal(closes)
 
-        # Expected return with user conviction adjustment
-        user_multiplier = sec.get("user_multiplier", 1.0) or 1.0
-        ml_pred = ml_preds_map.get(symbol, {})
-        ml_final_score = ml_pred.get("final_score", ml_pred.get("ml_score"))
-        fallback_score = components.get("expected_return", 0) or 0
-        base_expected_return = float(ml_final_score if ml_final_score is not None else fallback_score)
-        adjusted_expected_return = adjust_score_for_conviction(base_expected_return, user_multiplier)
-        conviction_boost = adjusted_expected_return - base_expected_return
+        maybe_fx_rate = deps.currency.get_rate(sec_currency)
+        if inspect.isawaitable(maybe_fx_rate):
+            maybe_fx_rate = await maybe_fx_rate
+        try:
+            fx_rate = float(maybe_fx_rate)
+        except (TypeError, ValueError):
+            fx_rate = 1.0
+        lot_profile = classify_lot_size(
+            price=current_price,
+            lot_size=min_lot,
+            fx_rate_to_eur=fx_rate,
+            portfolio_value_eur=total_value if total_value > 0 else 1.0,
+            fee_fixed_eur=fee_fixed,
+            fee_pct=fee_pct,
+            standard_max_pct=lot_standard_max_pct,
+            coarse_max_pct=lot_coarse_max_pct,
+        )
+        user_multiplier = sec.get("user_multiplier", 0.5) or 0.5
+        sleeve = sleeves_map.get(symbol)
+        if sleeve is None:
+            sleeve = "opportunity" if float(signal.get("opp_score", 0.0) or 0.0) >= min_opp_score else "core"
+        core_floor_active = bool(
+            sleeve == "core" and has_position and total_value > 0 and ((value_eur / total_value) <= core_floor_pct)
+        )
+
+        # Contrarian score with user conviction adjustment
+        adjusted_contrarian_score = adjust_score_for_conviction(float(signal.get("opp_score", 0.0)), user_multiplier)
 
         # Recommendation info
         rec_info = None
@@ -438,6 +417,7 @@ async def get_unified_view(
                 "quantity": recommendation.quantity,
                 "value_delta_eur": recommendation.value_delta_eur,
                 "reason": recommendation.reason,
+                "reason_code": recommendation.reason_code,
                 "priority": recommendation.priority,
             }
 
@@ -452,9 +432,7 @@ async def get_unified_view(
                 "active": sec.get("active", 1),
                 "allow_buy": sec.get("allow_buy", 1),
                 "allow_sell": sec.get("allow_sell", 1),
-                "user_multiplier": sec.get("user_multiplier", 1.0),
-                "ml_enabled": sec.get("ml_enabled", 0),
-                "ml_blend_ratio": sec.get("ml_blend_ratio", 0.5),
+                "user_multiplier": sec.get("user_multiplier", 0.5),
                 "aliases": sec.get("aliases"),
                 # Position data
                 "has_position": has_position,
@@ -472,15 +450,18 @@ async def get_unified_view(
                 "current_allocation": current_alloc,
                 "post_plan_allocation": post_plan_alloc,
                 "ideal_allocation": ideal_alloc,
-                "target_allocation": ideal_alloc,
                 # Score data (adjusted by user conviction)
-                "score": (score_data.get("score") or 0) + conviction_boost,
-                "expected_return": adjusted_expected_return,
-                "base_expected_return": base_expected_return,
-                "score_components": components,
-                # ML prediction breakdown
-                "wavelet_score": score_data.get("score"),
-                "ml_score": ml_pred.get("ml_score"),
+                "contrarian_score": adjusted_contrarian_score,
+                # Deterministic strategy diagnostics
+                "opp_score": signal.get("opp_score"),
+                "dip_score": signal.get("dip_score"),
+                "capitulation_score": signal.get("capitulation_score"),
+                "cycle_turn": signal.get("cycle_turn"),
+                "freefall_block": signal.get("freefall_block"),
+                "ticket_pct": lot_profile["ticket_pct"],
+                "lot_class": lot_profile["lot_class"],
+                "sleeve": sleeve,
+                "core_floor_active": core_floor_active,
                 # Price history (simplified for charts, oldest first)
                 "prices": [{"date": p["date"], "close": p["close"]} for p in reversed(prices)],
                 # Recommendation
@@ -489,40 +470,3 @@ async def get_unified_view(
         )
 
     return result
-
-
-# Scores router
-scores_router = APIRouter(prefix="/scores", tags=["scores"])
-
-
-@scores_router.post("/calculate")
-async def calculate_scores() -> dict[str, int]:
-    """Calculate scores for all securities."""
-    from sentinel.analyzer import Analyzer
-
-    analyzer = Analyzer()
-    count = await analyzer.update_scores()
-    return {"calculated": count}
-
-
-@scores_router.get("")
-async def get_scores(
-    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
-) -> list[dict]:
-    """Get latest score per security (one row per symbol)."""
-    cursor = await deps.db.conn.execute(
-        """SELECT s.id, s.symbol, s.score, s.components, s.calculated_at FROM scores s
-           INNER JOIN (
-             SELECT symbol, MAX(calculated_at) AS calculated_at FROM scores GROUP BY symbol
-           ) latest ON s.symbol = latest.symbol AND s.calculated_at = latest.calculated_at
-           ORDER BY s.score DESC, s.id DESC"""
-    )
-    rows = await cursor.fetchall()
-    # One row per symbol (tie-break same calculated_at by max id)
-    by_symbol: dict[str, dict] = {}
-    for row in rows:
-        r = dict(row)
-        sym = r["symbol"]
-        if sym not in by_symbol or r["id"] > by_symbol[sym]["id"]:
-            by_symbol[sym] = r
-    return sorted(by_symbol.values(), key=lambda x: (-(x["score"] or 0), -(x.get("id") or 0)))

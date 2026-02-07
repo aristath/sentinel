@@ -28,12 +28,6 @@ def mock_db():
     db.update_quotes_bulk = AsyncMock()
     db.update_security_metadata = AsyncMock()
     db.cache_clear = AsyncMock(return_value=5)
-    db.get_ml_enabled_securities = AsyncMock(
-        return_value=[
-            {"symbol": "AAPL.US"},
-            {"symbol": "MSFT.US"},
-        ]
-    )
     return db
 
 
@@ -73,22 +67,6 @@ def mock_cache():
 
 
 @pytest.fixture
-def mock_analyzer():
-    """Mock analyzer for testing."""
-    analyzer = AsyncMock()
-    analyzer.update_scores = AsyncMock(return_value=5)
-    return analyzer
-
-
-@pytest.fixture
-def mock_detector():
-    """Mock regime detector for testing."""
-    detector = AsyncMock()
-    detector.train_model = AsyncMock(return_value={"status": "trained"})
-    return detector
-
-
-@pytest.fixture
 def mock_planner():
     """Mock planner for testing."""
     planner = AsyncMock()
@@ -101,34 +79,6 @@ def mock_planner():
     )
     planner.calculate_ideal_portfolio = AsyncMock(return_value={"AAPL.US": 0.5})
     return planner
-
-
-@pytest.fixture
-def mock_retrainer():
-    """Mock ML retrainer for testing."""
-    retrainer = AsyncMock()
-    retrainer.retrain_symbol = AsyncMock(
-        return_value={
-            "validation_rmse": 0.05,
-            "training_samples": 100,
-        }
-    )
-    return retrainer
-
-
-@pytest.fixture
-def mock_monitor():
-    """Mock ML monitor for testing."""
-    monitor = AsyncMock()
-    monitor.track_symbol_performance = AsyncMock(
-        return_value={
-            "xgboost": {"mean_absolute_error": 0.03, "predictions_evaluated": 10},
-            "ridge": {"mean_absolute_error": 0.04, "predictions_evaluated": 10},
-            "rf": {"mean_absolute_error": 0.035, "predictions_evaluated": 10},
-            "svr": {"mean_absolute_error": 0.038, "predictions_evaluated": 10},
-        }
-    )
-    return monitor
 
 
 class TestSyncPortfolio:
@@ -224,19 +174,6 @@ class TestSyncExchangeRates:
             await sync_exchange_rates()
 
             mock_currency.sync_rates.assert_awaited_once()
-
-
-class TestScoringCalculate:
-    """Tests for scoring_calculate task."""
-
-    @pytest.mark.asyncio
-    async def test_scoring_calculate_calls_analyzer(self, mock_analyzer):
-        """Verify analyzer.update_scores() is called."""
-        from sentinel.jobs.tasks import scoring_calculate
-
-        await scoring_calculate(mock_analyzer)
-
-        mock_analyzer.update_scores.assert_awaited_once()
 
 
 class TestTradingCheckMarkets:

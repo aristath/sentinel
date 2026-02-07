@@ -79,25 +79,38 @@ class TestSettingsDefaults:
         assert 0 < DEFAULTS["min_position_pct"] < DEFAULTS["max_position_pct"]
         assert DEFAULTS["max_position_pct"] <= 100
 
-    def test_defaults_ml_settings_exist(self):
-        """ML-related settings should have defaults."""
-        ml_keys = [
-            "ml_weight_xgboost",
-            "ml_weight_ridge",
-            "ml_weight_rf",
-            "ml_weight_svr",
-            "ml_weight_wavelet",
-            "ml_prediction_horizon_days",
-            "ml_training_lookback_years",
-            "ml_service_base_url",
+    def test_defaults_strategy_settings_exist(self):
+        """Strategy-related settings should have defaults."""
+        strategy_keys = [
+            "strategy_core_target_pct",
+            "strategy_opportunity_target_pct",
+            "strategy_opportunity_target_max_pct",
+            "strategy_min_opp_score",
+            "strategy_entry_t1_dd",
+            "strategy_entry_t2_dd",
+            "strategy_entry_t3_dd",
+            "strategy_entry_memory_days",
+            "strategy_memory_max_boost",
+            "strategy_opportunity_addon_threshold",
+            "strategy_max_opportunity_buys_per_cycle",
+            "strategy_max_new_opportunity_buys_per_cycle",
+            "strategy_lot_standard_max_pct",
+            "strategy_lot_coarse_max_pct",
+            "strategy_coarse_max_new_lots_per_cycle",
+            "strategy_core_floor_pct",
+            "strategy_core_new_min_score",
+            "strategy_core_new_min_dip_score",
+            "strategy_max_funding_sells_per_cycle",
+            "strategy_max_funding_turnover_pct",
+            "strategy_funding_conviction_bias",
         ]
-        for key in ml_keys:
-            assert key in DEFAULTS, f"Missing ML default: {key}"
+        for key in strategy_keys:
+            assert key in DEFAULTS, f"Missing strategy default: {key}"
 
-    def test_defaults_ml_weights_sum_to_one(self):
-        """ML ensemble weights should sum to 1.0."""
-        total = sum(DEFAULTS[f"ml_weight_{mt}"] for mt in ["xgboost", "ridge", "rf", "svr"])
-        assert abs(total - 1.0) < 0.01
+    def test_defaults_strategy_targets_sum_to_hundred(self):
+        """Core + opportunity sleeves should target full investment."""
+        total = DEFAULTS["strategy_core_target_pct"] + DEFAULTS["strategy_opportunity_target_pct"]
+        assert abs(total - 100.0) < 0.01
 
 
 class TestSettingsGet:
@@ -265,11 +278,11 @@ class TestSettingsValidation:
     @pytest.mark.asyncio
     async def test_boolean_settings(self, temp_settings):
         """Boolean settings should work correctly."""
-        await temp_settings.set("use_regime_adjustment", True)
-        assert await temp_settings.get("use_regime_adjustment") is True
+        await temp_settings.set("led_display_enabled", True)
+        assert await temp_settings.get("led_display_enabled") is True
 
-        await temp_settings.set("use_regime_adjustment", False)
-        assert await temp_settings.get("use_regime_adjustment") is False
+        await temp_settings.set("led_display_enabled", False)
+        assert await temp_settings.get("led_display_enabled") is False
 
 
 class TestSettingsEdgeCases:

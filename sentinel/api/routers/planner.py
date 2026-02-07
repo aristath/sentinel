@@ -60,7 +60,7 @@ async def get_recommendations(
                 "price": r.price,
                 "currency": r.currency,
                 "lot_size": r.lot_size,
-                "expected_return": r.expected_return,
+                "contrarian_score": r.contrarian_score,
                 "priority": r.priority,
                 "reason": r.reason,
             }

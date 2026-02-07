@@ -43,7 +43,7 @@ class SimulationDatabase(BaseDatabase):
                     pass
 
         # Copy read-only reference data only
-        for table in ["settings", "securities", "prices", "scores", "allocation_targets"]:
+        for table in ["settings", "securities", "prices", "allocation_targets"]:
             await self._copy_table(source_db, table)
 
         await self._connection.commit()

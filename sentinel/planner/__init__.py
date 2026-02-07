@@ -10,8 +10,6 @@ This package provides components for:
 from sentinel.planner.allocation import AllocationCalculator
 from sentinel.planner.analyzer import PortfolioAnalyzer
 from sentinel.planner.models import TradeRecommendation
-
-# Keep Planner class for backward compatibility
 from sentinel.planner.planner import Planner
 from sentinel.planner.rebalance import RebalanceEngine
 

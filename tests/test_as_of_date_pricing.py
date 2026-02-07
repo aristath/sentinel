@@ -37,7 +37,6 @@ async def test_deficit_sells_use_historical_close_on_as_of_date():
             }
         ]
     )
-    db.get_scores = AsyncMock(return_value={"AAA": 0.0})
     db.get_prices = AsyncMock(return_value=[{"symbol": "AAA", "date": "2025-01-01", "close": 10.0}])
 
     engine = RebalanceEngine(db=db, portfolio=portfolio, currency=currency)
@@ -47,4 +46,4 @@ async def test_deficit_sells_use_historical_close_on_as_of_date():
     assert sells[0].symbol == "AAA"
     assert sells[0].price == 10.0
 
-    db.get_prices.assert_awaited_once_with("AAA", days=1, end_date="2025-01-01")
+    db.get_prices.assert_any_await("AAA", days=1, end_date="2025-01-01")

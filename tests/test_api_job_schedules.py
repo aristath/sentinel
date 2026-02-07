@@ -39,8 +39,7 @@ async def test_get_job_schedules_returns_all(db):
     """GET /api/jobs/schedules should return all schedules."""
     schedules = await db.get_job_schedules()
 
-    # ML/analytics schedules moved to sentinel-ml service
-    assert len(schedules) == 16
+    assert len(schedules) == 15
 
     # Check structure (no longer has enabled, dependencies, is_parameterized fields)
     schedule = schedules[0]
@@ -187,7 +186,6 @@ async def test_all_job_types_present(db):
         "sync:quotes",
         "sync:metadata",
         "sync:exchange_rates",
-        "scoring:calculate",
         "trading:check_markets",
         "trading:execute",
         "trading:rebalance",
@@ -208,5 +206,5 @@ async def test_categories_present(db):
     schedules = await db.get_job_schedules()
     categories = set(s["category"] for s in schedules)
 
-    expected = {"sync", "scoring", "trading", "backup"}
+    expected = {"sync", "trading", "backup"}
     assert categories == expected

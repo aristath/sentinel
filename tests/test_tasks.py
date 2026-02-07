@@ -7,12 +7,12 @@ import pytest
 from sentinel.jobs.tasks import sync_prices
 
 
-class TestSyncPricesClearsFeatureCache:
-    """Tests that sync_prices clears feature cache before fetching new prices."""
+class TestSyncPricesClearsAnalysisCache:
+    """Tests that sync_prices clears analysis cache before fetching new prices."""
 
     @pytest.mark.asyncio
-    async def test_sync_prices_clears_feature_cache_before_fetch(self):
-        """Verify cache_clear("features:") is called before broker.get_historical_prices_bulk."""
+    async def test_sync_prices_clears_analysis_cache_before_fetch(self):
+        """Verify cache.clear() is called before broker.get_historical_prices_bulk."""
         # Track cross-object call ordering via a shared list
         call_order = []
 
@@ -23,11 +23,6 @@ class TestSyncPricesClearsFeatureCache:
             ]
         )
 
-        async def track_cache_clear(prefix):
-            call_order.append(("db.cache_clear", prefix))
-            return 1
-
-        db.cache_clear = AsyncMock(side_effect=track_cache_clear)
         db.save_prices = AsyncMock()
 
         broker = MagicMock()
@@ -39,16 +34,21 @@ class TestSyncPricesClearsFeatureCache:
         broker.get_historical_prices_bulk = AsyncMock(side_effect=track_fetch)
 
         cache = MagicMock()
-        cache.clear = MagicMock(return_value=5)
+
+        def track_analysis_cache_clear():
+            call_order.append(("cache.clear",))
+            return 5
+
+        cache.clear = MagicMock(side_effect=track_analysis_cache_clear)
 
         await sync_prices(db, broker, cache)
 
-        # cache_clear("features:") must have been called
-        db.cache_clear.assert_called_once_with("features:")
+        # analysis cache must have been cleared
+        cache.clear.assert_called_once()
 
-        # Verify ordering: cache_clear happens before broker fetch
-        clear_idx = next(i for i, c in enumerate(call_order) if c[0] == "db.cache_clear")
+        # Verify ordering: cache clear happens before broker fetch
+        clear_idx = next(i for i, c in enumerate(call_order) if c[0] == "cache.clear")
         fetch_idx = next(i for i, c in enumerate(call_order) if c[0] == "broker.get_historical_prices_bulk")
         assert clear_idx < fetch_idx, (
-            f"cache_clear (index {clear_idx}) must precede get_historical_prices_bulk (index {fetch_idx})"
+            f"cache.clear (index {clear_idx}) must precede get_historical_prices_bulk (index {fetch_idx})"
         )

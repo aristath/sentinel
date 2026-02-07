@@ -2,7 +2,6 @@
 
 import bisect
 import logging
-from collections import defaultdict
 from datetime import date as date_type
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -74,7 +73,7 @@ async def get_portfolio_pnl_history(
     Get portfolio P&L history for charting (hardcoded 1Y).
 
     Snapshots store only positions + cash. All derived metrics
-    (total_value, net_deposits, wavelet, ML) are computed at query time.
+    (total_value, net_deposits, returns) are computed at query time.
     """
     days = 365
 
@@ -112,13 +111,6 @@ async def get_portfolio_pnl_history(
         idx = bisect.bisect_right(nd_dates, iso_date) - 1
         return nd_values[idx] if idx >= 0 else 0.0
 
-    # --- Pre-fetch wavelet scores ---
-    raw_scores = await deps.db.get_all_scores_history()
-    scores_by_symbol: dict[str, list[tuple[int, float]]] = defaultdict(list)
-    for row in raw_scores:
-        if row["score"] is not None:
-            scores_by_symbol[row["symbol"]].append((row["calculated_at"], row["score"]))
-
     # --- Build daily data from snapshots ---
     daily = []
     for snap in snapshots:
@@ -135,25 +127,6 @@ async def get_portfolio_pnl_history(
         pnl_eur = total_value - net_deposits
         pnl_pct = (pnl_eur / net_deposits * 100) if net_deposits > 0 else 0.0
 
-        # Position-value-weighted wavelet score
-        eod_ts = int(datetime.strptime(iso_date + " 23:59:59", "%Y-%m-%d %H:%M:%S").timestamp())
-        wavelet_score = None
-        if positions_value > 0:
-            w_sum = 0.0
-            w_total = 0.0
-            for symbol, pos in positions.items():
-                pos_val = pos.get("value_eur", 0)
-                if pos_val <= 0:
-                    continue
-                ts_list = scores_by_symbol.get(symbol, [])
-                if ts_list:
-                    idx = bisect.bisect_right(ts_list, (eod_ts, float("inf"))) - 1
-                    if idx >= 0:
-                        w_sum += ts_list[idx][1] * pos_val
-                        w_total += pos_val
-            if w_total > 0:
-                wavelet_score = round(w_sum / w_total, 6)
-
         daily.append(
             {
                 "date": iso_date,
@@ -161,11 +134,6 @@ async def get_portfolio_pnl_history(
                 "net_deposits_eur": round(net_deposits, 2),
                 "pnl_eur": round(pnl_eur, 2),
                 "pnl_pct": round(pnl_pct, 2),
-                "wavelet_score": wavelet_score,
-                "ml_xgboost_return": None,
-                "ml_ridge_return": None,
-                "ml_rf_return": None,
-                "ml_svr_return": None,
             }
         )
 
@@ -177,14 +145,13 @@ async def get_portfolio_pnl_history(
             output_start = idx
             break
     window = 365
-    offset = 14
     output_start = max(output_start, window)
 
     last_daily_idx = len(daily) - 1
 
     result_snapshots = []
     i = output_start
-    while i < last_daily_idx + offset + 1:
+    while i < last_daily_idx + 1:
         in_future = i > last_daily_idx
 
         if in_future:
@@ -227,34 +194,6 @@ async def get_portfolio_pnl_history(
                 point["actual_ann_return"] = None
         else:
             point["actual_ann_return"] = None
-
-        # Wavelet
-        if not in_future:
-            point["wavelet_ann_return"] = daily[i].get("wavelet_score")
-        else:
-            point["wavelet_ann_return"] = None
-
-        # ML: actual CAGR from 14 days ago + ML prediction
-        past_i = i - offset
-        past_cumulative = None
-        if past_i >= (window - offset) and past_i >= 0 and past_i <= last_daily_idx:
-            past_cumulative = 1.0
-            past_valid = True
-            for j in range(max(1, past_i - window + 1), past_i + 1):
-                prev_val = daily[j - 1]["total_value_eur"]
-                curr_val = daily[j]["total_value_eur"]
-                cash_flow = daily[j]["net_deposits_eur"] - daily[j - 1]["net_deposits_eur"]
-                if prev_val and prev_val > 0:
-                    hpr = (curr_val - prev_val - cash_flow) / prev_val
-                    past_cumulative *= 1.0 + hpr
-                else:
-                    past_valid = False
-                    break
-            if not past_valid:
-                past_cumulative = None
-
-        for mt in ["xgboost", "ridge", "rf", "svr"]:
-            point[f"ml_{mt}"] = None
 
         result_snapshots.append(point)
         i += 1

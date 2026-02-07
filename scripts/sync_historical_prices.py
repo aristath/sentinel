@@ -67,9 +67,6 @@ async def main() -> None:
         cache = Cache("motion")
         cleared = cache.clear()
         logger.info("Cleared %d cached analyses before price sync", cleared)
-        features_cleared = await db.cache_clear("features:")
-        logger.info("Cleared %d cached feature entries before price sync", features_cleared)
-
         securities = await db.get_all_securities(active_only=True)
         symbols = [s["symbol"] for s in securities]
         total = len(symbols)

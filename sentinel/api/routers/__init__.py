@@ -4,13 +4,12 @@ Each router handles a specific domain of the API.
 """
 
 from sentinel.api.routers.backup import router as backup_router
-from sentinel.api.routers.internal_ml import router as internal_ml_router
 from sentinel.api.routers.jobs import router as jobs_router
 from sentinel.api.routers.jobs import set_scheduler
 from sentinel.api.routers.planner import router as planner_router
 from sentinel.api.routers.portfolio import allocation_router, targets_router
 from sentinel.api.routers.portfolio import router as portfolio_router
-from sentinel.api.routers.securities import prices_router, scores_router, unified_router
+from sentinel.api.routers.securities import prices_router, unified_router
 from sentinel.api.routers.securities import router as securities_router
 from sentinel.api.routers.settings import led_router
 from sentinel.api.routers.settings import router as settings_router
@@ -36,7 +35,6 @@ __all__ = [
     "targets_router",
     "securities_router",
     "prices_router",
-    "scores_router",
     "unified_router",
     "trading_router",
     "cashflows_router",
@@ -44,7 +42,6 @@ __all__ = [
     "planner_router",
     "jobs_router",
     "set_scheduler",
-    "internal_ml_router",
     "backup_router",
     "system_router",
     "cache_router",

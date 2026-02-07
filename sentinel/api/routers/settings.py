@@ -9,7 +9,12 @@ from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.led import LEDController
 
 router = APIRouter(prefix="/settings", tags=["settings"])
-WEIGHT_KEYS = {"ml_weight_wavelet", "ml_weight_xgboost", "ml_weight_ridge", "ml_weight_rf", "ml_weight_svr"}
+STRATEGY_KEYS = {
+    "strategy_core_target_pct",
+    "strategy_opportunity_target_pct",
+    "strategy_min_opp_score",
+    "strategy_core_floor_pct",
+}
 
 # Global LED controller reference (set by app lifespan)
 _led_controller: LEDController | None = None
@@ -47,7 +52,7 @@ async def set_settings_batch(
 ) -> dict[str, str]:
     """Set multiple settings atomically.
 
-    For this endpoint, payload must contain all ML weight keys so validation can
+    For this endpoint, payload must contain all strategy tuning keys so validation can
     enforce domain/range constraints and prevent partial inconsistent updates.
     """
     values = payload.get("values")
@@ -55,23 +60,33 @@ async def set_settings_batch(
         raise HTTPException(status_code=400, detail="Payload must include object field 'values'")
 
     keys = set(values.keys())
-    if keys != WEIGHT_KEYS:
-        raise HTTPException(status_code=400, detail=f"Batch update requires exactly these keys: {sorted(WEIGHT_KEYS)}")
+    if keys != STRATEGY_KEYS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Batch update requires exactly these keys: {sorted(STRATEGY_KEYS)}",
+        )
 
-    parsed_weights: dict[str, float] = {}
-    for key in WEIGHT_KEYS:
+    parsed_values: dict[str, float] = {}
+    for key in STRATEGY_KEYS:
         raw = values.get(key)
         if isinstance(raw, bool) or not isinstance(raw, int | float):
             raise HTTPException(status_code=400, detail=f"Setting '{key}' must be a number")
         value = float(raw)
-        if value < 0.0 or value > 1.0:
-            raise HTTPException(status_code=400, detail=f"Setting '{key}' must be in [0, 1]")
-        parsed_weights[key] = value
+        parsed_values[key] = value
 
-    if sum(parsed_weights.values()) <= 0.0:
-        raise HTTPException(status_code=400, detail="At least one weight must be greater than zero")
+    if parsed_values["strategy_core_target_pct"] < 0 or parsed_values["strategy_core_target_pct"] > 100:
+        raise HTTPException(status_code=400, detail="'strategy_core_target_pct' must be in [0, 100]")
+    if parsed_values["strategy_opportunity_target_pct"] < 0 or parsed_values["strategy_opportunity_target_pct"] > 100:
+        raise HTTPException(status_code=400, detail="'strategy_opportunity_target_pct' must be in [0, 100]")
+    target_sum = parsed_values["strategy_core_target_pct"] + parsed_values["strategy_opportunity_target_pct"]
+    if abs(target_sum - 100.0) > 1e-9:
+        raise HTTPException(status_code=400, detail="Core and opportunity targets must sum to 100")
+    if parsed_values["strategy_min_opp_score"] < 0 or parsed_values["strategy_min_opp_score"] > 1:
+        raise HTTPException(status_code=400, detail="'strategy_min_opp_score' must be in [0, 1]")
+    if parsed_values["strategy_core_floor_pct"] < 0 or parsed_values["strategy_core_floor_pct"] > 1:
+        raise HTTPException(status_code=400, detail="'strategy_core_floor_pct' must be in [0, 1]")
 
-    await deps.db.set_settings_batch({key: parsed_weights[key] for key in sorted(WEIGHT_KEYS)})
+    await deps.db.set_settings_batch({key: parsed_values[key] for key in sorted(STRATEGY_KEYS)})
 
     return {"status": "ok"}
 

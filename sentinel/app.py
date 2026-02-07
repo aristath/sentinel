@@ -22,7 +22,6 @@ from sentinel.api.routers import (
     cache_router,
     cashflows_router,
     exchange_rates_router,
-    internal_ml_router,
     jobs_router,
     led_router,
     markets_router,
@@ -31,7 +30,6 @@ from sentinel.api.routers import (
     portfolio_router,
     prices_router,
     pulse_router,
-    scores_router,
     securities_router,
     set_scheduler,
     settings_router,
@@ -85,11 +83,9 @@ async def lifespan(app: FastAPI):
     await _sync_missing_prices(db, broker)
 
     # Initialize job system components
-    from sentinel.analyzer import Analyzer
     from sentinel.planner import Planner
 
     portfolio = Portfolio()
-    analyzer = Analyzer()
     planner = Planner()
     cache = Cache("motion")
 
@@ -105,7 +101,6 @@ async def lifespan(app: FastAPI):
         db,
         broker,
         portfolio,
-        analyzer,
         planner,
         cache,
         market_checker,
@@ -200,14 +195,12 @@ app.include_router(targets_router, prefix="/api")
 app.include_router(allocation_router, prefix="/api")
 app.include_router(securities_router, prefix="/api")
 app.include_router(prices_router, prefix="/api")
-app.include_router(scores_router, prefix="/api")
 app.include_router(unified_router, prefix="/api")
 app.include_router(trading_router, prefix="/api")
 app.include_router(cashflows_router, prefix="/api")
 app.include_router(trading_actions_router, prefix="/api")
 app.include_router(planner_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
-app.include_router(internal_ml_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
 app.include_router(system_router, prefix="/api")
 app.include_router(cache_router, prefix="/api")

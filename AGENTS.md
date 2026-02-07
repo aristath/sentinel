@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-Sentinel is a long-term autonomous portfolio management system built with Python/FastAPI backend and React frontend. It integrates with TraderNet API for live trading, includes machine learning components for market analysis, and supports automated portfolio rebalancing.
+Sentinel is a long-term autonomous portfolio management system built with Python/FastAPI backend and React frontend. It integrates with TraderNet API for live trading and supports automated portfolio rebalancing with a deterministic contrarian strategy.
 
 ## Essential Commands
 
@@ -50,7 +50,7 @@ npm run build    # Build for production
   - `api/` - FastAPI routers and endpoints
   - `database/` - Database operations using aiosqlite
   - `jobs/` - APScheduler-based task scheduling
-  - `ml_*.py` - Machine learning components
+  - `strategy/` - Deterministic portfolio signal and lot-aware sizing logic
   - `services/` - Business logic services
   - `utils/` - Utility functions and decorators
   - `planner/` - Portfolio planning and rebalancing logic
@@ -76,12 +76,10 @@ npm run build    # Build for production
 - Response format: standardized JSON with consistent error handling
 - CORS enabled for development
 
-### ML Components
-- Models stored in `sentinel/models/` directory
-- Feature extraction in `ml_features.py`
-- Prediction logic in `ml_predictor.py`
-- Ensemble methods in `ml_ensemble.py`
-- Monitoring and retraining in `ml_monitor.py` and `ml_retrainer.py`
+### Strategy Components
+- Deterministic contrarian scoring in `sentinel/strategy/contrarian.py`
+- Portfolio allocation logic in `sentinel/planner/allocation.py`
+- Trade recommendation engine in `sentinel/planner/rebalance.py`
 
 ### Configuration
 - No hardcoded values - all settings go through Settings class
@@ -162,11 +160,11 @@ This project uses Python 3.13 target with virtual environment:
 2. Add migration logic in Database class
 3. Update all affected database methods
 
-### Adding ML Feature
-1. Add feature extraction in `ml_features.py`
-2. Update model training in `ml_trainer.py`
-3. Add monitoring in `ml_monitor.py`
-4. Retrain existing models (see scripts in `scripts/`)
+### Modifying Strategy Logic
+1. Update deterministic signals in `sentinel/strategy/contrarian.py`
+2. Update sleeve or weighting behavior in `sentinel/planner/allocation.py`
+3. Update trade generation constraints in `sentinel/planner/rebalance.py`
+4. Add/adjust tests in `tests/test_strategy_contrarian.py` and planner tests
 
 ## Error Handling
 

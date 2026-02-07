@@ -840,56 +840,6 @@ class TestAsianMarketHandling:
             await security.buy(10)
 
 
-class TestScoring:
-    """Tests for score operations."""
-
-    @pytest.mark.asyncio
-    async def test_get_score_returns_score(self):
-        """get_score() delegates to db.get_score()."""
-        db = MagicMock()
-        db.get_score = AsyncMock(return_value=0.75)
-
-        security = Security("AAPL.US", db=db)
-        score = await security.get_score()
-        assert score == 0.75
-        db.get_score.assert_awaited_once_with("AAPL.US", as_of_date=None)
-
-    @pytest.mark.asyncio
-    async def test_get_score_with_as_of_date_delegates_with_ts(self):
-        """get_score(as_of_date=ts) delegates to db.get_score(symbol, as_of_date=ts)."""
-        db = MagicMock()
-        db.get_score = AsyncMock(return_value=0.6)
-
-        security = Security("AAPL.US", db=db)
-        score = await security.get_score(as_of_date=1700000000)
-        assert score == 0.6
-        db.get_score.assert_awaited_once_with("AAPL.US", as_of_date=1700000000)
-
-    @pytest.mark.asyncio
-    async def test_get_score_returns_none_when_not_scored(self):
-        """get_score() returns None when no score exists."""
-        db = MagicMock()
-        db.get_score = AsyncMock(return_value=None)
-
-        security = Security("AAPL.US", db=db)
-        score = await security.get_score()
-        assert score is None
-
-    @pytest.mark.asyncio
-    async def test_set_score_saves_score(self):
-        """set_score() saves score to database."""
-        db = MagicMock()
-        db.conn = MagicMock()
-        db.conn.execute = AsyncMock()
-        db.conn.commit = AsyncMock()
-
-        security = Security("AAPL.US", db=db)
-        await security.set_score(0.85, components={"ml": 0.8, "momentum": 0.9})
-
-        db.conn.execute.assert_called_once()
-        db.conn.commit.assert_called_once()
-
-
 class TestManagement:
     """Tests for security management operations."""
 

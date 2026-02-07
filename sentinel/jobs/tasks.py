@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import json
 import logging
 import os
@@ -31,10 +32,6 @@ async def sync_prices(db, broker, cache) -> None:
     # Clear analysis cache since prices are changing
     cleared = cache.clear()
     logger.info(f"Cleared {cleared} cached analyses before price sync")
-
-    # Clear cached feature extraction results (derived from prices)
-    features_cleared = await db.cache_clear("features:")
-    logger.info(f"Cleared {features_cleared} cached feature entries before price sync")
 
     securities = await db.get_all_securities(active_only=True)
     symbols = [s["symbol"] for s in securities]
@@ -286,18 +283,6 @@ async def aggregate_compute(db) -> None:
     logger.info(f"Aggregate computation complete: {result['country']} country, {result['industry']} industry")
 
 
-# -----------------------------------------------------------------------------
-# Scoring Tasks
-# -----------------------------------------------------------------------------
-
-
-async def scoring_calculate(analyzer) -> None:
-    """Calculate scores for all securities."""
-    count = await analyzer.update_scores()
-    logger.info(f"Calculated scores for {count} securities")
-
-
-# -----------------------------------------------------------------------------
 # Trading Tasks
 # -----------------------------------------------------------------------------
 
@@ -397,6 +382,7 @@ async def trading_execute(broker, db, planner) -> None:
         success = await _execute_trade(broker, rec)
         if success:
             executed.append(rec)
+            await _update_strategy_state_after_execution(db, rec)
         else:
             failed.append(rec)
 
@@ -405,6 +391,7 @@ async def trading_execute(broker, db, planner) -> None:
         success = await _execute_trade(broker, rec)
         if success:
             executed.append(rec)
+            await _update_strategy_state_after_execution(db, rec)
         else:
             failed.append(rec)
 
@@ -618,6 +605,57 @@ async def _execute_trade(broker, rec) -> bool:
     except Exception as e:
         logger.error(f"Failed to execute {rec.action} {rec.symbol}: {e}")
         return False
+
+
+async def _update_strategy_state_after_execution(db, rec) -> None:
+    """Persist deterministic strategy lifecycle state after a successful trade."""
+    import time
+
+    getter = getattr(db, "get_strategy_state", None)
+    upserter = getattr(db, "upsert_strategy_state", None)
+    if not callable(getter) or not callable(upserter):
+        return
+
+    current_value = getter(rec.symbol)
+    if inspect.isawaitable(current_value):
+        current_value = await current_value
+    current = current_value if isinstance(current_value, dict) else {}
+    now = int(time.time())
+    updates = {
+        "updated_at": now,
+        "sleeve": rec.sleeve or current.get("sleeve", "core"),
+    }
+
+    if rec.action == "buy":
+        tranche_stage = int(current.get("tranche_stage", 0) or 0)
+        if rec.reason_code and rec.reason_code.startswith("entry_t"):
+            try:
+                tranche_stage = max(tranche_stage, int(rec.reason_code[-1]))
+            except ValueError:
+                pass
+        updates.update(
+            {
+                "tranche_stage": tranche_stage,
+                "last_entry_price": rec.price,
+                "last_entry_ts": now,
+            }
+        )
+    else:
+        scaleout_stage = int(current.get("scaleout_stage", 0) or 0)
+        if rec.reason_code == "scaleout_10":
+            scaleout_stage = max(scaleout_stage, 1)
+        elif rec.reason_code == "scaleout_18":
+            scaleout_stage = max(scaleout_stage, 2)
+
+        updates["scaleout_stage"] = scaleout_stage
+        if rec.reason_code in {"exit_momentum", "time_stop_rotation"}:
+            updates["last_rotation_ts"] = now
+            updates["tranche_stage"] = 0
+            updates["scaleout_stage"] = 0
+
+    upsert_result = upserter(rec.symbol, **updates)
+    if inspect.isawaitable(upsert_result):
+        await upsert_result
 
 
 async def _get_open_market_symbols(broker, db) -> set[str]:

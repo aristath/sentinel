@@ -583,29 +583,11 @@ class TestSchemaInitialization:
             "prices",
             "trades",
             "allocation_targets",
-            "scores",
             "cash_balances",
         ]
 
         for table in required_tables:
             assert table in tables, f"Missing table: {table}"
-
-    @pytest.mark.asyncio
-    async def test_old_ml_tables_removed(self, temp_db):
-        """Old ML tables are dropped from main database (now in ml.db)."""
-        cursor = await temp_db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
-        tables = [row[0] for row in await cursor.fetchall()]
-
-        old_ml_tables = [
-            "ml_training_samples",
-            "ml_models",
-            "ml_predictions",
-            "ml_performance_tracking",
-            "regime_states",
-            "regime_models",
-        ]
-        for table in old_ml_tables:
-            assert table not in tables, f"Old ML table should be removed: {table}"
 
 
 class TestCategories:
@@ -689,125 +671,6 @@ class TestBuildTradesWhere:
         where, params = temp_db._build_trades_where(end_date="2024-01-15")
         end_ts = int(datetime.strptime("2024-01-15 23:59:59", "%Y-%m-%d %H:%M:%S").timestamp())
         assert end_ts in params
-
-
-class TestScores:
-    """Tests for score retrieval methods."""
-
-    @pytest.mark.asyncio
-    async def test_get_score_existing(self, temp_db):
-        """get_score() returns the score float for an existing symbol."""
-        import time
-
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("TEST", 0.75, int(time.time())),
-        )
-        await temp_db.conn.commit()
-
-        result = await temp_db.get_score("TEST")
-        assert result == 0.75
-
-    @pytest.mark.asyncio
-    async def test_get_score_nonexistent(self, temp_db):
-        """get_score() returns None for a symbol with no score."""
-        result = await temp_db.get_score("NONEXISTENT")
-        assert result is None
-
-    @pytest.mark.asyncio
-    async def test_get_scores_multiple(self, temp_db):
-        """get_scores() returns a dict mapping symbol to score for multiple symbols."""
-        import time
-
-        ts = int(time.time())
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("SYM1", 0.5, ts),
-        )
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("SYM2", 0.8, ts),
-        )
-        await temp_db.conn.commit()
-
-        result = await temp_db.get_scores(["SYM1", "SYM2"])
-        assert result["SYM1"] == 0.5
-        assert result["SYM2"] == 0.8
-
-    @pytest.mark.asyncio
-    async def test_get_score_returns_latest_when_multiple_rows(self, temp_db):
-        """get_score() returns the score from the row with latest calculated_at."""
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("LATEST", 0.3, 1000),
-        )
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("LATEST", 0.9, 2000),
-        )
-        await temp_db.conn.commit()
-
-        result = await temp_db.get_score("LATEST")
-        assert result == 0.9
-
-    @pytest.mark.asyncio
-    async def test_get_score_as_of_date_returns_score_at_or_before_ts(self, temp_db):
-        """get_score(symbol, as_of_date=ts) returns score where calculated_at <= ts."""
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("ASOF", 0.2, 100),
-        )
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("ASOF", 0.5, 200),
-        )
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("ASOF", 0.8, 300),
-        )
-        await temp_db.conn.commit()
-
-        assert await temp_db.get_score("ASOF", as_of_date=150) == 0.2
-        assert await temp_db.get_score("ASOF", as_of_date=200) == 0.5
-        assert await temp_db.get_score("ASOF", as_of_date=250) == 0.5
-        assert await temp_db.get_score("ASOF", as_of_date=300) == 0.8
-        assert await temp_db.get_score("ASOF", as_of_date=400) == 0.8
-
-    @pytest.mark.asyncio
-    async def test_get_score_as_of_date_returns_none_when_no_row_before_ts(self, temp_db):
-        """get_score(symbol, as_of_date=ts) returns None when no row has calculated_at <= ts."""
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("ASOF", 0.5, 200),
-        )
-        await temp_db.conn.commit()
-
-        assert await temp_db.get_score("ASOF", as_of_date=100) is None
-
-    @pytest.mark.asyncio
-    async def test_get_scores_as_of_date_returns_latest_per_symbol_at_or_before_ts(self, temp_db):
-        """get_scores(symbols, as_of_date=ts) returns latest score per symbol with calculated_at <= ts."""
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("A", 0.1, 100),
-        )
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("A", 0.2, 200),
-        )
-        await temp_db.conn.execute(
-            "INSERT INTO scores (symbol, score, calculated_at) VALUES (?, ?, ?)",
-            ("B", 0.5, 150),
-        )
-        await temp_db.conn.commit()
-
-        result = await temp_db.get_scores(["A", "B"], as_of_date=175)
-        assert result["A"] == 0.1
-        assert result["B"] == 0.5
-
-        result2 = await temp_db.get_scores(["A", "B"], as_of_date=250)
-        assert result2["A"] == 0.2
-        assert result2["B"] == 0.5
 
 
 class TestPortfolioSnapshots:
@@ -909,3 +772,44 @@ class TestPortfolioSnapshots:
         assert "B" in snapshots[0]["data"]["positions"]
         assert "A" not in snapshots[0]["data"]["positions"]
         assert snapshots[0]["data"]["cash_eur"] == 75.0
+
+
+class TestStrategyState:
+    """Tests for deterministic strategy state table helpers."""
+
+    @pytest.mark.asyncio
+    async def test_upsert_and_get_strategy_state(self, temp_db):
+        await temp_db.upsert_strategy_state(
+            "AAPL.US",
+            sleeve="opportunity",
+            tranche_stage=2,
+            scaleout_stage=1,
+            last_entry_price=150.0,
+            last_entry_ts=1700000000,
+            updated_at=1700000100,
+        )
+
+        state = await temp_db.get_strategy_state("AAPL.US")
+        assert state is not None
+        assert state["sleeve"] == "opportunity"
+        assert state["tranche_stage"] == 2
+        assert state["scaleout_stage"] == 1
+
+    @pytest.mark.asyncio
+    async def test_get_strategy_states_by_symbol_subset(self, temp_db):
+        await temp_db.upsert_strategy_state("AAPL.US", sleeve="core", updated_at=1)
+        await temp_db.upsert_strategy_state("MSFT.US", sleeve="opportunity", updated_at=2)
+
+        states = await temp_db.get_strategy_states(["AAPL.US"])
+        assert "AAPL.US" in states
+        assert "MSFT.US" not in states
+
+    @pytest.mark.asyncio
+    async def test_get_portfolio_snapshot_as_of(self, temp_db):
+        await temp_db.upsert_portfolio_snapshot(1700000000, {"positions": {}, "cash_eur": 100.0})
+        await temp_db.upsert_portfolio_snapshot(1700100000, {"positions": {}, "cash_eur": 200.0})
+
+        snap = await temp_db.get_portfolio_snapshot_as_of(1700050000)
+        assert snap is not None
+        assert snap["date"] == 1700000000
+        assert snap["data"]["cash_eur"] == 100.0

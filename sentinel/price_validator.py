@@ -330,7 +330,7 @@ def check_trade_blocking(current_price: float, historical_prices: list[float], s
     """
     Check if trades should be blocked due to price anomaly.
 
-    Ported from sentinel2's scoring.CheckTradeBlocking.
+    Ported from sentinel2's trade-blocking logic.
 
     Logic:
     - High anomaly (price > 10x avg): BLOCK TRADES (prevents buying at inflated API error prices)

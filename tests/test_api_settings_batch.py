@@ -38,47 +38,43 @@ async def deps():
 
 
 @pytest.mark.asyncio
-async def test_set_settings_batch_persists_all_weights(deps):
+async def test_set_settings_batch_persists_strategy_values(deps):
     from sentinel.api.routers.settings import set_settings_batch
 
     payload = {
         "values": {
-            "ml_weight_wavelet": 0.1,
-            "ml_weight_xgboost": 0.8,
-            "ml_weight_ridge": 0.3,
-            "ml_weight_rf": 0.4,
-            "ml_weight_svr": 0.5,
+            "strategy_core_target_pct": 70,
+            "strategy_opportunity_target_pct": 30,
+            "strategy_min_opp_score": 0.6,
+            "strategy_core_floor_pct": 0.1,
         }
     }
 
     result = await set_settings_batch(payload, deps)
     assert result == {"status": "ok"}
 
-    assert await deps.db.get_setting("ml_weight_wavelet") == 0.1
-    assert await deps.db.get_setting("ml_weight_xgboost") == 0.8
-    assert await deps.db.get_setting("ml_weight_ridge") == 0.3
-    assert await deps.db.get_setting("ml_weight_rf") == 0.4
-    assert await deps.db.get_setting("ml_weight_svr") == 0.5
+    assert await deps.db.get_setting("strategy_core_target_pct") == 70
+    assert await deps.db.get_setting("strategy_opportunity_target_pct") == 30
+    assert await deps.db.get_setting("strategy_min_opp_score") == 0.6
+    assert await deps.db.get_setting("strategy_core_floor_pct") == 0.1
 
 
 @pytest.mark.asyncio
-async def test_set_settings_batch_rejects_out_of_range_without_partial_write(deps):
+async def test_set_settings_batch_rejects_invalid_value_without_partial_write(deps):
     from sentinel.api.routers.settings import set_settings_batch
 
     original = {
-        "ml_weight_wavelet": await deps.db.get_setting("ml_weight_wavelet"),
-        "ml_weight_xgboost": await deps.db.get_setting("ml_weight_xgboost"),
-        "ml_weight_ridge": await deps.db.get_setting("ml_weight_ridge"),
-        "ml_weight_rf": await deps.db.get_setting("ml_weight_rf"),
-        "ml_weight_svr": await deps.db.get_setting("ml_weight_svr"),
+        "strategy_core_target_pct": await deps.db.get_setting("strategy_core_target_pct"),
+        "strategy_opportunity_target_pct": await deps.db.get_setting("strategy_opportunity_target_pct"),
+        "strategy_min_opp_score": await deps.db.get_setting("strategy_min_opp_score"),
+        "strategy_core_floor_pct": await deps.db.get_setting("strategy_core_floor_pct"),
     }
     payload = {
         "values": {
-            "ml_weight_wavelet": 0.2,
-            "ml_weight_xgboost": 0.2,
-            "ml_weight_ridge": -0.1,
-            "ml_weight_rf": 0.2,
-            "ml_weight_svr": 0.2,
+            "strategy_core_target_pct": 70,
+            "strategy_opportunity_target_pct": 20,
+            "strategy_min_opp_score": -0.1,
+            "strategy_core_floor_pct": 0.1,
         }
     }
 
@@ -90,16 +86,15 @@ async def test_set_settings_batch_rejects_out_of_range_without_partial_write(dep
 
 
 @pytest.mark.asyncio
-async def test_set_settings_batch_rejects_zero_sum(deps):
+async def test_set_settings_batch_rejects_targets_not_summing_to_hundred(deps):
     from sentinel.api.routers.settings import set_settings_batch
 
     payload = {
         "values": {
-            "ml_weight_wavelet": 0.0,
-            "ml_weight_xgboost": 0.0,
-            "ml_weight_ridge": 0.0,
-            "ml_weight_rf": 0.0,
-            "ml_weight_svr": 0.0,
+            "strategy_core_target_pct": 80,
+            "strategy_opportunity_target_pct": 30,
+            "strategy_min_opp_score": 0.5,
+            "strategy_core_floor_pct": 0.1,
         }
     }
 

@@ -61,11 +61,10 @@ async def test_settings_batch_http_success(deps):
         "/api/settings",
         json={
             "values": {
-                "ml_weight_wavelet": 0.1,
-                "ml_weight_xgboost": 0.8,
-                "ml_weight_ridge": 0.3,
-                "ml_weight_rf": 0.4,
-                "ml_weight_svr": 0.5,
+                "strategy_core_target_pct": 70,
+                "strategy_opportunity_target_pct": 30,
+                "strategy_min_opp_score": 0.6,
+                "strategy_core_floor_pct": 0.1,
             }
         },
     )
@@ -80,11 +79,10 @@ async def test_settings_batch_http_rejects_boolean(deps):
         "/api/settings",
         json={
             "values": {
-                "ml_weight_wavelet": True,
-                "ml_weight_xgboost": 0.8,
-                "ml_weight_ridge": 0.3,
-                "ml_weight_rf": 0.4,
-                "ml_weight_svr": 0.5,
+                "strategy_core_target_pct": True,
+                "strategy_opportunity_target_pct": 30,
+                "strategy_min_opp_score": 0.6,
+                "strategy_core_floor_pct": 0.1,
             }
         },
     )

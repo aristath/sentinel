@@ -68,22 +68,6 @@ def mock_portfolio():
 
 
 @pytest.fixture
-def mock_analyzer():
-    """Mock analyzer for testing."""
-    analyzer = AsyncMock()
-    analyzer.update_scores = AsyncMock(return_value=5)
-    return analyzer
-
-
-@pytest.fixture
-def mock_detector():
-    """Mock detector for testing."""
-    detector = AsyncMock()
-    detector.train_model = AsyncMock()
-    return detector
-
-
-@pytest.fixture
 def mock_planner():
     """Mock planner for testing."""
     planner = AsyncMock()
@@ -91,22 +75,6 @@ def mock_planner():
     planner.get_rebalance_summary = AsyncMock(return_value={"needs_rebalance": False})
     planner.calculate_ideal_portfolio = AsyncMock(return_value={})
     return planner
-
-
-@pytest.fixture
-def mock_retrainer():
-    """Mock ML retrainer for testing."""
-    retrainer = AsyncMock()
-    retrainer.retrain_symbol = AsyncMock()
-    return retrainer
-
-
-@pytest.fixture
-def mock_monitor():
-    """Mock ML monitor for testing."""
-    monitor = AsyncMock()
-    monitor.track_symbol_performance = AsyncMock()
-    return monitor
 
 
 @pytest.fixture
@@ -136,7 +104,6 @@ class TestRunnerInit:
         mock_db,
         mock_broker,
         mock_portfolio,
-        mock_analyzer,
         mock_planner,
         mock_cache,
         mock_market_checker,
@@ -159,7 +126,6 @@ class TestRunnerInit:
                 mock_db,
                 mock_broker,
                 mock_portfolio,
-                mock_analyzer,
                 mock_planner,
                 mock_cache,
                 mock_market_checker,
@@ -174,7 +140,6 @@ class TestRunnerInit:
         mock_db,
         mock_broker,
         mock_portfolio,
-        mock_analyzer,
         mock_planner,
         mock_cache,
         mock_market_checker,
@@ -196,7 +161,6 @@ class TestRunnerInit:
                 mock_db,
                 mock_broker,
                 mock_portfolio,
-                mock_analyzer,
                 mock_planner,
                 mock_cache,
                 mock_market_checker,

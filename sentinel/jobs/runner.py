@@ -39,7 +39,6 @@ TASK_REGISTRY: dict[str, tuple[Callable, list[str]]] = {
     "sync:cashflows": (tasks.sync_cashflows, ["db", "broker"]),
     "sync:dividends": (tasks.sync_dividends, ["db", "broker"]),
     "aggregate:compute": (tasks.aggregate_compute, ["db"]),
-    "scoring:calculate": (tasks.scoring_calculate, ["analyzer"]),
     "trading:check_markets": (tasks.trading_check_markets, ["broker", "db", "planner"]),
     "trading:execute": (tasks.trading_execute, ["broker", "db", "planner"]),
     "trading:rebalance": (tasks.trading_rebalance, ["planner"]),
@@ -59,7 +58,6 @@ async def init(
     db,
     broker,
     portfolio,
-    analyzer,
     planner,
     cache,
     market_checker,
@@ -70,7 +68,6 @@ async def init(
         db: Database instance
         broker: Broker instance
         portfolio: Portfolio instance
-        analyzer: Analyzer instance
         planner: Planner instance
         cache: Cache instance
         market_checker: MarketChecker instance
@@ -85,7 +82,6 @@ async def init(
         "db": db,
         "broker": broker,
         "portfolio": portfolio,
-        "analyzer": analyzer,
         "planner": planner,
         "cache": cache,
         "market_checker": market_checker,
