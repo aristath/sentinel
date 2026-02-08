@@ -757,6 +757,23 @@ class TestPortfolioSnapshots:
         assert latest is None
 
     @pytest.mark.asyncio
+    async def test_get_portfolio_snapshot_dates_range(self, temp_db):
+        """Returns only snapshot dates inside the optional range."""
+        ts1 = 1706745600  # 2024-02-01
+        ts2 = 1706832000  # 2024-02-02
+        ts3 = 1706918400  # 2024-02-03
+        for ts in [ts1, ts2, ts3]:
+            await temp_db.upsert_portfolio_snapshot(ts, {"positions": {}, "cash_eur": 0.0})
+
+        dates_all = await temp_db.get_portfolio_snapshot_dates()
+        dates_ranged = await temp_db.get_portfolio_snapshot_dates(start_ts=ts2, end_ts=ts3)
+        dates_start_only = await temp_db.get_portfolio_snapshot_dates(start_ts=ts2)
+
+        assert dates_all == [ts1, ts2, ts3]
+        assert dates_ranged == [ts2, ts3]
+        assert dates_start_only == [ts2, ts3]
+
+    @pytest.mark.asyncio
     async def test_upsert_replaces_existing(self, temp_db):
         """Upsert same date twice, second data wins."""
         ts = 1706745600

@@ -671,6 +671,24 @@ class BaseDatabase:
         rows = await cursor.fetchall()
         return [{"date": row["date"], "data": json.loads(row["data"])} for row in rows]
 
+    async def get_portfolio_snapshot_dates(self, start_ts: int | None = None, end_ts: int | None = None) -> list[int]:
+        """Get snapshot dates (unix timestamps), ordered ascending."""
+        where: list[str] = []
+        params: list[int] = []
+        if start_ts is not None:
+            where.append("date >= ?")
+            params.append(start_ts)
+        if end_ts is not None:
+            where.append("date <= ?")
+            params.append(end_ts)
+        where_sql = f" WHERE {' AND '.join(where)}" if where else ""
+        cursor = await self.conn.execute(
+            f"SELECT date FROM portfolio_snapshots{where_sql} ORDER BY date ASC",  # noqa: S608
+            tuple(params),
+        )
+        rows = await cursor.fetchall()
+        return [int(row["date"]) for row in rows]
+
     async def upsert_portfolio_snapshot(self, date: int, data: dict) -> None:
         """
         Insert or replace a portfolio snapshot.
