@@ -6,7 +6,8 @@ After=network.target
 Type=simple
 User=arduino
 WorkingDirectory=/home/arduino/sentinel
-ExecStart=/home/arduino/sentinel/.venv/bin/python main.py --all
+# Bind IPv4 so Docker/Arduino App containers can reach the API via HOST_IP/gateway.
+ExecStart=/home/arduino/sentinel/.venv/bin/python main.py --all --host 0.0.0.0
 Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
