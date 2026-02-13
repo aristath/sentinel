@@ -24,7 +24,9 @@
 #define H 8
 #define NUMPIXELS (W * H)
 
-static const uint8_t BRIGHTNESS_CAP = 8;
+// Keep very low, but non-zero-visible for typical indoor light.
+// Once we confirm hardware visibility, we can tune this back down.
+static const uint8_t BRIGHTNESS_CAP = 24;
 static const uint32_t POLL_INTERVAL_MS = 30000;
 static const float PULSE_PERIOD_S = 2.0f;
 
@@ -36,6 +38,7 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 static float before40[40];
 static float after40[40];
+static bool hasHeatmapData = false;
 
 static uint32_t lastPollMs = 0;
 static uint32_t lastFrameMs = 0;
@@ -136,9 +139,38 @@ static void maybePoll() {
     before40[i] = clampf(out[0][i], -0.5f, 0.5f);
     after40[i] = clampf(out[1][i], -0.5f, 0.5f);
   }
+  hasHeatmapData = true;
+}
+
+static void renderStartupComet() {
+  // If the shield is miswired / signal-level is wrong, everything will look "off".
+  // This moving comet makes hardware visibility debugging unambiguous.
+  pixels.setBrightness(BRIGHTNESS_CAP);
+  const float speed = 6.0f; // pixels per second
+  float head = tSec * speed;
+  int headI = (int)head;
+  for (int i = 0; i < NUMPIXELS; i++) {
+    int d = headI - i;
+    // Wrap distance into [-NUMPIXELS, NUMPIXELS]
+    while (d > NUMPIXELS) d -= NUMPIXELS;
+    while (d < -NUMPIXELS) d += NUMPIXELS;
+    int ad = (d < 0) ? -d : d;
+    // Exponential-ish tail without powf(): 1/(1+ad^2)
+    float inv = 1.0f / (1.0f + (float)(ad * ad));
+    uint8_t v = (uint8_t)clampf(inv * 255.0f, 0.0f, 255.0f);
+    v = gamma8(v);
+    // Cyan comet (still shows clearly even if G/R swapped).
+    pixels.setPixelColor(i, pixels.Color(0, v, v));
+  }
+  pixels.show();
 }
 
 static void renderFrame() {
+  if (!hasHeatmapData) {
+    renderStartupComet();
+    return;
+  }
+
   float cycles = tSec / PULSE_PERIOD_S;
   float phase = cycles - (int)cycles; // 0..1 for tSec>=0
   float pulse = 0.5f + 0.5f * sinf(phase * 2.0f * (float)M_PI);
