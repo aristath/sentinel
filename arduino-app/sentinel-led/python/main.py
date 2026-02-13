@@ -1,17 +1,23 @@
 # pyright: reportMissingImports=false
 """
-Sentinel LED App - Trade recommendations display for Arduino UNO Q.
+Sentinel LED App - NeoPixel heatmap display for Arduino UNO Q.
 
-Fetches trade recommendations from sentinel API and provides them
-to the MCU on demand. MCU pulls next trade when ready (after scrolling).
+The MCU owns animation/rendering and polls the MPU via Arduino Bridge RPC:
 
-This runs as an Arduino App via arduino-app-cli.
+  Bridge.call("heatmap/get") -> [[before40],[after40]]
+
+Each array has 40 scores (clamped to [-0.5, +0.5]) representing per-segment P/L:
+  score = (current_price - avg_cost) / avg_cost
+
+The "before" vs "after" difference comes from applying Sentinel's planner
+recommendations to weights (as-if executed).
 """
+
+from __future__ import annotations
 
 import logging
 import os
 import time
-from dataclasses import dataclass
 from threading import Lock
 
 import requests
@@ -21,115 +27,154 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(level
 logger = logging.getLogger(__name__)
 
 
-# Configuration
 SENTINEL_API_URL = os.environ.get("SENTINEL_API_URL", "http://172.17.0.1:8000")
-REFRESH_INTERVAL = 300  # Refresh recommendations every 5 minutes
+REFRESH_INTERVAL_SEC = 30  # MCU polls every 30s; keep cache roughly aligned.
+SCORE_CLAMP_ABS = 0.5
+PARTS = 40
 
 
-@dataclass
-class Trade:
-    """A trade recommendation to display."""
-
-    action: str
-    amount: float
-    symbol: str
-    sell_pct: float = 0.0
-
-    def to_display_string(self) -> str:
-        """Format trade for LED display."""
-        if self.action == "SELL":
-            return f"{self.symbol} -${self.amount:,.2f} (-{int(self.sell_pct)}%)"
-        else:
-            return f"{self.symbol} +${self.amount:,.2f}"
+def clamp_score(x: float) -> float:
+    if x < -SCORE_CLAMP_ABS:
+        return -SCORE_CLAMP_ABS
+    if x > SCORE_CLAMP_ABS:
+        return SCORE_CLAMP_ABS
+    return x
 
 
-class TradeProvider:
-    """Provides trades to MCU on demand."""
+def largest_remainder_counts(weights: list[float], total_parts: int) -> list[int]:
+    total_w = sum(w for w in weights if w > 0)
+    if total_w <= 0:
+        return [0 for _ in weights]
 
-    def __init__(self):
-        self._trades: list[Trade] = []
-        self._index = 0
+    scaled = [max(0.0, w) / total_w * total_parts for w in weights]
+    floors = [int(x) for x in scaled]
+    remainder = total_parts - sum(floors)
+    fracs = sorted(((scaled[i] - floors[i], i) for i in range(len(weights))), reverse=True)
+
+    counts = floors[:]
+    for _, i in fracs[:remainder]:
+        counts[i] += 1
+    return counts
+
+
+class HeatmapProvider:
+    def __init__(self) -> None:
         self._lock = Lock()
-        self._last_fetch = 0
+        self._last_refresh = 0.0
+        self._before: list[float] = [0.0] * PARTS
+        self._after: list[float] = [0.0] * PARTS
 
-    def fetch_recommendations(self) -> None:
-        """Fetch trade recommendations from sentinel API."""
+    def _fetch_portfolio(self) -> dict:
+        resp = requests.get(f"{SENTINEL_API_URL}/api/portfolio", timeout=30)
+        resp.raise_for_status()
+        return resp.json()
+
+    def _fetch_recommendations(self) -> list[dict]:
+        resp = requests.get(f"{SENTINEL_API_URL}/api/planner/recommendations", timeout=30)
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("recommendations", []) or []
+
+    def refresh(self) -> None:
         try:
-            resp = requests.get(f"{SENTINEL_API_URL}/api/planner/recommendations", timeout=30)
-            resp.raise_for_status()
-            data = resp.json()
-            recommendations = data.get("recommendations", [])
+            portfolio = self._fetch_portfolio()
+            positions = portfolio.get("positions", []) or []
+
+            before_values: dict[str, float] = {}
+            scores: dict[str, float] = {}
+            for p in positions:
+                sym = str(p.get("symbol") or "")
+                if not sym:
+                    continue
+                qty = float(p.get("quantity") or 0.0)
+                current_price = float(p.get("current_price") or 0.0)
+                avg_cost = float(p.get("avg_cost") or 0.0)
+
+                before_values[sym] = max(0.0, qty * current_price)
+                if avg_cost > 0 and current_price > 0:
+                    score = (current_price - avg_cost) / avg_cost
+                else:
+                    score = 0.0
+                scores[sym] = clamp_score(float(score))
+
+            total_before = sum(before_values.values())
+            if total_before <= 0 or not scores:
+                before40 = [0.0] * PARTS
+                after40 = [0.0] * PARTS
+            else:
+                after_values = dict(before_values)
+                try:
+                    recs = self._fetch_recommendations()
+                except Exception as e:  # noqa: BLE001
+                    logger.warning("Failed to fetch recommendations; using before state for after: %s", e)
+                    recs = []
+
+                for r in recs:
+                    sym = r.get("symbol")
+                    if not sym:
+                        continue
+                    delta = float(r.get("value_delta_eur") or 0.0)
+                    after_values[sym] = max(0.0, after_values.get(sym, 0.0) + delta)
+
+                total_after = sum(after_values.values()) or total_before
+
+                # Allocate 40 parts by weight, repeating per-security score.
+                symbols = sorted(scores.keys())
+                w_before = [before_values.get(s, 0.0) / total_before for s in symbols]
+                w_after = [after_values.get(s, 0.0) / total_after for s in symbols]
+                s_vals = [scores[s] for s in symbols]
+
+                counts_before = largest_remainder_counts(w_before, PARTS)
+                counts_after = largest_remainder_counts(w_after, PARTS)
+
+                before_parts: list[float] = []
+                after_parts: list[float] = []
+                for score, nb, na in zip(s_vals, counts_before, counts_after, strict=False):
+                    before_parts.extend([score] * int(nb))
+                    after_parts.extend([score] * int(na))
+
+                # Guard exact length then sort so index corresponds to percentile, not identity.
+                before_parts = (before_parts + [0.0] * PARTS)[:PARTS]
+                after_parts = (after_parts + [0.0] * PARTS)[:PARTS]
+                before_parts.sort()
+                after_parts.sort()
+                before40 = before_parts
+                after40 = after_parts
 
             with self._lock:
-                self._trades = []
-                for rec in recommendations:
-                    action = rec.get("action", "").upper()
-                    value = abs(rec.get("value_delta_eur", 0))
-                    symbol = rec.get("symbol", "")
-                    current_value = rec.get("current_value_eur", 0)
+                self._before = before40
+                self._after = after40
+                self._last_refresh = time.time()
 
-                    if action == "SELL":
-                        sell_pct = (value / current_value * 100) if current_value > 0 else 100
-                        trade = Trade(action="SELL", amount=value, symbol=symbol, sell_pct=sell_pct)
-                    else:
-                        trade = Trade(action="BUY", amount=value, symbol=symbol)
+        except Exception as e:  # noqa: BLE001
+            logger.warning("Heatmap refresh failed: %s", e)
 
-                    self._trades.append(trade)
-
-                self._index = 0
-                self._last_fetch = time.time()
-
-            logger.info(f"Fetched {len(self._trades)} trade recommendations")
-
-        except requests.RequestException as e:
-            logger.warning(f"Failed to fetch recommendations: {e}")
-
-    def get_next_trade(self) -> str:
-        """Get next trade string. Called by MCU via Bridge."""
-        # Refresh if needed
-        if time.time() - self._last_fetch > REFRESH_INTERVAL:
-            self.fetch_recommendations()
-
+    def get(self) -> list[list[float]]:
+        # Refresh on demand if cache is stale.
+        if time.time() - self._last_refresh > REFRESH_INTERVAL_SEC:
+            self.refresh()
         with self._lock:
-            if not self._trades:
-                return ""
-
-            trade = self._trades[self._index]
-            self._index = (self._index + 1) % len(self._trades)
-
-            text = trade.to_display_string()
-            logger.debug(f"Providing trade: {text}")
-            return text
+            return [self._before, self._after]
 
 
-# Global provider instance
-provider = TradeProvider()
+provider = HeatmapProvider()
 
 
-def get_next_trade() -> str:
-    """Bridge callback - called by MCU to get next trade."""
-    return provider.get_next_trade()
+def get_heatmap() -> list[list[float]]:
+    return provider.get()
 
 
-def loop():
-    """Main loop - refresh recommendations periodically."""
-    time.sleep(REFRESH_INTERVAL)
-    provider.fetch_recommendations()
+def loop() -> None:
+    # Keep the cache warm even if MCU doesn't call for a while.
+    time.sleep(REFRESH_INTERVAL_SEC)
+    provider.refresh()
 
 
-def main():
-    """Entry point."""
-    logger.info("Sentinel LED App starting...")
-
-    # Register callback for MCU to fetch trades
-    Bridge.provide("getNextTrade", get_next_trade)
-
-    # Initial fetch
-    provider.fetch_recommendations()
-
-    logger.info("Ready - MCU will pull trades on demand")
-
-    # Run app loop
+def main() -> None:
+    logger.info("Sentinel LED heatmap app starting...")
+    Bridge.provide("heatmap/get", get_heatmap)
+    provider.refresh()
+    logger.info("Ready: providing heatmap/get")
     App.run(user_loop=loop)
 
 

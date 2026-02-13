@@ -1,166 +1,233 @@
-/**
- * sketch.ino - Scrolling text display for Arduino UNO Q
- *
- * Displays trade instructions as scrolling text on LED matrix.
- * MCU fetches next trade from Python when done scrolling (pull-based).
- */
+// NeoPixel Shield (5x8) drifting heatmap for Arduino UNO Q MCU, using Arduino_RouterBridge.
+//
+// Official transport:
+// - arduino-router runs on the MPU and bridges MsgPack-RPC over Serial1.
+// - Sketch polls the MPU by calling Bridge.call("heatmap/get") every 30s.
+//
+// Data:
+// - The MPU returns [[before40],[after40]] where each list contains 40 floats (scores in [-0.5,+0.5]).
+// - We render a constantly drifting heatmap driven by a moving center+end point.
+// - Recommendations appear as a 2s pulse between before/after, strength based on abs(diff), auto-scaled.
+//
+// Pin:
+// - NeoPixel data on D6 (per your wiring).
+
+#define MSGPACK_MAX_ARRAY_SIZE 96
+#define MSGPACK_MAX_OBJECT_SIZE 256
 
 #include <Arduino_RouterBridge.h>
-#include <Arduino_LED_Matrix.h>
+#include <Adafruit_NeoPixel.h>
+#include <math.h>
 
-Arduino_LED_Matrix matrix;
+#define PIN 6
+#define W 5
+#define H 8
+#define NUMPIXELS (W * H)
 
-// 5x7 font for basic characters (space, $, %, (, ), 0-9, A-Z, .)
-const uint8_t FONT_5X7[][5] = {
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 32 space
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 33 !
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 34 "
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 35 #
-  {0x24, 0x2A, 0x7F, 0x2A, 0x12}, // 36 $
-  {0x23, 0x13, 0x08, 0x64, 0x62}, // 37 %
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 38 &
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 39 '
-  {0x00, 0x1C, 0x22, 0x41, 0x00}, // 40 (
-  {0x00, 0x41, 0x22, 0x1C, 0x00}, // 41 )
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 42 *
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 43 +
-  {0x00, 0x50, 0x30, 0x00, 0x00}, // 44 ,
-  {0x08, 0x08, 0x08, 0x08, 0x08}, // 45 -
-  {0x00, 0x60, 0x60, 0x00, 0x00}, // 46 .
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 47 /
-  {0x3E, 0x51, 0x49, 0x45, 0x3E}, // 48 0
-  {0x00, 0x42, 0x7F, 0x40, 0x00}, // 49 1
-  {0x42, 0x61, 0x51, 0x49, 0x46}, // 50 2
-  {0x21, 0x41, 0x45, 0x4B, 0x31}, // 51 3
-  {0x18, 0x14, 0x12, 0x7F, 0x10}, // 52 4
-  {0x27, 0x45, 0x45, 0x45, 0x39}, // 53 5
-  {0x3C, 0x4A, 0x49, 0x49, 0x30}, // 54 6
-  {0x01, 0x71, 0x09, 0x05, 0x03}, // 55 7
-  {0x36, 0x49, 0x49, 0x49, 0x36}, // 56 8
-  {0x06, 0x49, 0x49, 0x29, 0x1E}, // 57 9
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 58 :
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 59 ;
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 60 <
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 61 =
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 62 >
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 63 ?
-  {0x00, 0x00, 0x00, 0x00, 0x00}, // 64 @
-  {0x7E, 0x11, 0x11, 0x11, 0x7E}, // 65 A
-  {0x7F, 0x49, 0x49, 0x49, 0x36}, // 66 B
-  {0x3E, 0x41, 0x41, 0x41, 0x22}, // 67 C
-  {0x7F, 0x41, 0x41, 0x22, 0x1C}, // 68 D
-  {0x7F, 0x49, 0x49, 0x49, 0x41}, // 69 E
-  {0x7F, 0x09, 0x09, 0x09, 0x01}, // 70 F
-  {0x3E, 0x41, 0x49, 0x49, 0x7A}, // 71 G
-  {0x7F, 0x08, 0x08, 0x08, 0x7F}, // 72 H
-  {0x00, 0x41, 0x7F, 0x41, 0x00}, // 73 I
-  {0x20, 0x40, 0x41, 0x3F, 0x01}, // 74 J
-  {0x7F, 0x08, 0x14, 0x22, 0x41}, // 75 K
-  {0x7F, 0x40, 0x40, 0x40, 0x40}, // 76 L
-  {0x7F, 0x02, 0x0C, 0x02, 0x7F}, // 77 M
-  {0x7F, 0x04, 0x08, 0x10, 0x7F}, // 78 N
-  {0x3E, 0x41, 0x41, 0x41, 0x3E}, // 79 O
-  {0x7F, 0x09, 0x09, 0x09, 0x06}, // 80 P
-  {0x3E, 0x41, 0x51, 0x21, 0x5E}, // 81 Q
-  {0x7F, 0x09, 0x19, 0x29, 0x46}, // 82 R
-  {0x46, 0x49, 0x49, 0x49, 0x31}, // 83 S
-  {0x01, 0x01, 0x7F, 0x01, 0x01}, // 84 T
-  {0x3F, 0x40, 0x40, 0x40, 0x3F}, // 85 U
-  {0x1F, 0x20, 0x40, 0x20, 0x1F}, // 86 V
-  {0x3F, 0x40, 0x38, 0x40, 0x3F}, // 87 W
-  {0x63, 0x14, 0x08, 0x14, 0x63}, // 88 X
-  {0x07, 0x08, 0x70, 0x08, 0x07}, // 89 Y
-  {0x61, 0x51, 0x49, 0x45, 0x43}, // 90 Z
-};
+static const uint8_t BRIGHTNESS_CAP = 8;
+static const uint32_t POLL_INTERVAL_MS = 30000;
+static const float PULSE_PERIOD_S = 2.0f;
 
-// Matrix dimensions
-const int WIDTH = 13;
-const int HEIGHT = 8;
-const int CHAR_WIDTH = 6;
+static const float DRIFT_SPEED = 0.10f;
+static const float WARP_AMP = 0.55f;
+static const float WARP_FREQ = 0.65f;
 
-uint8_t frameBuffer[HEIGHT][WIDTH];
+Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
-int getCharIndex(char c) {
-  if (c >= 32 && c <= 90) return c - 32;
-  if (c >= 'a' && c <= 'z') return c - 'a' + 33;
-  return 0;
+static float before40[40];
+static float after40[40];
+
+static uint32_t lastPollMs = 0;
+static uint32_t lastFrameMs = 0;
+static float tSec = 0.0f;
+
+static float cx = 2.0f, cy = 3.5f;
+static float ex = 4.0f, ey = 7.0f;
+static float cdx = 0.31f, cdy = -0.17f;
+static float edx = -0.23f, edy = 0.19f;
+
+static int XY(int x, int y) {
+  const bool serpentine = true;
+  if (!serpentine) return y * W + x;
+  if (y & 1) return y * W + (W - 1 - x);
+  return y * W + x;
 }
 
-void drawChar(int x, char c) {
-  int idx = getCharIndex(c);
-  if (idx < 0 || idx >= 59) idx = 0;
+static float clampf(float v, float lo, float hi) {
+  if (v < lo) return lo;
+  if (v > hi) return hi;
+  return v;
+}
 
-  for (int col = 0; col < 5; col++) {
-    int screenX = x + col;
-    if (screenX >= 0 && screenX < WIDTH) {
-      uint8_t colData = FONT_5X7[idx][col];
-      for (int row = 0; row < 7; row++) {
-        if (colData & (1 << row)) {
-          frameBuffer[row][screenX] = 1;
-        }
-      }
+static uint8_t gamma8(uint8_t x) {
+  float xf = (float)x / 255.0f;
+  float yf = powf(xf, 2.2f);
+  int yi = (int)(yf * 255.0f + 0.5f);
+  if (yi < 0) yi = 0;
+  if (yi > 255) yi = 255;
+  return (uint8_t)yi;
+}
+
+static void hsv2rgb(float h, float s, float v, uint8_t &r, uint8_t &g, uint8_t &b) {
+  h = h - floorf(h);
+  float c = v * s;
+  float hp = h * 6.0f;
+  float x = c * (1.0f - fabsf(fmodf(hp, 2.0f) - 1.0f));
+  float r1 = 0, g1 = 0, b1 = 0;
+  if (hp < 1) { r1 = c; g1 = x; b1 = 0; }
+  else if (hp < 2) { r1 = x; g1 = c; b1 = 0; }
+  else if (hp < 3) { r1 = 0; g1 = c; b1 = x; }
+  else if (hp < 4) { r1 = 0; g1 = x; b1 = c; }
+  else if (hp < 5) { r1 = x; g1 = 0; b1 = c; }
+  else { r1 = c; g1 = 0; b1 = x; }
+  float m = v - c;
+  r = (uint8_t)clampf((r1 + m) * 255.0f, 0.0f, 255.0f);
+  g = (uint8_t)clampf((g1 + m) * 255.0f, 0.0f, 255.0f);
+  b = (uint8_t)clampf((b1 + m) * 255.0f, 0.0f, 255.0f);
+}
+
+static void scoreToColor(float score, uint8_t &r, uint8_t &g, uint8_t &b) {
+  score = clampf(score, -0.5f, 0.5f);
+  float t = (score + 0.5f) / 1.0f;
+  float hue = (t * 120.0f) / 360.0f; // red->green
+  hsv2rgb(hue, 1.0f, 1.0f, r, g, b);
+}
+
+static void driftPoints(float dt) {
+  cx += cdx * dt * DRIFT_SPEED * 10.0f;
+  cy += cdy * dt * DRIFT_SPEED * 10.0f;
+  ex += edx * dt * DRIFT_SPEED * 10.0f;
+  ey += edy * dt * DRIFT_SPEED * 10.0f;
+
+  if (cx < 0.0f) { cx = 0.0f; cdx = fabsf(cdx); }
+  if (cx > (float)(W - 1)) { cx = (float)(W - 1); cdx = -fabsf(cdx); }
+  if (cy < 0.0f) { cy = 0.0f; cdy = fabsf(cdy); }
+  if (cy > (float)(H - 1)) { cy = (float)(H - 1); cdy = -fabsf(cdy); }
+
+  if (ex < 0.0f) { ex = 0.0f; edx = fabsf(edx); }
+  if (ex > (float)(W - 1)) { ex = (float)(W - 1); edx = -fabsf(edx); }
+  if (ey < 0.0f) { ey = 0.0f; edy = fabsf(edy); }
+  if (ey > (float)(H - 1)) { ey = (float)(H - 1); edy = -fabsf(edy); }
+
+  cdx += 0.002f * sinf(tSec * 0.7f);
+  cdy += 0.002f * cosf(tSec * 0.9f);
+  edx += 0.002f * cosf(tSec * 0.8f);
+  edy += 0.002f * sinf(tSec * 0.6f);
+}
+
+static void maybePoll() {
+  uint32_t now = millis();
+  if ((now - lastPollMs) < POLL_INTERVAL_MS) return;
+  lastPollMs = now;
+
+  MsgPack::arr_t<MsgPack::arr_t<float>> out;
+  if (!Bridge.call("heatmap/get").result(out)) {
+    return;
+  }
+  if (out.size() < 2) return;
+  if (out[0].size() < 40 || out[1].size() < 40) return;
+
+  for (int i = 0; i < 40; i++) {
+    before40[i] = clampf(out[0][i], -0.5f, 0.5f);
+    after40[i] = clampf(out[1][i], -0.5f, 0.5f);
+  }
+}
+
+static void renderFrame() {
+  float phase = fmodf(tSec, PULSE_PERIOD_S) / PULSE_PERIOD_S;
+  float pulse = 0.5f + 0.5f * sinf(phase * 2.0f * (float)M_PI);
+
+  float maxAbsDiff = 0.0f;
+  for (int i = 0; i < 40; i++) {
+    float d = fabsf(after40[i] - before40[i]);
+    if (d > maxAbsDiff) maxAbsDiff = d;
+  }
+  if (maxAbsDiff < 0.001f) maxAbsDiff = 0.001f;
+
+  float dx = ex - cx;
+  float dy = ey - cy;
+  float len = sqrtf(dx * dx + dy * dy);
+  if (len < 0.001f) { dx = 1.0f; dy = 0.0f; len = 1.0f; }
+  dx /= len;
+  dy /= len;
+  float px = -dy;
+  float py = dx;
+
+  float uMin = 1e9f, uMax = -1e9f;
+  float uField[NUMPIXELS];
+
+  for (int y = 0; y < H; y++) {
+    for (int x = 0; x < W; x++) {
+      float fx = (float)x;
+      float fy = (float)y;
+      float rx = fx - cx;
+      float ry = fy - cy;
+      float u = rx * dx + ry * dy;
+      float v = rx * px + ry * py;
+      u += WARP_AMP * sinf((v * WARP_FREQ) + tSec * 0.9f);
+      u += 0.25f * sinf((u * 1.3f) + tSec * 0.6f);
+
+      int p = XY(x, y);
+      uField[p] = u;
+      if (u < uMin) uMin = u;
+      if (u > uMax) uMax = u;
     }
   }
-}
 
-void renderText(const String& text, int offset) {
-  memset(frameBuffer, 0, sizeof(frameBuffer));
+  float denom = uMax - uMin;
+  if (denom < 0.001f) denom = 0.001f;
 
-  int x = -offset;
-  for (unsigned int i = 0; i < text.length(); i++) {
-    if (x > WIDTH) break;
-    if (x + CHAR_WIDTH > 0) {
-      drawChar(x, text.charAt(i));
+  pixels.setBrightness(BRIGHTNESS_CAP);
+
+  for (int y = 0; y < H; y++) {
+    for (int x = 0; x < W; x++) {
+      int p = XY(x, y);
+      float uNorm = (uField[p] - uMin) / denom;
+      int idx = (int)floorf(uNorm * 39.999f);
+      if (idx < 0) idx = 0;
+      if (idx > 39) idx = 39;
+
+      float diff = fabsf(after40[idx] - before40[idx]);
+      float strength = clampf(diff / maxAbsDiff, 0.0f, 1.0f);
+      float mix = strength * pulse;
+      float s = after40[idx] * (1.0f - mix) + before40[idx] * mix;
+
+      uint8_t r, g, b;
+      scoreToColor(s, r, g, b);
+      r = gamma8(r);
+      g = gamma8(g);
+      b = gamma8(b);
+      pixels.setPixelColor(p, pixels.Color(r, g, b));
     }
-    x += CHAR_WIDTH;
   }
 
-  uint32_t frame[4] = {0, 0, 0, 0};
-  for (int row = 0; row < HEIGHT; row++) {
-    for (int col = 0; col < WIDTH; col++) {
-      if (frameBuffer[row][col]) {
-        int bitIndex = row * WIDTH + col;
-        int wordIndex = bitIndex / 32;
-        int bitPos = 31 - (bitIndex % 32);
-        frame[wordIndex] |= (1UL << bitPos);
-      }
-    }
-  }
-
-  matrix.loadFrame(frame);
-}
-
-void scrollText(const String& text) {
-  String padded = text + "   ";
-  int totalWidth = padded.length() * CHAR_WIDTH;
-
-  // Start with text off-screen to the right, scroll left until off-screen
-  for (int pos = -WIDTH; pos < totalWidth; pos++) {
-    renderText(padded, pos);
-    delay(80);
-  }
-
-  matrix.clear();
-}
-
-String fetchNextTrade() {
-  String text;
-  Bridge.call("getNextTrade").result(text);
-  return text;
+  pixels.show();
 }
 
 void setup() {
-  matrix.begin();
-  matrix.clear();
+  pixels.begin();
+  pixels.setBrightness(BRIGHTNESS_CAP);
+  pixels.clear();
+  pixels.show();
+
+  for (int i = 0; i < 40; i++) { before40[i] = 0.0f; after40[i] = 0.0f; }
+
   Bridge.begin();
+
+  lastPollMs = millis();
+  lastFrameMs = millis();
 }
 
 void loop() {
-  String trade = fetchNextTrade();
+  uint32_t now = millis();
+  uint32_t dtMs = now - lastFrameMs;
+  if (dtMs > 100) dtMs = 100;
+  lastFrameMs = now;
+  float dt = (float)dtMs / 1000.0f;
+  tSec += dt;
 
-  if (trade.length() > 0) {
-    scrollText(trade);
-  }
-
-  delay(500); // Brief pause between trades
+  maybePoll();
+  driftPoints(dt);
+  renderFrame();
+  delay(12);
 }

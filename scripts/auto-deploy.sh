@@ -104,11 +104,11 @@ fi
 # Update LED app if changed
 if git diff --name-only "$LOCAL" "$REMOTE" -- arduino-app/sentinel-led/ | grep -q .; then
     log "LED app changed, updating..."
-    mkdir -p "$LED_APP_DEST/python" "$LED_APP_DEST/sketch"
+    mkdir -p "$LED_APP_DEST"
+    rm -rf "$LED_APP_DEST/python" "$LED_APP_DEST/sketch"
     cp "$LED_APP_SRC/app.yaml" "$LED_APP_DEST/"
-    cp "$LED_APP_SRC/python/main.py" "$LED_APP_DEST/python/"
-    cp "$LED_APP_SRC/sketch/sketch.ino" "$LED_APP_DEST/sketch/"
-    cp "$LED_APP_SRC/sketch/sketch.yaml" "$LED_APP_DEST/sketch/"
+    cp -R "$LED_APP_SRC/python" "$LED_APP_DEST/"
+    cp -R "$LED_APP_SRC/sketch" "$LED_APP_DEST/"
     arduino-app-cli app stop sentinel-led 2>/dev/null || true
     cd "$LED_APP_DEST" && arduino-app-cli app start .
     cd "$REPO_DIR"
