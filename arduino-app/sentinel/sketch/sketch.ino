@@ -66,6 +66,18 @@ static float absf(float v) {
   return (v < 0.0f) ? -v : v;
 }
 
+// Parse a MsgPack array of floats into a fixed C array; returns true on success.
+static bool unpackFloatArray(MsgPack::object obj, float* outArr, int needed) {
+  if (!obj.is<MsgPack::arr_t<MsgPack::object>>()) return false;
+  MsgPack::arr_t<MsgPack::object> arr = obj.as<MsgPack::arr_t<MsgPack::object>>();
+  if ((int)arr.size() < needed) return false;
+  for (int i = 0; i < needed; i++) {
+    if (!arr[i].is<float>()) return false;
+    outArr[i] = clampf(arr[i].as<float>(), -0.5f, 0.5f);
+  }
+  return true;
+}
+
 static uint8_t gamma8(uint8_t x) {
   // Avoid powf(). A simple gamma~2 curve is fine at our low brightness cap.
   uint16_t y = (uint16_t)x * (uint16_t)x; // 0..65025
@@ -123,12 +135,12 @@ static void driftPoints(float dt) {
   edy += 0.002f * sinf(tSec * 0.6f);
 }
 
-static void updateHeatmap(MsgPack::arr_t<float> inBefore, MsgPack::arr_t<float> inAfter) {
-  if (inBefore.size() < 40 || inAfter.size() < 40) return;
-  for (int i = 0; i < 40; i++) {
-    before40[i] = clampf(inBefore[i], -0.5f, 0.5f);
-    after40[i] = clampf(inAfter[i], -0.5f, 0.5f);
-  }
+static void updateHeatmap(MsgPack::arr_t<MsgPack::object> payload) {
+  // Expect [before40, after40]; each is an array of floats.
+  if (payload.size() < 2) return;
+  if (!payload[0].is<MsgPack::object>() || !payload[1].is<MsgPack::object>()) return;
+  if (!unpackFloatArray(payload[0].as<MsgPack::object>(), before40, 40)) return;
+  if (!unpackFloatArray(payload[1].as<MsgPack::object>(), after40, 40)) return;
   hasHeatmapData = true;
 }
 
