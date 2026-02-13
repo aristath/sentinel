@@ -1,3 +1,2 @@
 compiler.cpp.extra_flags=-fno-exceptions -fno-rtti
-# Force linker to skip libstdc++ (core already provides throw stubs); link only c, m, gcc.
-build.flags.linker=-nostdlib++ -nodefaultlibs -lc -lm -lgcc
+build.flags.linker=-Wl,--allow-multiple-definition
