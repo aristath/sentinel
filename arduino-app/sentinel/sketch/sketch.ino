@@ -2,10 +2,11 @@
 //
 // Official transport:
 // - arduino-router runs on the MPU and bridges MsgPack-RPC over Serial1.
-// - Sketch polls the MPU by calling Bridge.call("heatmap/get") every 30s.
+// - The MPU pushes updates via Bridge.call("heatmap/update", before40, after40).
+// - This sketch registers Bridge.provide("heatmap/update", ...) and never polls.
 //
 // Data:
-// - The MPU returns [[before40],[after40]] where each list contains 40 floats (scores in [-0.5,+0.5]).
+// - The MPU sends [[before40],[after40]] where each list contains 40 floats (scores in [-0.5,+0.5]).
 // - We render a constantly drifting heatmap driven by a moving center+end point.
 // - Recommendations appear as a 2s pulse between before/after, strength based on abs(diff), auto-scaled.
 //
@@ -40,7 +41,6 @@ static float before40[40];
 static float after40[40];
 static bool hasHeatmapData = false;
 
-static uint32_t lastPollMs = 0;
 static uint32_t lastFrameMs = 0;
 static float tSec = 0.0f;
 
@@ -123,21 +123,11 @@ static void driftPoints(float dt) {
   edy += 0.002f * sinf(tSec * 0.6f);
 }
 
-static void maybePoll() {
-  uint32_t now = millis();
-  if ((now - lastPollMs) < POLL_INTERVAL_MS) return;
-  lastPollMs = now;
-
-  MsgPack::arr_t<MsgPack::arr_t<float>> out;
-  if (!Bridge.call("heatmap/get").result(out)) {
-    return;
-  }
-  if (out.size() < 2) return;
-  if (out[0].size() < 40 || out[1].size() < 40) return;
-
+static void updateHeatmap(MsgPack::arr_t<float> inBefore, MsgPack::arr_t<float> inAfter) {
+  if (inBefore.size() < 40 || inAfter.size() < 40) return;
   for (int i = 0; i < 40; i++) {
-    before40[i] = clampf(out[0][i], -0.5f, 0.5f);
-    after40[i] = clampf(out[1][i], -0.5f, 0.5f);
+    before40[i] = clampf(inBefore[i], -0.5f, 0.5f);
+    after40[i] = clampf(inAfter[i], -0.5f, 0.5f);
   }
   hasHeatmapData = true;
 }
@@ -251,8 +241,8 @@ void setup() {
   for (int i = 0; i < 40; i++) { before40[i] = 0.0f; after40[i] = 0.0f; }
 
   Bridge.begin();
+  Bridge.provide("heatmap/update", updateHeatmap);
 
-  lastPollMs = millis();
   lastFrameMs = millis();
 }
 
@@ -264,7 +254,6 @@ void loop() {
   float dt = (float)dtMs / 1000.0f;
   tSec += dt;
 
-  maybePoll();
   driftPoints(dt);
   renderFrame();
   delay(12);

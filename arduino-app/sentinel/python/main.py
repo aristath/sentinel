@@ -2,15 +2,10 @@
 """
 Sentinel LED App - NeoPixel heatmap display for Arduino UNO Q.
 
-The MCU owns animation/rendering and polls the MPU via Arduino Bridge RPC:
-
-  Bridge.call("heatmap/get") -> [[before40],[after40]]
-
-Each array has 40 scores (clamped to [-0.5, +0.5]) representing per-segment P/L:
-  score = (current_price - avg_cost) / avg_cost
-
-The "before" vs "after" difference comes from applying Sentinel's planner
-recommendations to weights (as-if executed).
+Transport follows Arduino router docs and our prior working app:
+- The MPU (this Python process) polls Sentinel API, computes before/after scores,
+  then *pushes* them to the MCU with `Bridge.call("heatmap/update", before, after)`.
+- The MCU registers `Bridge.provide("heatmap/update", ...)` and renders locally.
 """
 
 from __future__ import annotations
@@ -58,7 +53,7 @@ SENTINEL_API_URL = (
     or (f"http://{_gw}:8000" if _gw else None)
     or "http://172.17.0.1:8000"
 )
-REFRESH_INTERVAL_SEC = 30  # MCU polls every 30s; keep cache roughly aligned.
+REFRESH_INTERVAL_SEC = 30  # Push cadence to the MCU.
 SCORE_CLAMP_ABS = 0.5
 PARTS = 40
 
@@ -87,124 +82,110 @@ def largest_remainder_counts(weights: list[float], total_parts: int) -> list[int
     return counts
 
 
-class HeatmapProvider:
+class HeatmapPusher:
     def __init__(self) -> None:
         self._lock = Lock()
         self._last_refresh = 0.0
         self._before: list[float] = [0.0] * PARTS
         self._after: list[float] = [0.0] * PARTS
+        self._session = requests.Session()
 
-    def _fetch_portfolio(self) -> dict:
-        resp = requests.get(f"{SENTINEL_API_URL}/api/portfolio", timeout=30)
+    def _fetch(self, path: str) -> dict:
+        resp = self._session.get(f"{SENTINEL_API_URL}{path}", timeout=30)
         resp.raise_for_status()
         return resp.json()
 
-    def _fetch_recommendations(self) -> list[dict]:
-        resp = requests.get(f"{SENTINEL_API_URL}/api/planner/recommendations", timeout=30)
-        resp.raise_for_status()
-        data = resp.json()
-        return data.get("recommendations", []) or []
+    def _compute(self) -> tuple[list[float], list[float]]:
+        portfolio = self._fetch("/api/portfolio")
+        positions = portfolio.get("positions", []) or []
 
-    def refresh(self) -> None:
-        try:
-            portfolio = self._fetch_portfolio()
-            positions = portfolio.get("positions", []) or []
+        before_values: dict[str, float] = {}
+        scores: dict[str, float] = {}
+        for p in positions:
+            sym = str(p.get("symbol") or "")
+            if not sym:
+                continue
+            qty = float(p.get("quantity") or 0.0)
+            current_price = float(p.get("current_price") or 0.0)
+            avg_cost = float(p.get("avg_cost") or 0.0)
 
-            before_values: dict[str, float] = {}
-            scores: dict[str, float] = {}
-            for p in positions:
-                sym = str(p.get("symbol") or "")
-                if not sym:
-                    continue
-                qty = float(p.get("quantity") or 0.0)
-                current_price = float(p.get("current_price") or 0.0)
-                avg_cost = float(p.get("avg_cost") or 0.0)
-
-                before_values[sym] = max(0.0, qty * current_price)
-                if avg_cost > 0 and current_price > 0:
-                    score = (current_price - avg_cost) / avg_cost
-                else:
-                    score = 0.0
-                scores[sym] = clamp_score(float(score))
-
-            total_before = sum(before_values.values())
-            if total_before <= 0 or not scores:
-                before40 = [0.0] * PARTS
-                after40 = [0.0] * PARTS
+            before_values[sym] = max(0.0, qty * current_price)
+            if avg_cost > 0 and current_price > 0:
+                score = (current_price - avg_cost) / avg_cost
             else:
-                after_values = dict(before_values)
-                try:
-                    recs = self._fetch_recommendations()
-                except Exception as e:  # noqa: BLE001
-                    logger.warning("Failed to fetch recommendations; using before state for after: %s", e)
-                    recs = []
+                score = 0.0
+            scores[sym] = clamp_score(float(score))
 
-                for r in recs:
-                    sym = r.get("symbol")
-                    if not sym:
-                        continue
-                    delta = float(r.get("value_delta_eur") or 0.0)
-                    after_values[sym] = max(0.0, after_values.get(sym, 0.0) + delta)
+        total_before = sum(before_values.values())
+        if total_before <= 0 or not scores:
+            return [0.0] * PARTS, [0.0] * PARTS
 
-                total_after = sum(after_values.values()) or total_before
-
-                # Allocate 40 parts by weight, repeating per-security score.
-                symbols = sorted(scores.keys())
-                w_before = [before_values.get(s, 0.0) / total_before for s in symbols]
-                w_after = [after_values.get(s, 0.0) / total_after for s in symbols]
-                s_vals = [scores[s] for s in symbols]
-
-                counts_before = largest_remainder_counts(w_before, PARTS)
-                counts_after = largest_remainder_counts(w_after, PARTS)
-
-                before_parts: list[float] = []
-                after_parts: list[float] = []
-                for score, nb, na in zip(s_vals, counts_before, counts_after, strict=False):
-                    before_parts.extend([score] * int(nb))
-                    after_parts.extend([score] * int(na))
-
-                # Guard exact length then sort so index corresponds to percentile, not identity.
-                before_parts = (before_parts + [0.0] * PARTS)[:PARTS]
-                after_parts = (after_parts + [0.0] * PARTS)[:PARTS]
-                before_parts.sort()
-                after_parts.sort()
-                before40 = before_parts
-                after40 = after_parts
-
-            with self._lock:
-                self._before = before40
-                self._after = after40
-                self._last_refresh = time.time()
-
+        after_values = dict(before_values)
+        try:
+            recs = self._fetch("/api/planner/recommendations").get("recommendations", []) or []
         except Exception as e:  # noqa: BLE001
-            logger.warning("Heatmap refresh failed: %s", e)
+            logger.warning("Failed to fetch recommendations; using before state for after: %s", e)
+            recs = []
 
-    def get(self) -> list[list[float]]:
-        # Refresh on demand if cache is stale.
-        if time.time() - self._last_refresh > REFRESH_INTERVAL_SEC:
-            self.refresh()
+        for r in recs:
+            sym = r.get("symbol")
+            if not sym:
+                continue
+            delta = float(r.get("value_delta_eur") or 0.0)
+            after_values[sym] = max(0.0, after_values.get(sym, 0.0) + delta)
+
+        total_after = sum(after_values.values()) or total_before
+
+        # Allocate 40 parts by weight, repeating per-security score.
+        symbols = sorted(scores.keys())
+        w_before = [before_values.get(s, 0.0) / total_before for s in symbols]
+        w_after = [after_values.get(s, 0.0) / total_after for s in symbols]
+        s_vals = [scores[s] for s in symbols]
+
+        counts_before = largest_remainder_counts(w_before, PARTS)
+        counts_after = largest_remainder_counts(w_after, PARTS)
+
+        before_parts: list[float] = []
+        after_parts: list[float] = []
+        for score, nb, na in zip(s_vals, counts_before, counts_after, strict=False):
+            before_parts.extend([score] * int(nb))
+            after_parts.extend([score] * int(na))
+
+        # Guard exact length then sort so index corresponds to percentile, not identity.
+        before_parts = (before_parts + [0.0] * PARTS)[:PARTS]
+        after_parts = (after_parts + [0.0] * PARTS)[:PARTS]
+        before_parts.sort()
+        after_parts.sort()
+        return before_parts, after_parts
+
+    def push_once(self) -> None:
+        before40, after40 = self._compute()
         with self._lock:
-            return [self._before, self._after]
+            self._before = before40
+            self._after = after40
+            self._last_refresh = time.time()
+        # Push to MCU; if it fails, keep cached data for next try.
+        Bridge.call("heatmap/update", before40, after40, timeout=10)
 
 
-provider = HeatmapProvider()
-
-
-def get_heatmap() -> list[list[float]]:
-    return provider.get()
+pusher = HeatmapPusher()
 
 
 def loop() -> None:
-    # Keep the cache warm even if MCU doesn't call for a while.
+    try:
+        pusher.push_once()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Heatmap push failed: %s", e)
     time.sleep(REFRESH_INTERVAL_SEC)
-    provider.refresh()
 
 
 def main() -> None:
     logger.info("Sentinel LED heatmap app starting...")
-    Bridge.provide("heatmap/get", get_heatmap)
-    provider.refresh()
-    logger.info("Ready: providing heatmap/get")
+    try:
+        pusher.push_once()
+    except Exception as e:  # noqa: BLE001
+        logger.warning("Initial heatmap push failed: %s", e)
+    logger.info("Ready: pushing heatmap/update every %ss", REFRESH_INTERVAL_SEC)
     App.run(user_loop=loop)
 
 
