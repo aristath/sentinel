@@ -21,6 +21,7 @@ _scheduler: AsyncIOScheduler | None = None
 _deps: dict[str, Any] = {}
 _current_job: str | None = None
 _market_check_task: asyncio.Task | None = None
+_startup_catchup_task: asyncio.Task | None = None
 
 # Job timeout in seconds (15 minutes)
 JOB_TIMEOUT = 15 * 60
@@ -130,12 +131,24 @@ async def init(
     # Start background task to periodically check market status and adjust intervals
     _market_check_task = asyncio.create_task(_market_status_loop())
 
+    # Run snapshot backfill shortly after startup to catch up on missed days
+    _startup_catchup_task = asyncio.create_task(_startup_catchup())
+
     return _scheduler
 
 
 async def stop() -> None:
     """Shutdown the scheduler."""
-    global _scheduler, _current_job, _market_check_task
+    global _scheduler, _current_job, _market_check_task, _startup_catchup_task
+
+    # Stop startup catch-up task
+    if _startup_catchup_task:
+        _startup_catchup_task.cancel()
+        try:
+            await _startup_catchup_task
+        except asyncio.CancelledError:
+            pass
+        _startup_catchup_task = None
 
     # Stop market check task
     if _market_check_task:
@@ -419,6 +432,22 @@ async def _run_task(job_type: str, schedule: dict, skip_timing_check: bool = Fal
 
     finally:
         _current_job = None
+
+
+async def _startup_catchup() -> None:
+    """Run snapshot backfill shortly after startup to catch up on missed days.
+
+    IntervalTrigger with 1440-min intervals won't fire until 24h after startup,
+    so if the app restarts frequently, the daily backfill never gets a chance to run.
+    This ensures missing snapshots are filled promptly after each restart.
+    """
+    await asyncio.sleep(30)  # Let other services stabilize
+    logger.info("Startup catch-up: running snapshot:backfill")
+    try:
+        result = await run_now("snapshot:backfill")
+        logger.info("Startup snapshot backfill: %s", result.get("status", "unknown"))
+    except Exception as e:
+        logger.error("Startup snapshot backfill failed: %s", e)
 
 
 async def _market_status_loop() -> None:
