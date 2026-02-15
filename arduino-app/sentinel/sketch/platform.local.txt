@@ -1,2 +1,1 @@
-compiler.cpp.extra_flags=-fno-exceptions -fno-rtti
-build.flags.linker=-Wl,--allow-multiple-definition
+compiler.c.elf.extra_flags=-Wl,--allow-multiple-definition

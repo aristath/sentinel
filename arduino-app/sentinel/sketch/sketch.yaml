@@ -1,17 +1,13 @@
-# Sketch build configuration for Arduino UNO Q
-default_profile: default
-
 profiles:
   default:
-    fqbn: arduino:zephyr:unoq
     platforms:
       - platform: arduino:zephyr
-        platform_flags: "-fno-exceptions -fno-rtti -nostdlib++"
     libraries:
-      - Arduino_RouterBridge (0.3.0)
-      - Arduino_RPClite (0.2.1)
-      - MsgPack (0.4.2)
-      - ArxContainer (0.7.0)
-      - ArxTypeTraits (0.3.2)
-      - DebugLog (0.8.4)
+      - Arduino_RouterBridge (0.2.2)
+      - dependency: Arduino_RPClite (0.2.0)
+      - dependency: ArxContainer (0.7.0)
+      - dependency: ArxTypeTraits (0.3.2)
+      - dependency: DebugLog (0.8.4)
+      - dependency: MsgPack (0.4.2)
       - Adafruit NeoPixel (1.15.4)
+default_profile: default

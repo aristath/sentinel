@@ -1,11 +1,9 @@
 # pyright: reportMissingImports=false
 """
-Sentinel LED App - NeoPixel heatmap display for Arduino UNO Q.
+Sentinel LED App — 2-digit portfolio return display for Arduino UNO Q.
 
-Transport follows Arduino router docs and our prior working app:
-- The MPU (this Python process) polls Sentinel API, computes before/after scores,
-  then *pushes* them to the MCU with `Bridge.call("heatmap.update", before, after)`.
-- The MCU registers `Bridge.provide("heatmap.update", ...)` and renders locally.
+Computes overall portfolio return %, sends a single int to MCU.
+MCU renders the value as colored digits on a 5×8 NeoPixel shield (landscape).
 """
 
 from __future__ import annotations
@@ -13,7 +11,6 @@ from __future__ import annotations
 import logging
 import os
 import time
-from threading import Lock
 
 import requests
 from arduino.app_utils import App, Bridge
@@ -21,12 +18,13 @@ from arduino.app_utils import App, Bridge
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
 
+REFRESH_INTERVAL_SEC = 300  # 5 minutes
+
 
 def _default_gateway_ip() -> str | None:
     """Best-effort container->host gateway discovery (no external deps)."""
     try:
         with open("/proc/net/route") as f:
-            # Iface  Destination  Gateway  Flags ...
             for line in f.readlines()[1:]:
                 parts = line.strip().split()
                 if len(parts) < 4:
@@ -36,10 +34,8 @@ def _default_gateway_ip() -> str | None:
                     continue
                 if int(flags, 16) & 0x2 == 0:
                     continue
-                # Gateway is little-endian hex.
                 b = bytes.fromhex(gw)
-                ip = ".".join(str(x) for x in b[::-1])
-                return ip
+                return ".".join(str(x) for x in b[::-1])
     except Exception:
         return None
     return None
@@ -53,139 +49,58 @@ SENTINEL_API_URL = (
     or (f"http://{_gw}:8000" if _gw else None)
     or "http://172.17.0.1:8000"
 )
-REFRESH_INTERVAL_SEC = 30  # Push cadence to the MCU.
-SCORE_CLAMP_ABS = 0.5
-PARTS = 40
+
+_session = requests.Session()
 
 
-def clamp_score(x: float) -> float:
-    if x < -SCORE_CLAMP_ABS:
-        return -SCORE_CLAMP_ABS
-    if x > SCORE_CLAMP_ABS:
-        return SCORE_CLAMP_ABS
-    return x
+def _fetch(path: str) -> dict:
+    resp = _session.get(f"{SENTINEL_API_URL}{path}", timeout=30)
+    resp.raise_for_status()
+    return resp.json()
 
 
-def largest_remainder_counts(weights: list[float], total_parts: int) -> list[int]:
-    total_w = sum(w for w in weights if w > 0)
-    if total_w <= 0:
-        return [0 for _ in weights]
+def push_once() -> None:
+    """Compute overall portfolio return % and send to MCU."""
+    portfolio = _fetch("/api/portfolio")
+    positions = portfolio.get("positions", []) or []
 
-    scaled = [max(0.0, w) / total_w * total_parts for w in weights]
-    floors = [int(x) for x in scaled]
-    remainder = total_parts - sum(floors)
-    fracs = sorted(((scaled[i] - floors[i], i) for i in range(len(weights))), reverse=True)
+    total_invested = 0.0
+    total_current = 0.0
+    for p in positions:
+        qty = float(p.get("quantity") or 0.0)
+        price = float(p.get("current_price") or 0.0)
+        avg_cost = float(p.get("avg_cost") or 0.0)
+        if qty <= 0 or avg_cost <= 0:
+            continue
+        total_invested += avg_cost * qty
+        total_current += price * qty
 
-    counts = floors[:]
-    for _, i in fracs[:remainder]:
-        counts[i] += 1
-    return counts
+    if total_invested > 0:
+        return_pct = round((total_current - total_invested) / total_invested * 100)
+    else:
+        return_pct = 0
 
+    return_pct = max(-99, min(99, return_pct))
 
-class HeatmapPusher:
-    def __init__(self) -> None:
-        self._lock = Lock()
-        self._last_refresh = 0.0
-        self._before: list[float] = [0.0] * PARTS
-        self._after: list[float] = [0.0] * PARTS
-        self._session = requests.Session()
-
-    def _fetch(self, path: str) -> dict:
-        resp = self._session.get(f"{SENTINEL_API_URL}{path}", timeout=30)
-        resp.raise_for_status()
-        return resp.json()
-
-    def _compute(self) -> tuple[list[float], list[float]]:
-        portfolio = self._fetch("/api/portfolio")
-        positions = portfolio.get("positions", []) or []
-
-        before_values: dict[str, float] = {}
-        scores: dict[str, float] = {}
-        for p in positions:
-            sym = str(p.get("symbol") or "")
-            if not sym:
-                continue
-            qty = float(p.get("quantity") or 0.0)
-            current_price = float(p.get("current_price") or 0.0)
-            avg_cost = float(p.get("avg_cost") or 0.0)
-
-            before_values[sym] = max(0.0, qty * current_price)
-            if avg_cost > 0 and current_price > 0:
-                score = (current_price - avg_cost) / avg_cost
-            else:
-                score = 0.0
-            scores[sym] = clamp_score(float(score))
-
-        total_before = sum(before_values.values())
-        if total_before <= 0 or not scores:
-            return [0.0] * PARTS, [0.0] * PARTS
-
-        after_values = dict(before_values)
-        try:
-            recs = self._fetch("/api/planner/recommendations").get("recommendations", []) or []
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Failed to fetch recommendations; using before state for after: %s", e)
-            recs = []
-
-        for r in recs:
-            sym = r.get("symbol")
-            if not sym:
-                continue
-            delta = float(r.get("value_delta_eur") or 0.0)
-            after_values[sym] = max(0.0, after_values.get(sym, 0.0) + delta)
-
-        total_after = sum(after_values.values()) or total_before
-
-        # Allocate 40 parts by weight, repeating per-security score.
-        symbols = sorted(scores.keys())
-        w_before = [before_values.get(s, 0.0) / total_before for s in symbols]
-        w_after = [after_values.get(s, 0.0) / total_after for s in symbols]
-        s_vals = [scores[s] for s in symbols]
-
-        counts_before = largest_remainder_counts(w_before, PARTS)
-        counts_after = largest_remainder_counts(w_after, PARTS)
-
-        before_parts: list[float] = []
-        after_parts: list[float] = []
-        for score, nb, na in zip(s_vals, counts_before, counts_after, strict=False):
-            before_parts.extend([score] * int(nb))
-            after_parts.extend([score] * int(na))
-
-        # Guard exact length then sort so index corresponds to percentile, not identity.
-        before_parts = (before_parts + [0.0] * PARTS)[:PARTS]
-        after_parts = (after_parts + [0.0] * PARTS)[:PARTS]
-        before_parts.sort()
-        after_parts.sort()
-        return before_parts, after_parts
-
-    def push_once(self) -> None:
-        before40, after40 = self._compute()
-        with self._lock:
-            self._before = before40
-            self._after = after40
-            self._last_refresh = time.time()
-        # Push to MCU; if it fails, keep cached data for next try.
-        Bridge.call("heatmap.update", before40, after40, timeout=10)
-
-
-pusher = HeatmapPusher()
+    logger.info("Portfolio return: %d%%, sending to MCU", return_pct)
+    Bridge.call("hm.u", [return_pct], timeout=10)
 
 
 def loop() -> None:
+    time.sleep(REFRESH_INTERVAL_SEC)
     try:
-        pusher.push_once()
+        push_once()
     except Exception as e:  # noqa: BLE001
         logger.warning("Heatmap push failed: %s", e)
-    time.sleep(REFRESH_INTERVAL_SEC)
 
 
 def main() -> None:
-    logger.info("Sentinel LED heatmap app starting...")
+    logger.info("Sentinel LED app starting...")
     try:
-        pusher.push_once()
+        push_once()
     except Exception as e:  # noqa: BLE001
-        logger.warning("Initial heatmap push failed: %s", e)
-    logger.info("Ready: pushing heatmap.update every %ss", REFRESH_INTERVAL_SEC)
+        logger.warning("Initial push failed: %s", e)
+    logger.info("Ready: updating every %ss", REFRESH_INTERVAL_SEC)
     App.run(user_loop=loop)
 
 

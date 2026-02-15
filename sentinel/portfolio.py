@@ -62,6 +62,13 @@ class Portfolio:
                 updated_at="now",
             )
 
+        # Zero out positions that no longer exist in the broker account
+        broker_symbols = {pos["symbol"] for pos in data.get("positions", [])}
+        db_positions = await self._db.get_all_positions()
+        for pos in db_positions:
+            if pos["symbol"] not in broker_symbols:
+                await self._db.upsert_position(pos["symbol"], quantity=0, updated_at="now")
+
         # Store cash balances in memory and database
         self._cash = data.get("cash", {})
         await self._db.set_cash_balances(self._cash)
