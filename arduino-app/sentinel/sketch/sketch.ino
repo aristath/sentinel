@@ -3,7 +3,7 @@
 // Shield is natively 8 wide x 5 tall, progressive (non-serpentine) wiring.
 // MPU sends Bridge.call("hm.u", [total_value_eur, return_pct]).
 // MCU displays the value as soroban-style decimal digits:
-//   Row 0 (top): heaven bead (white, worth 5)
+//   Row 0 (top): heaven bead (orange, worth 5)
 //   Rows 1-4: earth bead position marker (amber, worth 1-4)
 //   Only the single position-indicator bead is lit per earth section.
 // Column 0 is a blinking P/L bar: green up from r2, red down from r2.
@@ -95,9 +95,9 @@ static void renderDisplay() {
   for (int col = 1; col < 8; col++) {
     uint8_t d = digits[col];
 
-    // Heaven bead (row 0) — white, lit if digit >= 5.
+    // Heaven bead (row 0) — orange, lit if digit >= 5.
     if (d >= 5) {
-      pixels.setPixelColor(col, pixels.Color(BRIGHTNESS, BRIGHTNESS, BRIGHTNESS));
+      pixels.setPixelColor(col, pixels.Color(BRIGHTNESS, BRIGHTNESS / 3, 0));
     }
 
     // Earth bead — amber, single pixel at position.
