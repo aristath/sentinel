@@ -1,11 +1,12 @@
 // NeoPixel Shield (8x5) — soroban abacus portfolio value display.
 //
 // Shield is natively 8 wide x 5 tall, progressive (non-serpentine) wiring.
-// MPU sends Bridge.call("hm.u", [total_value_eur]) — single int.
+// MPU sends Bridge.call("hm.u", [total_value_eur, return_pct]).
 // MCU displays the value as soroban-style decimal digits:
 //   Row 0 (top): heaven bead (blue, worth 5)
 //   Rows 1-4: earth bead position marker (amber, worth 1-4)
 //   Only the single position-indicator bead is lit per earth section.
+// Column 0 is a blinking P/L bar: green up from r2, red down from r2.
 //
 // Device-only patches (not in this repo):
 // - bridge.h UPDATE_THREAD_STACK_SIZE changed from 500 to 8192
@@ -68,9 +69,15 @@ static void ws2812_show(Adafruit_NeoPixel &strip) {
 Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 
 static int displayValue = 0;
+static int displayPnl = 0;
 static bool needsRedraw = false;
 
-static void renderAbacus() {
+// Blink timing for P/L bar.
+#define BLINK_MS 500
+static unsigned long lastBlink = 0;
+static bool blinkOn = true;
+
+static void renderDisplay() {
   pixels.clear();
 
   int val = displayValue;
@@ -83,7 +90,8 @@ static void renderAbacus() {
     val /= 10;
   }
 
-  for (int col = 0; col < 8; col++) {
+  // Abacus on columns 1-7 (column 0 reserved for P/L bar).
+  for (int col = 1; col < 8; col++) {
     uint8_t d = digits[col];
 
     // Heaven bead (row 0) — blue, lit if digit >= 5.
@@ -96,8 +104,27 @@ static void renderAbacus() {
     uint8_t earth = d % 5;
     if (earth > 0) {
       int row = 5 - earth;
-      int px = row * 8 + col;
-      pixels.setPixelColor(px, pixels.Color(BRIGHTNESS, BRIGHTNESS * 2 / 3, 0));
+      pixels.setPixelColor(row * 8 + col, pixels.Color(BRIGHTNESS, BRIGHTNESS * 2 / 3, 0));
+    }
+  }
+
+  // P/L bar on column 0 — blinks.
+  if (blinkOn && displayPnl != 0) {
+    int pnl = displayPnl;
+    if (pnl > 0) {
+      // Green, upward from r2: 0-10% = r2, 10-20% += r1, 20-30% += r0.
+      int bars = (pnl - 1) / 10 + 1;
+      if (bars > 3) bars = 3;
+      for (int b = 0; b < bars; b++) {
+        pixels.setPixelColor((2 - b) * 8, pixels.Color(0, BRIGHTNESS, 0));
+      }
+    } else {
+      // Red, downward from r2: 0-10% = r2, 10-20% += r3, 20-30% += r4.
+      int bars = (-pnl - 1) / 10 + 1;
+      if (bars > 3) bars = 3;
+      for (int b = 0; b < bars; b++) {
+        pixels.setPixelColor((2 + b) * 8, pixels.Color(BRIGHTNESS, 0, 0));
+      }
     }
   }
 
@@ -111,6 +138,13 @@ static void hmUpdate(MsgPack::arr_t<int> data) {
   if (val < 0) val = 0;
   if (val > 99999999) val = 99999999;
   displayValue = val;
+
+  if ((int)data.size() >= 2) {
+    displayPnl = data[1];
+    if (displayPnl < -99) displayPnl = -99;
+    if (displayPnl >  99) displayPnl =  99;
+  }
+
   needsRedraw = true;
 }
 
@@ -126,8 +160,16 @@ void setup() {
 void loop() {
   Bridge.update();
 
+  // Toggle blink state for P/L bar.
+  unsigned long now = millis();
+  if (now - lastBlink >= BLINK_MS) {
+    lastBlink = now;
+    blinkOn = !blinkOn;
+    if (displayPnl != 0) needsRedraw = true;
+  }
+
   if (needsRedraw) {
     needsRedraw = false;
-    renderAbacus();
+    renderDisplay();
   }
 }
