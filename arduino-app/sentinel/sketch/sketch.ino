@@ -187,7 +187,7 @@ void loop() {
 
   // Compute blink states from time (avoids per-feature timers).
   bool newPnlBlink = (now % 1000) < 500;
-  bool newHeartbeat = (now % 2000) < 50;
+  bool newHeartbeat = (now % 600) < 150;
   bool newRecBlink  = (now % 400) < 100;
 
   // Redraw only when a visible blink state changes.
