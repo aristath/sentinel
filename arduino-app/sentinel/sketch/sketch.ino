@@ -1,13 +1,13 @@
 // NeoPixel Shield (8x5) — soroban abacus portfolio value display.
 //
 // Shield is natively 8 wide x 5 tall, progressive (non-serpentine) wiring.
-// MPU sends Bridge.call("hm.u", [total_value_eur, return_pct, has_recs]).
+// MPU sends Bridge.call("hm.u", [total_value_eur, return_pct, has_recs, broker_connected]).
 // MCU displays the value as soroban-style decimal digits:
 //   Row 0 (top): heaven bead (orange, worth 5)
 //   Rows 1-4: earth bead position marker (amber, worth 1-4)
 //   Only the single position-indicator bead is lit per earth section.
 // Column 0 indicators:
-//   r0: heartbeat (red, 200ms on / 1000ms off) — alive if RPC received recently
+//   r0: broker connected (red blink, 200ms on / 1000ms off) — only when data is fresh
 //   r1-r3: P/L bar (green up / red down, 800ms blink)
 //   r4: recommendations (blue, 100ms on / 300ms off) — pending trades exist
 //
@@ -74,11 +74,12 @@ Adafruit_NeoPixel pixels(NUMPIXELS, PIN, NEO_GRB + NEO_KHZ800);
 static int displayValue = 0;
 static int displayPnl = 0;
 static int hasRecs = 0;
+static int brokerConnected = 0;
 static bool needsRedraw = false;
 
 // Last successful RPC timestamp (millis).
 static unsigned long lastRpcMs = 0;
-// Heartbeat considered alive if RPC within 10 minutes.
+// Incoming data considered fresh if RPC received within 10 minutes.
 #define HEARTBEAT_TIMEOUT_MS 600000UL
 
 // Blink states (computed from millis modulo).
@@ -119,9 +120,10 @@ static void renderDisplay() {
 
   // --- Column 0 indicators ---
 
-  // Heartbeat: c0r0, red, 50ms on / 1950ms off.
+  // Broker connected: c0r0, red, 200ms on / 1000ms off.
   unsigned long now = millis();
-  if (heartbeatOn && (now - lastRpcMs < HEARTBEAT_TIMEOUT_MS)) {
+  bool dataFresh = (now - lastRpcMs < HEARTBEAT_TIMEOUT_MS);
+  if (heartbeatOn && dataFresh && brokerConnected > 0) {
     pixels.setPixelColor(0, pixels.Color(BRIGHTNESS, 0, 0));
   }
 
@@ -167,6 +169,10 @@ static void hmUpdate(MsgPack::arr_t<int> data) {
     hasRecs = data[2];
   }
 
+  if ((int)data.size() >= 4) {
+    brokerConnected = data[3] > 0 ? 1 : 0;
+  }
+
   lastRpcMs = millis();
   needsRedraw = true;
 }
@@ -189,16 +195,20 @@ void loop() {
   bool newPnlBlink = (now % 1600) < 800;
   bool newHeartbeat = (now % 1200) < 200;
   bool newRecBlink  = (now % 400) < 100;
+  bool newDataFresh = (now - lastRpcMs < HEARTBEAT_TIMEOUT_MS);
+  static bool dataFresh = false;
 
   // Redraw only when a visible blink state changes.
   bool changed = false;
   if (newPnlBlink != pnlBlinkOn && displayPnl != 0) changed = true;
-  if (newHeartbeat != heartbeatOn && (now - lastRpcMs < HEARTBEAT_TIMEOUT_MS)) changed = true;
+  if (newHeartbeat != heartbeatOn && newDataFresh && brokerConnected > 0) changed = true;
+  if (newDataFresh != dataFresh) changed = true;
   if (newRecBlink != recBlinkOn && hasRecs > 0) changed = true;
 
   pnlBlinkOn = newPnlBlink;
   heartbeatOn = newHeartbeat;
   recBlinkOn = newRecBlink;
+  dataFresh = newDataFresh;
 
   if (changed) needsRedraw = true;
 

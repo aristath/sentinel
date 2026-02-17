@@ -1,0 +1,10 @@
+[Unit]
+Description=Sentinel LED Bridge Watchdog Timer
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=1min
+Unit=sentinel-led-watchdog.service
+
+[Install]
+WantedBy=timers.target

@@ -110,3 +110,36 @@ ssh arduino@192.168.1.11 'arduino-app-cli app restart user:sentinel'
 # Stop
 ssh arduino@192.168.1.11 'arduino-app-cli app stop user:sentinel'
 ```
+
+## LED Bridge Health
+
+The app now reports bridge telemetry to Sentinel via:
+
+- `POST /api/led/bridge/health`
+- `GET /api/led/bridge/health`
+- `GET /api/led/status` (includes nested `bridge` object)
+
+Reported fields include:
+
+- `last_success_at`
+- `consecutive_failures`
+- `stale_seconds`
+- `is_stale`
+
+### Auto-Recovery
+
+- Arduino app retries `Bridge.call("hm.u", ...)` before failing a cycle.
+- Persistent failures force process exit so the app supervisor restarts it.
+- A host-side watchdog script can force a full app restart when bridge health is stale:
+  - `scripts/watchdog_led_bridge.sh`
+  - `systemd/sentinel-led-watchdog.service`
+  - `systemd/sentinel-led-watchdog.timer`
+
+Enable watchdog timer on device:
+
+```bash
+sudo cp /home/arduino/sentinel/systemd/sentinel-led-watchdog.service /etc/systemd/system/
+sudo cp /home/arduino/sentinel/systemd/sentinel-led-watchdog.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now sentinel-led-watchdog.timer
+```

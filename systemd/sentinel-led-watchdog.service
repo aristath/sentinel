@@ -1,0 +1,10 @@
+[Unit]
+Description=Sentinel LED Bridge Watchdog
+After=network.target sentinel.service
+
+[Service]
+Type=oneshot
+User=arduino
+WorkingDirectory=/home/arduino/sentinel
+Environment=SENTINEL_API_URL=http://127.0.0.1:8000
+ExecStart=/home/arduino/sentinel/scripts/watchdog_led_bridge.sh
