@@ -2,7 +2,7 @@
 set -euo pipefail
 
 API_URL="${SENTINEL_API_URL:-http://127.0.0.1:8000}"
-APP_PATH="${LED_APP_PATH:-./sentinel/arduino-app/sentinel}"
+APP_PATH="${LED_APP_PATH:-/home/arduino/sentinel/arduino-app/sentinel}"
 STALE_SECONDS="${LED_WATCHDOG_STALE_SECONDS:-600}"
 FAILURE_THRESHOLD="${LED_WATCHDOG_FAILURE_THRESHOLD:-5}"
 COOLDOWN_SECONDS="${LED_WATCHDOG_COOLDOWN_SECONDS:-180}"
