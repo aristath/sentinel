@@ -411,6 +411,15 @@ export function SettingsModal({ opened, onClose }) {
               />
 
               <NumberInput
+                label="Same-Side Cool-Off Days"
+                description="Minimum days between same-side actions (BUY->BUY and SELL->SELL)"
+                value={settings?.strategy_same_side_cooloff_days ?? 15}
+                onChange={(value) => handleChange('strategy_same_side_cooloff_days', value)}
+                min={0}
+                max={365}
+              />
+
+              <NumberInput
                 label="Rotation Time-Stop Days"
                 description="Exit opportunity positions if thesis stalls beyond this horizon"
                 value={settings?.strategy_rotation_time_stop_days ?? 90}

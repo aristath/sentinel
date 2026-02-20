@@ -45,7 +45,7 @@ TASK_REGISTRY: dict[str, tuple[Callable, list[str]]] = {
     "trading:execute": (tasks.trading_execute, ["broker", "db", "planner"]),
     "trading:rebalance": (tasks.trading_rebalance, ["planner"]),
     "trading:balance_fix": (tasks.trading_balance_fix, ["db", "broker"]),
-    "planning:refresh": (tasks.planning_refresh, ["db", "planner"]),
+    "planning:refresh": (tasks.planning_refresh, ["db", "planner", "broker"]),
     "backup:r2": (tasks.backup_r2, ["db"]),
 }
 

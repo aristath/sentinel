@@ -100,8 +100,28 @@ async def sync_trades(db, broker) -> None:
         logger.warning("Broker not connected, skipping trades sync")
         return
 
-    # Fetch all trades from broker
-    trades = await broker.get_trades_history(start_date="2020-01-01")
+    start_date = "2020-01-01"
+    get_trades = getattr(db, "get_trades", None)
+    if callable(get_trades):
+        latest_rows = get_trades(limit=1)
+        if inspect.isawaitable(latest_rows):
+            latest_rows = await latest_rows
+        if isinstance(latest_rows, list) and latest_rows:
+            first_row = latest_rows[0]
+            if not isinstance(first_row, dict):
+                first_row = {}
+            latest_ts_raw = first_row.get("executed_at")
+            try:
+                latest_ts = int(latest_ts_raw)
+            except (TypeError, ValueError):
+                latest_ts = 0
+            if latest_ts > 0:
+                # Re-fetch a small overlap window to avoid missing delayed broker entries.
+                overlap_start = datetime.fromtimestamp(latest_ts, tz=timezone.utc) - timedelta(days=2)
+                start_date = overlap_start.strftime("%Y-%m-%d")
+
+    # Fetch trades from broker
+    trades = await broker.get_trades_history(start_date=start_date)
 
     if not trades:
         logger.info("No trades returned from broker")
@@ -152,7 +172,7 @@ async def sync_trades(db, broker) -> None:
         else:
             skipped_count += 1
 
-    logger.info(f"Trades sync complete: {new_count} new, {skipped_count} existing")
+    logger.info(f"Trades sync complete ({start_date}): {new_count} new, {skipped_count} existing")
 
 
 async def sync_cashflows(db, broker) -> None:
@@ -523,8 +543,11 @@ async def trading_balance_fix(db, broker) -> None:
             logger.warning(f"Could not fully cover {neg_currency} deficit. Remaining: {deficit_eur:.2f} EUR")
 
 
-async def planning_refresh(db, planner) -> None:
+async def planning_refresh(db, planner, broker) -> None:
     """Refresh trading plan by clearing caches and regenerating recommendations."""
+    # Ensure planner sees manual broker trades before refreshing recommendations.
+    await sync_trades(db, broker)
+
     # Clear planner-related caches
     cleared = await db.cache_clear("planner:")
     logger.info(f"Cleared {cleared} planner cache entries")

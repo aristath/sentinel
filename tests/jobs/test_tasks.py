@@ -266,12 +266,14 @@ class TestPlanningRefresh:
     """Tests for planning_refresh task."""
 
     @pytest.mark.asyncio
-    async def test_planning_refresh_clears_cache(self, mock_db, mock_planner):
-        """Verify cache is cleared and ideal recalculated."""
+    async def test_planning_refresh_syncs_trades_then_refreshes(self, mock_db, mock_planner, mock_broker):
+        """Verify trades are synced before planner cache refresh."""
         from sentinel.jobs.tasks import planning_refresh
 
-        await planning_refresh(mock_db, mock_planner)
+        with patch("sentinel.jobs.tasks.sync_trades", new=AsyncMock()) as mock_sync_trades:
+            await planning_refresh(mock_db, mock_planner, mock_broker)
 
+        mock_sync_trades.assert_awaited_once_with(mock_db, mock_broker)
         mock_db.cache_clear.assert_awaited_once_with("planner:")
         mock_planner.calculate_ideal_portfolio.assert_awaited_once()
 

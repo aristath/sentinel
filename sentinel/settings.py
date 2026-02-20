@@ -62,6 +62,7 @@ DEFAULTS = {
     "strategy_core_floor_pct": 0.05,
     "strategy_opportunity_cooloff_days": 7,
     "strategy_core_cooloff_days": 21,
+    "strategy_same_side_cooloff_days": 15,
     "strategy_rotation_time_stop_days": 90,
     "strategy_core_new_min_score": 0.30,
     "strategy_core_new_min_dip_score": 0.20,

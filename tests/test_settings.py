@@ -98,6 +98,7 @@ class TestSettingsDefaults:
             "strategy_lot_coarse_max_pct",
             "strategy_coarse_max_new_lots_per_cycle",
             "strategy_core_floor_pct",
+            "strategy_same_side_cooloff_days",
             "strategy_core_new_min_score",
             "strategy_core_new_min_dip_score",
             "strategy_max_funding_sells_per_cycle",

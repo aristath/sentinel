@@ -623,8 +623,8 @@ class TestCooloffIntegration:
         assert "days remaining" in reason
 
     @pytest.mark.asyncio
-    async def test_cooloff_allows_same_direction(self, temp_db):
-        """Cooloff allows trades in same direction as last trade."""
+    async def test_cooloff_blocks_same_direction_buy_within_period(self, temp_db):
+        """Cooloff blocks BUY after recent BUY when same-side cooloff is set."""
         from sentinel.planner import RebalanceEngine
 
         yesterday_ts = int((datetime.now() - timedelta(days=1)).timestamp())
@@ -640,10 +640,43 @@ class TestCooloffIntegration:
 
         engine = RebalanceEngine(db=temp_db)
 
-        # BUY after BUY should be allowed
-        is_blocked, reason = await engine._check_cooloff_violation("AAPL.US", "buy", cooloff_days=30)
+        is_blocked, reason = await engine._check_cooloff_violation(
+            "AAPL.US",
+            "buy",
+            cooloff_days=30,
+            same_side_cooloff_days=15,
+        )
 
-        assert is_blocked is False
+        assert is_blocked is True
+        assert "Same-side cool-off" in reason
+
+    @pytest.mark.asyncio
+    async def test_cooloff_blocks_same_direction_sell_within_period(self, temp_db):
+        """Cooloff blocks SELL after recent SELL when same-side cooloff is set."""
+        from sentinel.planner import RebalanceEngine
+
+        yesterday_ts = int((datetime.now() - timedelta(days=1)).timestamp())
+        await temp_db.upsert_trade(
+            broker_trade_id="recent_sell",
+            symbol="AAPL.US",
+            side="SELL",
+            quantity=10.0,
+            price=150.0,
+            executed_at=yesterday_ts,
+            raw_data={"id": "recent_sell"},
+        )
+
+        engine = RebalanceEngine(db=temp_db)
+
+        is_blocked, reason = await engine._check_cooloff_violation(
+            "AAPL.US",
+            "sell",
+            cooloff_days=30,
+            same_side_cooloff_days=15,
+        )
+
+        assert is_blocked is True
+        assert "Same-side cool-off" in reason
 
     @pytest.mark.asyncio
     async def test_cooloff_allows_after_period(self, temp_db):

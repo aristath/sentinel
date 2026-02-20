@@ -96,6 +96,7 @@ class RebalanceEngine:
             "strategy_rotation_time_stop_days": 90,
             "strategy_opportunity_cooloff_days": 7,
             "strategy_core_cooloff_days": 21,
+            "strategy_same_side_cooloff_days": 15,
             "strategy_core_new_min_score": 0.30,
             "strategy_core_new_min_dip_score": 0.20,
             "strategy_coarse_max_new_lots_per_cycle": 1,
@@ -576,11 +577,13 @@ class RebalanceEngine:
             cooloff_days = int(settings_ctx["strategy_opportunity_cooloff_days"])
         else:
             cooloff_days = int(settings_ctx["strategy_core_cooloff_days"])
+        same_side_cooloff_days = int(settings_ctx["strategy_same_side_cooloff_days"])
         action_for_cooloff = "sell" if forced_sell_qty > 0 else ("buy" if delta > 0 else "sell")
         is_blocked, _ = await self._check_cooloff_violation(
             symbol,
             action_for_cooloff,
             cooloff_days,
+            same_side_cooloff_days=same_side_cooloff_days,
             latest_trade=latest_trade,
             as_of_date=as_of_date,
         )
@@ -788,6 +791,7 @@ class RebalanceEngine:
         symbol: str,
         action: str,
         cooloff_days: int,
+        same_side_cooloff_days: int = 0,
         latest_trade: dict | None = None,
         as_of_date: str | None = None,
     ) -> tuple[bool, str]:
@@ -797,7 +801,7 @@ class RebalanceEngine:
             Tuple of (is_blocked, reason)
         """
 
-        if cooloff_days <= 0:
+        if cooloff_days <= 0 and same_side_cooloff_days <= 0:
             return False, ""
 
         last_trade = latest_trade
@@ -824,15 +828,25 @@ class RebalanceEngine:
 
         days_since = (current_date - last_date).days
 
-        # Check if action is opposite of last trade
-        if action == "buy" and last_action == "SELL":
+        # Check opposite-side cool-off
+        if action == "buy" and last_action == "SELL" and cooloff_days > 0:
             if days_since < cooloff_days:
                 days_remaining = cooloff_days - days_since
                 return True, f"Cool-off period: {days_remaining} days remaining after last sell"
-        elif action == "sell" and last_action == "BUY":
+        elif action == "sell" and last_action == "BUY" and cooloff_days > 0:
             if days_since < cooloff_days:
                 days_remaining = cooloff_days - days_since
                 return True, f"Cool-off period: {days_remaining} days remaining after last buy"
+
+        # Check same-side cool-off
+        if action == "buy" and last_action == "BUY" and same_side_cooloff_days > 0:
+            if days_since < same_side_cooloff_days:
+                days_remaining = same_side_cooloff_days - days_since
+                return True, f"Same-side cool-off: {days_remaining} days remaining after last buy"
+        elif action == "sell" and last_action == "SELL" and same_side_cooloff_days > 0:
+            if days_since < same_side_cooloff_days:
+                days_remaining = same_side_cooloff_days - days_since
+                return True, f"Same-side cool-off: {days_remaining} days remaining after last sell"
 
         # Same direction as last trade, or enough time has passed
         return False, ""
