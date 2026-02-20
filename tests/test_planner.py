@@ -258,7 +258,6 @@ class TestContrarianSizing:
             "strategy_lot_standard_max_pct": 0.08,
             "strategy_lot_coarse_max_pct": 0.30,
             "strategy_coarse_max_new_lots_per_cycle": 1,
-            "trade_cooloff_days": 0,
             "strategy_core_floor_pct": 0.05,
         }
         engine._settings.get = AsyncMock(side_effect=lambda key, default=None: settings_values.get(key, default))

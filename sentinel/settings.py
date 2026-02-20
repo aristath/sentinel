@@ -38,8 +38,6 @@ DEFAULTS = {
     "diversification_impact_pct": 10,  # Max ±10% score adjustment for diversification
     # Dividend reinvestment
     "max_dividend_reinvestment_boost": 0.15,  # Max score boost for uninvested dividends
-    # Trade cool-off
-    "trade_cooloff_days": 30,  # Days to wait before opposite action after trade
     # API
     "tradernet_api_key": "",
     "tradernet_api_secret": "",

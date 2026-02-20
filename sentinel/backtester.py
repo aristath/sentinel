@@ -704,40 +704,6 @@ class Backtester:
             return current_date.month != last.month
         return False
 
-    async def _is_in_cooloff(self, symbol: str, action: str, security_tracking: dict, cooloff_days: int) -> bool:
-        """
-        Check if security is in cool-off period during backtest.
-        Uses trades table in simulation database with new schema.
-        """
-        assert self._sim_db is not None, "Simulation database not initialized"
-        tracked = security_tracking.get(symbol) or {}
-        last_action = tracked.get("last_action")
-        last_date_raw = tracked.get("last_date")
-        if last_action and last_date_raw:
-            last_date = datetime.strptime(str(last_date_raw), "%Y-%m-%d").date()
-        else:
-            # Fallback for symbols not yet seen in tracking.
-            trades = await self._sim_db.get_trades(symbol=symbol, limit=1)
-            if not trades:
-                return False  # No trade history
-            last_trade = trades[0]
-            last_action = last_trade["side"]
-            executed_at = last_trade["executed_at"]
-            if isinstance(executed_at, int):
-                last_date = datetime.fromtimestamp(executed_at).date()
-            else:
-                last_date = datetime.fromisoformat(str(executed_at)[:10]).date()
-        current_date = datetime.strptime(self._simulation_date, "%Y-%m-%d").date()
-        days_since = (current_date - last_date).days
-
-        # Check if opposite action within cool-off period
-        if action == "buy" and last_action == "SELL" and days_since < cooloff_days:
-            return True
-        if action == "sell" and last_action == "BUY" and days_since < cooloff_days:
-            return True
-
-        return False
-
     async def _get_portfolio_value(self) -> float:
         """Get portfolio value using the Portfolio class."""
         from sentinel.portfolio import Portfolio
@@ -771,11 +737,6 @@ class Backtester:
         # Get recommendations using the ACTUAL Planner logic (as_of_date = simulation date)
         recommendations = await self._planner.get_recommendations(as_of_date=self._simulation_date)
 
-        # Get cool-off setting
-        settings_data = await self._sim_db.conn.execute("SELECT value FROM settings WHERE key = 'trade_cooloff_days'")
-        cooloff_setting = await settings_data.fetchone()
-        cooloff_days = int(cooloff_setting["value"]) if cooloff_setting else 30
-
         # Execute each recommendation
         async with self._sim_db.deferred_writes():
             for rec in recommendations:
@@ -783,9 +744,6 @@ class Backtester:
                     opportunity_buy_count += 1
                     if rec.memory_entry:
                         memory_entry_count += 1
-                # Check cool-off period
-                if await self._is_in_cooloff(rec.symbol, rec.action, security_tracking, cooloff_days):
-                    continue  # Skip this trade
 
                 trade = await self._execute_trade(rec, security_tracking, self._currency)
                 if trade:

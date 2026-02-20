@@ -166,15 +166,6 @@ export function SettingsModal({ opened, onClose }) {
                 prefix="EUR "
               />
 
-              <NumberInput
-                label="Trade Cool-Off Period"
-                description="Days to wait before opposite action after a trade"
-                value={settings?.trade_cooloff_days || 30}
-                onChange={(value) => handleChange('trade_cooloff_days', value)}
-                min={0}
-                max={365}
-                suffix=" days"
-              />
             </Stack>
           </Tabs.Panel>
 
