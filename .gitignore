@@ -48,3 +48,4 @@ TUI/sentinel-tui
 
 # World binary
 world/world
+.aider*
