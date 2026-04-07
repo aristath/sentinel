@@ -36,6 +36,7 @@ def mock_broker():
     """Mock broker for testing."""
     broker = AsyncMock()
     broker.connected = True
+    broker.has_pending_orders = AsyncMock(return_value=False)
     broker.get_historical_prices_bulk = AsyncMock(
         return_value={
             "AAPL.US": [{"date": "2024-01-01", "close": 100}],
@@ -211,6 +212,9 @@ class TestTradingExecute:
 
             # Planner should be called to get recommendations for logging
             mock_planner.get_recommendations.assert_awaited()
+            # Pending-orders check is a live-mode concern; in research mode
+            # we short-circuit before reaching it.
+            mock_broker.has_pending_orders.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_execute_live_mode_trades(self, mock_broker, mock_db, mock_planner):
@@ -247,6 +251,41 @@ class TestTradingExecute:
                 await trading_execute(mock_broker, mock_db, mock_planner)
 
                 mock_security.buy.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_execute_skips_when_orders_pending(self, mock_broker, mock_db, mock_planner):
+        """No new orders are submitted while previous orders are still outstanding."""
+        from sentinel.jobs.tasks import trading_execute
+
+        mock_broker.connected = True
+        mock_broker.has_pending_orders = AsyncMock(return_value=True)
+
+        mock_rec = MagicMock()
+        mock_rec.symbol = "AAPL.US"
+        mock_rec.action = "buy"
+        mock_rec.quantity = 10
+        mock_rec.price = 100.0
+        mock_rec.currency = "USD"
+        mock_rec.priority = 1
+        mock_planner.get_recommendations = AsyncMock(return_value=[mock_rec])
+
+        with patch("sentinel.settings.Settings") as MockSettings:
+            mock_settings = AsyncMock()
+            mock_settings.get = AsyncMock(return_value="live")
+            MockSettings.return_value = mock_settings
+
+            with patch("sentinel.security.Security") as MockSecurity:
+                mock_security = AsyncMock()
+                mock_security.buy = AsyncMock(return_value="order123")
+                mock_security.load = AsyncMock()
+                MockSecurity.return_value = mock_security
+
+                await trading_execute(mock_broker, mock_db, mock_planner)
+
+                mock_broker.has_pending_orders.assert_awaited_once()
+                mock_security.buy.assert_not_awaited()
+                # Recommendations shouldn't even be fetched when we're skipping.
+                mock_planner.get_recommendations.assert_not_awaited()
 
 
 class TestTradingRebalance:

@@ -513,6 +513,147 @@ class TestBrokerGetTradesHistory:
             assert trades[0]["symbol"] == "AAPL.US"
 
 
+class TestBrokerHasPendingOrders:
+    """Tests for broker.has_pending_orders method."""
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_active_orders_exist(self):
+        """Returns True when get_placed reports one or more active orders."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        # Real Tradernet response shape: result -> orders -> order -> [list]
+        mock_response = {
+            "result": {
+                "orders": {
+                    "order": [
+                        {"order_id": 123, "instr": "AAPL.US", "oper": 1, "stat": 10},
+                    ]
+                }
+            }
+        }
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(return_value=mock_response)
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is True
+            mock_trading.get_placed.assert_called_once_with(active=True)
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_no_active_orders(self):
+        """Returns False when get_placed has no 'order' key (no active orders)."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        # When there are no active orders the API omits the 'order' key
+        # (see tradernet.client.Tradernet.cancel_all).
+        mock_response = {"result": {"orders": {}}}
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(return_value=mock_response)
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is False
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_single_order_dict(self):
+        """Defensively handles a single order returned as a dict, not a list."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        mock_response = {"result": {"orders": {"order": {"order_id": 123, "instr": "AAPL.US", "oper": 1}}}}
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(return_value=mock_response)
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_on_api_error_failsafe(self):
+        """Returns True (don't trade) if the broker call raises."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(side_effect=RuntimeError("boom"))
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_on_errmsg_response_failsafe(self):
+        """Tradernet returns {'errMsg': ...} without raising. Must fail safe."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        # authorized_request just logs errMsg and returns the error dict.
+        # See tradernet.core.Tradernet.authorized_request.
+        mock_response = {"errMsg": "Unsupported query method", "code": 2}
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(return_value=mock_response)
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_on_non_dict_response_failsafe(self):
+        """A non-dict response (e.g. list) must fail safe, not crash."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(return_value=["unexpected"])
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_result_missing_failsafe(self):
+        """Missing 'result' key means the response is malformed. Fail safe."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(return_value={"something": "else"})
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_orders_key_missing_failsafe(self):
+        """Missing 'result.orders' dict means the response is malformed."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(return_value={"result": {"something": "else"}})
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_order_field_unexpected_type(self):
+        """An unexpected 'order' field type (e.g. string) fails safe."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        mock_response = {"result": {"orders": {"order": "nonsense"}}}
+        with patch.object(broker, "_trading") as mock_trading:
+            mock_trading.get_placed = MagicMock(return_value=mock_response)
+            broker._trading = mock_trading
+
+            assert await broker.has_pending_orders() is True
+
+    @pytest.mark.asyncio
+    async def test_returns_true_when_trading_not_initialized(self):
+        """Fail safe when there's no trading client (partial connect failure)."""
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        # Use patch.object so the singleton's state is restored after the test.
+        with patch.object(broker, "_trading", None):
+            assert await broker.has_pending_orders() is True
+
+
 class TestSyncTradesJob:
     """Tests for sync_trades job task."""
 

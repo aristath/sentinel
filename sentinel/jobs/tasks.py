@@ -380,6 +380,13 @@ async def trading_execute(broker, db, planner) -> None:
         await _log_pending_trades(broker, db, planner)
         return
 
+    # Skip the entire cycle if any orders are still pending at the broker.
+    # This prevents submitting duplicate orders for recommendations whose
+    # previous order has been placed but not yet filled.
+    if await broker.has_pending_orders():
+        logger.info("Broker has pending orders, skipping trade execution")
+        return
+
     # Get market status to find open markets
     open_symbols = await _get_open_market_symbols(broker, db)
     if not open_symbols:

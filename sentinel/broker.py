@@ -316,20 +316,67 @@ class Broker:
             logger.error(f"Failed to sell {symbol}: {e}")
             return None
 
-    async def get_order_status(self, order_id: str) -> Optional[dict]:
-        """Get status of an order."""
+    async def has_pending_orders(self) -> bool:
+        """Return True if the broker has any active (unfilled) orders.
+
+        Used to prevent submitting duplicate orders while previous ones are
+        still outstanding. **Fail-safe: any uncertainty returns True**, so the
+        trading loop refuses to place new orders rather than risk duplicates.
+
+        Tradernet's ``get_placed(active=True)`` returns
+        ``{"result": {"orders": {"order": [...]}}}`` when there are active
+        orders, and omits the ``"order"`` key when there are none (see
+        ``tradernet.client.Tradernet.cancel_all`` for the canonical access
+        pattern). Note that ``authorized_request`` does *not* raise on API
+        errors — it just logs them and returns ``{"errMsg": ..., "code": ...}``
+        — so we must inspect the payload, not rely on exceptions.
+        """
         if not self._trading:
-            return None
+            # Broker not connected. trading_execute already gates on
+            # broker.connected upstream, so reaching here means another caller
+            # invoked us without a live trading client. We can't query, so
+            # fail safe.
+            logger.warning("has_pending_orders called without trading client; failing safe")
+            return True
         try:
-            placed = self._trading.get_placed()
-            if placed:
-                for order in placed.get("orders", []):
-                    if order.get("id") == order_id:
-                        return order
-            return None
+            placed = self._trading.get_placed(active=True)
         except Exception as e:
-            logger.error(f"Failed to get order {order_id}: {e}")
-            return None
+            logger.error(f"Failed to fetch active orders: {e}")
+            return True
+
+        # Defensively validate every level of the response. Any deviation from
+        # the documented shape is treated as an error and fails safe.
+        if not isinstance(placed, dict):
+            logger.error(f"Unexpected get_placed response type: {type(placed).__name__}; failing safe")
+            return True
+        if "errMsg" in placed:
+            logger.error(
+                f"Broker returned error from get_placed: {placed.get('errMsg')!r} "
+                f"(code={placed.get('code')!r}); failing safe"
+            )
+            return True
+
+        result = placed.get("result")
+        if not isinstance(result, dict):
+            logger.error("get_placed response missing 'result' dict; failing safe")
+            return True
+
+        orders = result.get("orders")
+        if not isinstance(orders, dict):
+            logger.error("get_placed response missing 'result.orders' dict; failing safe")
+            return True
+
+        order_field = orders.get("order")
+        if order_field is None:
+            return False
+        # The API normally returns a list. Defensively treat a single-order
+        # dict as "pending" too. Any other type is unexpected -> fail safe.
+        if isinstance(order_field, dict):
+            return True
+        if isinstance(order_field, list):
+            return len(order_field) > 0
+        logger.error(f"Unexpected get_placed 'order' field type: {type(order_field).__name__}; failing safe")
+        return True
 
     # -------------------------------------------------------------------------
     # Metadata
