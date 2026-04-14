@@ -393,6 +393,11 @@ async def trading_execute(broker, db, planner) -> None:
         logger.info("No securities with open markets, skipping execution")
         return
 
+    # Sync trades from broker to ensure cooldown checks have the latest trade history
+    # This is critical to prevent violating cooldown periods when trading_execute runs
+    # before sync_trades in the same cycle
+    await sync_trades(db, broker)
+
     # Get recommendations
     recommendations = await planner.get_recommendations()
     if not recommendations:
