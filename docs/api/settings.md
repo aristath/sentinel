@@ -1,0 +1,160 @@
+# Settings
+
+Base path: `/api/settings`
+
+---
+
+## `GET /api/settings`
+
+Returns all application settings, merging stored values with defaults. The response includes every key stored in the database, so it will contain more fields than the documented defaults — notably legacy fields, analytics/ML configuration, computed exchange rates, and the LED bridge health snapshot.
+
+**Response** (abbreviated)
+```json
+{
+  "trading_mode": "live",
+  "transaction_fee_fixed": 2.0,
+  "transaction_fee_percent": 0.2,
+  "max_position_pct": 25,
+  "min_position_pct": 2,
+  "min_trade_value": 250,
+  "min_cash_buffer": 0.005,
+  "target_cash_pct": 0,
+  "simulated_cash_eur": null,
+  "rebalance_threshold_pct": 5,
+  "diversification_impact_pct": 10,
+  "max_dividend_reinvestment_boost": 0.15,
+  "tradernet_api_key": "...",
+  "tradernet_api_secret": "...",
+  "strategy_core_target_pct": 80,
+  "strategy_opportunity_target_pct": 20,
+  "strategy_opportunity_target_max_pct": 30,
+  "strategy_min_opp_score": 0.55,
+  "strategy_entry_t1_dd": -0.1,
+  "strategy_entry_t2_dd": -0.16,
+  "strategy_entry_t3_dd": -0.22,
+  "strategy_entry_memory_days": 45,
+  "strategy_memory_max_boost": 0.12,
+  "strategy_opportunity_addon_threshold": 0.75,
+  "strategy_max_opportunity_buys_per_cycle": 1,
+  "strategy_max_new_opportunity_buys_per_cycle": 1,
+  "strategy_lot_standard_max_pct": 0.08,
+  "strategy_lot_coarse_max_pct": 0.3,
+  "strategy_coarse_max_new_lots_per_cycle": 1,
+  "strategy_core_floor_pct": 0.05,
+  "strategy_opportunity_cooloff_days": 15,
+  "strategy_core_cooloff_days": 21,
+  "strategy_same_side_cooloff_days": 15,
+  "strategy_rotation_time_stop_days": 90,
+  "strategy_core_new_min_score": 0.3,
+  "strategy_core_new_min_dip_score": 0.2,
+  "strategy_max_funding_sells_per_cycle": 2,
+  "strategy_max_funding_turnover_pct": 0.12,
+  "strategy_funding_conviction_bias": 1.0,
+  "strategy_funding_protect_multiplier": 1.25,
+  "strategy_funding_lock_multiplier": 1.75,
+  "strategy_funding_protect_conviction": 0.7,
+  "strategy_funding_lock_conviction": 0.9,
+  "strategy_core_conviction_threshold": 0.7,
+  "led_display_enabled": true,
+  "led_brightness": 200,
+  "r2_account_id": "",
+  "r2_access_key": "",
+  "r2_secret_key": "",
+  "r2_bucket_name": "",
+  "r2_backup_retention_days": 30,
+  "optimization_method": "classic",
+  "entropy_method": "shannon",
+  "entropy_weight": 0.3,
+  "tsallis_q": 2.0,
+  "te_lag": 5,
+  "te_bins": 10,
+  "te_influence_threshold": 0.1,
+  "rmt_auto_q": true,
+  "use_cleaned_correlation": true,
+  "use_transfer_entropy": true,
+  "scoring:calculate": 0.3,
+  "exchange_rates": {
+    "EUR": 1.0,
+    "USD": 0.8555,
+    "GBP": 1.1558,
+    "HKD": 0.1094
+  },
+  "led_bridge_health": {
+    "bridge_ok": true,
+    "consecutive_failures": 0,
+    "last_attempt_ts": 1745748000,
+    "last_success_ts": 1745748000,
+    "last_error_ts": null,
+    "last_error": null,
+    "watchdog_action": null,
+    "app_instance": "arduino-app/sentinel",
+    "updated_at_ts": 1745748000
+  }
+}
+```
+
+**Notable non-obvious fields**
+
+| Field | Description |
+|---|---|
+| `exchange_rates` | Current FX rates to EUR, embedded as a convenience (same data as `GET /api/exchange-rates`) |
+| `led_bridge_health` | Latest bridge health snapshot (same data as `GET /api/led/bridge/health`) |
+| `optimization_method` | Portfolio optimisation algorithm (`classic`, etc.) |
+| `entropy_method` | Entropy method for analytics (`shannon`, `tsallis`) |
+| `rmt_auto_q` | Auto-tune Random Matrix Theory q parameter |
+| `use_cleaned_correlation` | Use RMT-cleaned correlation matrix in analytics |
+| `use_transfer_entropy` | Include transfer entropy in analytics pipeline |
+| `strategy_funding_protect_multiplier` | Multiplier for protecting funding sources |
+| `strategy_funding_lock_multiplier` | Multiplier for locking in high-conviction funding sources |
+| `strategy_core_conviction_threshold` | Minimum conviction to classify as core |
+
+---
+
+## `PUT /api/settings/{key}`
+
+Set a single setting value.
+
+**Path params**
+- `key` — Setting key (e.g. `trading_mode`, `transaction_fee_fixed`)
+
+**Request body**
+```json
+{ "value": "live" }
+```
+
+**Response**
+```json
+{ "status": "ok" }
+```
+
+---
+
+## `PUT /api/settings`
+
+Atomically update the four core strategy-tuning settings. All four keys must be present; partial updates are rejected.
+
+**Required keys**
+- `strategy_core_target_pct` — Core sleeve target (0–100). Must sum to 100 with opportunity target.
+- `strategy_opportunity_target_pct` — Opportunity sleeve target (0–100).
+- `strategy_min_opp_score` — Minimum score to classify a security as opportunity (0–1).
+- `strategy_core_floor_pct` — Core floor fraction (0–1).
+
+**Request body**
+```json
+{
+  "values": {
+    "strategy_core_target_pct": 80,
+    "strategy_opportunity_target_pct": 20,
+    "strategy_min_opp_score": 0.55,
+    "strategy_core_floor_pct": 0.05
+  }
+}
+```
+
+**Response**
+```json
+{ "status": "ok" }
+```
+
+**Errors**
+- `400` — Missing keys, wrong types, out-of-range values, or core + opportunity targets don't sum to 100.
