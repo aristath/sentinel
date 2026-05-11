@@ -41,6 +41,10 @@ DEFAULTS = {
     # API
     "tradernet_api_key": "",
     "tradernet_api_secret": "",
+    # Freedom24 web-session login (needed for PRAAMS portfolio-structure data
+    # which is only served on the authenticated web UI, not the public API).
+    "freedom24_login": "",
+    "freedom24_password": "",
     # Contrarian strategy
     "strategy_core_target_pct": 80,
     "strategy_opportunity_target_pct": 20,

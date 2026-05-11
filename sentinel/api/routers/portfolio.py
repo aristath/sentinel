@@ -6,10 +6,11 @@ from datetime import date as date_type
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
+from sentinel.freedom24_web import Freedom24WebClient
 from sentinel.portfolio import Portfolio
 from sentinel.services.portfolio import PortfolioService
 
@@ -31,6 +32,26 @@ async def get_portfolio(
         currency=deps.currency,
     )
     return await service.get_portfolio_state()
+
+
+@router.get("/structure")
+async def get_portfolio_structure(force: bool = False) -> dict[str, Any]:
+    """PRAAMS portfolio analysis from freedom24.com (rating, risk/return radar,
+    sector/region/currency breakdowns, replacement recommendations).
+
+    Requires `freedom24_login` and `freedom24_password` to be set. Result is
+    cached in memory for 5 minutes; pass ?force=true to bypass.
+    """
+    data = await Freedom24WebClient().get_portfolio_structure(force_refresh=force)
+    if data is None:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Could not fetch portfolio structure. Check freedom24_login / "
+                "freedom24_password settings and try again."
+            ),
+        )
+    return data
 
 
 @router.post("/sync")
