@@ -4,9 +4,13 @@
 
 Method of receiving clients' requests history.
 
+(for JS)
+
+(for API V2)
+
 #### Request:
 
-The method command getClientCpsHistory
+The method command ***getClientCpsHistory***
 
 ```json
 {
@@ -31,7 +35,7 @@ The method command getClientCpsHistory
 | cmd |   | string | Request execution command
 | SID |   | string | SID received during the user's authorization
 | params |   | array | Request execution parameters
-| params | cpsDocId | null|int | Request execution parameters. Request type ID. Can be viewed in section                List of request types. Optional parameter
+| params | cpsDocId | null|int | Request execution parameters. Request type ID. Can be viewed in section List of request types. Optional parameter
 | params | id | null|int | Request execution parameters. Order ID. Optional parameter
 | params | date_from | null|string|date | Request execution parameters. Request list start date. Optional parameter
 | params | date_to | null|string|date | Request execution parameters. Request list end date. Optional parameter
@@ -56,7 +60,6 @@ Getting a response if successful.
             "fio": "Dow John",
             "tel": "+79999999901",
             "id": 13123125345345,
-            "ts_id": 1231233333,
             "type_doc_id": 10160,
             "user_id": 1347723723,
             "date_crt": "2019-11-06 15:31:55",
@@ -93,7 +96,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Unsupported query method",

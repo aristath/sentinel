@@ -1,19 +1,19 @@
 # Types of documents for the application
 
-| Document type (passport_type)
-|---|---|---|---|
+| ID (passport_type_id) | Document type (passport_type)
+|---|---|
 | 1 | Passport
-| 4 | Driver&#039;s licence
+| 4 | Driver's licence
 | 5 | Student ID card
 | 9 | Birth certificate
 | 10 | Officer ID
 | 11 | Certificate of release from prison
 | 13 | Military ID of a soldier (sailor, sergeant, senior sergeant)
 | 15 | Passport of a foreign citizen
-| 16 | Certificate of registration of the immigrant&#039;s application for recognition
+| 16 | Certificate of registration of the immigrant's application for recognition
 | 17 | Residence permit
 | 19 | Temporary citizen ID
-| 22 | Seaman&#039;s passport
+| 22 | Seaman's passport
 | 23 | Military card of a reserves officer
 | 25 | Ukrainian citizen passport
 | 26 | ID
@@ -25,3 +25,4 @@
 | 10155 | International passport
 | 10165 | Passport of a citizen of Uzbekistan
 | 10166 | ID-passport
+| 10167 | HKID

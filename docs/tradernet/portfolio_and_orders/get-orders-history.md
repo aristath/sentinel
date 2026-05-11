@@ -2,6 +2,8 @@
 
 ### Description of server request parameters and a sample response:
 
+Request to get the user's order history for the selected period.
+
 #### Request:
 
 ```json
@@ -22,8 +24,8 @@
 | cmd |   | string | Request execution command
 | SID |   | string | SID received during the user's authorization
 | params |   | array | Request execution parameters
-| params | from | datetime | Request execution parameters. Period start date, format ISO 8601 YYYY-MM-DD\Thh:mm:ss
-| params | till | datetime | Request execution parameters. Period end date, format ISO 8601 YYYY-MM-DD\Thh:mm:ss
+| params | from | datetime | Request execution parameters. Period start date, format ISO 8601 *YYYY-MM-DD\Thh:mm:ss*
+| params | till | datetime | Request execution parameters. Period end date, format ISO 8601 *YYYY-MM-DD\Thh:mm:ss*
 
 #### Response:
 
@@ -94,7 +96,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -122,7 +124,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {Orders}
  */
@@ -148,7 +150,7 @@ getOrdersHistory(function(json){
 
 ### PHP
 
-```json
+```javascript
 /**
  * Receiving orders history
 * @param {string} from - Period start date, format ISO 8601 "YYYY-MM-DD\Thh:mm:ss"

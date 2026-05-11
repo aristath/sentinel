@@ -2,6 +2,8 @@
 
 ### Description of server request parameters and a sample response:
 
+Request allows you to get initial user data from the server - orders, portfolio, markets, open sessions, etc..
+
 #### Request:
 
 ```json
@@ -250,7 +252,6 @@ Getting a response if successful.
       "date_last_request" (string) : "2021-10-05 17:00:23",
       "f_active" (int) : 1,
       "trader_systems_id" (string) : "000000",
-      "client_id" (int) : 30000000,
       "f_demo" (int) : 0,
       "birthday" (string) : "1971-01-01",
       "sex" (string) : null,
@@ -404,7 +405,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -430,7 +431,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {getOPQ}
  */

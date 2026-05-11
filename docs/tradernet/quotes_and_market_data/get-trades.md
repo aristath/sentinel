@@ -2,6 +2,10 @@
 
 ### Description of server request parameters and a sample response:
 
+Method of receiving trades.
+
+(For API V2)
+
 #### Request:
 
 ```json
@@ -50,7 +54,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -78,7 +82,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {GetHlocParams}
  */

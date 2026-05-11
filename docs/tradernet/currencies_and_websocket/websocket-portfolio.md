@@ -2,13 +2,15 @@
 
 ### Example and description of the receiving details
 
+A method for obtaining information on a portfolio with the subscription to changes.
+
 The server sends the 'portfolio' event with portfolio updates
 
 #### Response:
 
 Getting a response if successful.
 
-```json
+```javascript
 /**
  * @typedef {{}} AccountInfoRow (acc)
  * @property {string} curr - account currency

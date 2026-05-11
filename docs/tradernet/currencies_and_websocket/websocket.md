@@ -2,19 +2,16 @@
 
 All WebSocket server requests and responses meet the format:
 
-```json
 [event[, data]]
-```
+
+- `event` - Event name
+- `data(optional)` - Request / response data in json format
+
+## Examples
 
 ### Example with an ordinary client using integrated javascript WebSocket
 
 ```javascript
-        JavaScript
-
-
-
-
-
 const WebSocketsURL = "wss://wss.tradernet.com/";
 
 const ws = new WebSocket(WebSocketsURL);
@@ -42,6 +39,8 @@ ws.onerror = function (error) {
 };
 ```
 
+[Learn more about WebSocket object’s methods and events](https://developer.mozilla.org/en-US/docs/Web/API/WebSocket).
+
 ```javascript
 (function websocketStart() {
     const ws = new WebSocket(WebSocketsURL);
@@ -57,6 +56,8 @@ ws.onerror = function (error) {
 })()
 ```
 
+Connect with SID
+
 ```javascript
 new WebSocket('wss://wss.tradernet.com/?SID=<your-sid>');
 ```
@@ -71,9 +72,9 @@ When connecting, the 'userdata' event with user data is received
     {
         "isDemo":false,
         "mode":"prod",
-        "authLogin":"[email protected]",
+        "authLogin":"[email protected]",
         "login":"user1",
-        "clientLogin":"[email protected]"
+        "clientLogin":"[email protected]"
     }
  ]
 ```
@@ -81,10 +82,10 @@ When connecting, the 'userdata' event with user data is received
 **Description of 'userdata' event parameters:**
 
 | Parameter | Type | Description
-|---|---|---|---|
+|---|---|---|
 | isDemo | bool | Demo mode. 'True' if the SID was not transferred, the SID authorization failed, or the user has no live account.
 | model | prod|demo | It is technically a string representation of the previous parameter
-| authLogin | string | Authentication login. | login | string | User login.
+| authLogin | string | Authentication login.
 | clientLogin | string | Username, under which the user logged in.
 
 ## Examples
@@ -93,7 +94,9 @@ When connecting, the 'userdata' event with user data is received
 
 #### Subscribing to events
 
-```json
+To subscribe to an event, you need to send the event name and parameters, if required
+
+```javascript
 // Subscribing to quotes
 ws.onopen = function() { // Waiting for the connection to open
     ws.send(JSON.stringify(['quotes', ['AAPL.SPB']]));

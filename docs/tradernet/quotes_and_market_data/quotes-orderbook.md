@@ -4,7 +4,7 @@ The server sends the 'b' event with market depth updates
 
 ### Description of response data from the server
 
-```json
+```javascript
 /**
  * @typedef {{}} DomInfoRow
  * @property {number} k -  position number in the market depth

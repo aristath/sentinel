@@ -2,6 +2,10 @@
 
 ### Description of server request parameters and a sample response:
 
+Method of obtaining historical information as per the listing (candlesticks).
+
+(For API V2)
+
 #### Request:
 
 ```json
@@ -27,7 +31,7 @@
 
 Getting a response if successful.
 
-```json
+```javascript
 /**
  * A sample response returned by the server, when requesting information about a ticker
 * @param {number} id - Unique ticker ID
@@ -53,7 +57,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -73,7 +77,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {getSecurityInfo}
  */

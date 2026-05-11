@@ -2,6 +2,8 @@
 
 ### Description of the server reply and an example of the reply
 
+The request allows you to get the news from the server
+
 #### The request requires authorization. In the request header, you need to pass the cookieSID, received during authorization.
 
 ### Examples of using
@@ -10,7 +12,7 @@
 
 ### Browser
 
-```json
+```javascript
 /**
  * @type {getNews}
  */

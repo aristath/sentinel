@@ -3,7 +3,7 @@
 **Orders statuses:**
 
 | Status ID | Status value
-|---|---|---|---|
+|---|---|
 | 0 | was ignored
 | 1 | received
 | 2 | processing the cancellation

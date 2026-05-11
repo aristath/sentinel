@@ -3,7 +3,7 @@
 **Security Session Opening Types:**
 
 | Type ID | Type value
-|---|---|---|---|
+|---|---|
 | 0 | No key
 | 2 | by token
 | 3 | by SMS password

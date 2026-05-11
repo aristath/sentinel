@@ -2,9 +2,13 @@
 
 ### Example and description of the receiving details
 
+A method for obtaining information on a portfolio with the subscription to changes.
+
+(for API V2)
+
 #### Request:
 
-The method command getPositionJson
+The method command ***getPositionJson***
 
 ```json
 {
@@ -24,7 +28,7 @@ The method command getPositionJson
 
 Getting a response if successful.
 
-```json
+```javascript
 /**
  * @typedef {{}} AccountInfoRow (acc)
  * @property {string} curr - account currency
@@ -128,7 +132,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Unsupported query method",

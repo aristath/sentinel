@@ -2,9 +2,13 @@
 
 ### Description of server request parameters and a sample response:
 
+Method, allowing to cancel submitted orders.
+
+(for API V2)
+
 #### Request:
 
-The method command delTradeOrder
+The method command ***delTradeOrder***
 
 ```json
 {
@@ -30,7 +34,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Unsupported query method",

@@ -2,6 +2,8 @@
 
 ### Description of server request parameters and a sample response:
 
+The service enables removing price alerts
+
 #### Request:
 
 ```json
@@ -24,13 +26,13 @@
 | params |   | array | Parameter array
 | params | id | number | unique alert ID
 | params | del | boolean | Alert removal feature
-| params | quote_type | string |
-| params | notification_type | string |
+| params | quote_type | string | type of the price underlying the alert calculation.  Possible values are described in the table:  Price type description
+| params | notification_type | string | type of notification.  Possible values are described in the table:  Notification type description
 
 **Price type description:**
 
 | Price type | Description
-|---|---|---|---|
+|---|---|
 | ltp | last trade price
 | bap | the best bid price
 | bbp | the best ask price
@@ -40,7 +42,7 @@
 **Notification type description:**
 
 | type of notification | Description
-|---|---|---|---|
+|---|---|
 | email | by mail only
 | sms | only via SMS
 | push | push notification
@@ -62,7 +64,7 @@
 
 ### Error examples
 
-```json
+```javascript
 //Common error
 {
     "code"   (number)	: 1,
@@ -76,7 +78,7 @@
 
 ### Browser
 
-```json
+```javascript
 /**
  * Removing price alert
  * @param {string} id

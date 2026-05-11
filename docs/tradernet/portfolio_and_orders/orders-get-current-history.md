@@ -2,9 +2,13 @@
 
 ### Description of server request parameters and a sample response:
 
+A method that allows you to get a list of orders in the current period with a subscription to changes.
+
+(for API V2)
+
 #### Request:
 
-The method command getNotifyOrderJson
+The method command ***getNotifyOrderJson***
 
 ```json
 {
@@ -27,7 +31,7 @@ The method command getNotifyOrderJson
 
 Getting a response if successful.
 
-```json
+```javascript
 /**
  * @typedef {{}} OrderDataRow
  *
@@ -126,7 +130,7 @@ var responseData = [{
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Unsupported query method",

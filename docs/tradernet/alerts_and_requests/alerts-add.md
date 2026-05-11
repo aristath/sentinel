@@ -2,14 +2,11 @@
 
 ### Description of server request parameters and a sample response:
 
+The service enabled adding price alerts
+
 #### Request:
 
 ```json
-        HTTPS
-        GET
-
-
-
 {
     "cmd"                   (string)        :"togglePriceAlert",
     "params"                (array)         :{
@@ -35,16 +32,16 @@
 | params | ticker | string | ticker in Tradernet's system
 | params | price | array |
 | params | price | string | price of the alert activation
-| params | trigger_type | string |
-| params | quote_type | string |
-| params | notification_type | string |
-| params | alert_period | number |
-| params | expire | number | string |
+| params | trigger_type | string | Trigger method.  Possible values are described in the table:  Alert trigger event description
+| params | quote_type | string | type of the price underlying the alert calculation.  Possible values are described in the table:  Price type description
+| params | notification_type | string | type of notification.  Possible values are described in the table:  Notification type description
+| params | alert_period | number | Frequency Possible values are described in the table:  Alert activation frequency description
+| params | expire | number | string | alert period Possible values are described in the table:  Alert duration description
 
 **Price type description:**
 
 | Price type | Description
-|---|---|---|---|
+|---|---|
 | ltp | last trade price
 | bap | the best bid price
 | bbp | the best ask price
@@ -54,7 +51,7 @@
 **Notification type description:**
 
 | type of notification | Description
-|---|---|---|---|
+|---|---|
 | email | by mail only
 | sms | only via SMS
 | push | push notification
@@ -63,7 +60,7 @@
 **Alert trigger event description:**
 
 | Trigger method | Description
-|---|---|---|---|
+|---|---|
 | crossing | Crossing price
 | crossing_down | Crossing Down
 | crossing_up | Crossing Up
@@ -81,7 +78,7 @@
 **Alert activation frequency description:**
 
 | Value | Description
-|---|---|---|---|
+|---|---|
 | 0 | Once
 | 60 | Activate again in 1 min after it has worked
 | 300 | Activate again in 5 minutes after it has worked
@@ -92,7 +89,7 @@
 **Alert duration description:**
 
 | alert period | Description
-|---|---|---|---|
+|---|---|
 | 0 | Good-Til-Cancelled
 | end_of_day | Good-Til-Day
 | till_time | Until a specified time
@@ -113,7 +110,7 @@
 
 ### Error examples
 
-```json
+```javascript
 //Common error
 {
 	"code" 		(number)	: 5,
@@ -127,7 +124,7 @@
 
 ### Browser
 
-```json
+```javascript
 /**
  * @type {AlertDataRow}
  */

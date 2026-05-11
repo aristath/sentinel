@@ -43,65 +43,42 @@ The method enables receiving data on client's cash flow.
 | SID |   | string | SID received during the user's authorization
 | params |   | array | Request execution parameters
 | params | user_id | int|null | Client ID to find the report. Optional parameter
-| params | groupByType | int|null #### Response:
+| params | groupByType | int|null | `1|0` Group by type. Optional parameter
+| params | cash_totals | int|null | `1|0` Show trade amounts by day?. Optional parameter
+| params | hide_limits | int|null | `1|0` Hide available limits?. Optional parameter
+| params | take | int|null | Output data amount. Optional parameter
+| params | skip | int|null | Output data offset. Optional parameter
+| params | without_refund | int|null | `1|0` Data without refunds. Optional parameter
+| params | filters | array|null | *Output data filter. Optional parameter
+| params | sort | array|null | Output data sorting. Optional parameter
+
+* — **Output data filter**
+ Field values usable for filtering. Field with key "field":
+ `date`,
+ `sum`,
+ `currency`,
+ `comment`,
+ `type_code` (Types of valid codes)
+
+ ***The same fields can be used when sorting***
+
+ Filter statement values. Field with key "operator":
+ `eq` — is equal to
+ `neq` — not equal to
+ `more` — the value is greater than the desired one
+ `eqormore` — the value is equal to or greater than the desired one
+ `eqorless` — the value is smaller or greater than the desired one
+ `contains` — finding a value in the middle of the string
+ `doesnotcontain` — values are missing in the middle of the string
+ `startswith` — values are being searched for at the beginning of the string
+ `endswith` — values are being searched for at the end of the string
+ `in` — search for any of the transferred values
+
+#### Response:
 
 Getting a response if successful.
 
 ```json
-            params
-            cash_totals
-            int|null
-
-
-            params
-            hide_limits
-            int|null
-
-
-            params
-            take
-            int|null
-            Output data amount. Optional parameter
-
-
-            params
-            skip
-            int|null
-            Output data offset. Optional parameter
-
-
-            params
-            without_refund
-            int|null
-
-
-            params
-            filters
-            array|null
-            *Output data filter. Optional parameter
-
-
-            params
-            sort
-            array|null
-            Output data sorting. Optional parameter
-
-
-
-
-
-        * — Output data filter
-        Field values usable for filtering. Field with key "field":
-
-        The same fields can be used when sorting
-
-        Filter statement values. Field with key "operator":
-
-
-
-
-
-
 {
   "total"    (int)   : 10,
   "cashflow" (array) : {
@@ -143,7 +120,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -164,7 +141,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {getUserCashFlows}
  */

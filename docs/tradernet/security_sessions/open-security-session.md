@@ -45,7 +45,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -57,7 +57,7 @@ We get an answer in case of failure
 
 | Base parameter | Parameter | Type | Description
 |---|---|---|---|
-| channel |   | string|null |
+| channel |   | string|null | Telegram, PUSH, Telegram and PUSH or SMS – where the most recent code was sent to.  Enum: "sms", "telegram", "push"
 | delay |   | int|null | A repeated request can be made in, s
 | isRepeatAvailable |   | bool | Resend attempts available
 | isInputAvailable |   | bool | Code entry attempts available
@@ -126,7 +126,7 @@ Method of sending a message with a secret code from the SMS to open a security s
 | cmd |   | string | Request execution command
 | SID |   | string | SID received during the user's authorization
 | params |   | array | Request execution parameters
-| params | validationKey | string |
+| params | validationKey | string | SMS code received to the client’s phone number in the method *getSecuritySessionCode*
 
 #### Response:
 
@@ -160,7 +160,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -176,13 +176,13 @@ We get an answer in case of failure
 | isAttemptAvailable |   | bool | Attempted access
 | sessions |   | object[]|null | Security session information
 | sessions | id | int | Security Session ID
-| sessions | safety_type_id | int |
+| sessions | safety_type_id | int | Security session opening code types.  Security Session Opening Types
 | sessions | owner_login | string | Login of the account owner
 | sessions | user_login | string | Login of the client that opened the session
 | sessions | key_current | string | Unique security session key
 | sessions | start_datetime | string | Security session start date in UTCZ format
 | sessions | expire_datetime | string | Security session end date in UTCZ format
-| sessions | expire | int |
+| sessions | expire | int | Time till security session expiry after the message has been received, s
 | sessions | ip | string | IP address hash
 | sessions | ip_client | string | Client IP address
 | texts |   | object | Additional information on security session opening

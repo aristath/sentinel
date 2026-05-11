@@ -1,7 +1,7 @@
 # Types of valid transaction codes
 
 | Code | Description
-|---|---|---|---|
+|---|---|
 | bank | Bank transfer
 | sbp | Account top-up through FPS
 | digital_assets | Account top-up through Wallet
@@ -35,6 +35,7 @@
 | crypto_withdrawal | Cryptocurrency withdrawals
 | currency_conversion | Currency conversion
 | dvp | DVP trade payment
+| debt_coverage | Debt repayment
 | dividend | Dividends
 | dividend_reverted | Dividends
 | stock_dividend | Dividends by securities
@@ -66,6 +67,7 @@
 | kassa | Payment via the cash desk
 | payments_to_customer | Payments to the client
 | commission_refund | Reimbursement of commissions to the client
+| blik | Replenishing the account via BLIK
 | sepa_instant | SEPA Instant
 | sepa | SEPA-payment
 | swift | SWIFT payment
@@ -73,6 +75,7 @@
 | spin_off_reverted | Spin-off
 | split | Split
 | split_reverted | Split
+| system | System transaction
 | tax | Taxes
 | tax_reverted | Taxes
 | tax_vat | Taxes VAT
@@ -83,6 +86,7 @@
 | agent_fee_reverted | The agent's fees on dividends payment
 | trade_cancellation | Trade cancellation
 | otc_trade | Trade payment
+| pending_card_authorisation | Unfinished authorization of a card payment
 | unblock | Unlock
 | variation_margin | Variable margin
 | cashout | Withdraw

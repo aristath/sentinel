@@ -2,6 +2,10 @@
 
 ### Description of server request parameters and a sample response:
 
+The method allows receiving files attached to the order using the order ID.
+
+(for API V2)
+
 #### Request:
 
 ```json
@@ -22,7 +26,7 @@
 | cmd |   | string | Request execution command
 | SID |   | string | SID received during the user's authorization
 | params |   | array | Request execution parameters
-| params | id | int|null | Order ID. May be not used if the draft order ID is known (internal_id).
+| params | id | int|null | Order ID. May be not used if the draft order ID is known (*internal_id*).
 | params | internal_id | int|null | Draft order number. Used when known, or if the order has the draft status and has not yet been assigned the main ID.
 
 #### Response:
@@ -46,7 +50,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -65,11 +69,11 @@ We get an answer in case of failure
 | Base parameter | Parameter | Type | Description
 |---|---|---|---|
 | files |   | array | File list
-| files | file | string | File format base64
+| files | file | string | File format *base64*
 | files | mime | string | MIME type
 | files | file_name | string | File name
 | files | extension | string | File extension
-| files | encoding_type | string | File encoding type (base64)
+| files | encoding_type | string | File encoding type (*base64*)
 
 ### Examples of using
 
@@ -77,7 +81,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {getCps}
  */

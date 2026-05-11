@@ -2,9 +2,12 @@
 
 ### Description of server request parameters and a sample response:
 
+Method, allowing to get a list of open security sessions of clients.
+ You can open a security session using the methods described on the page «Opening the security session»
+
 #### Request:
 
-The method command getSecuritySessions
+The method command ***getSecuritySessions***
 
 ```json
 {
@@ -26,7 +29,7 @@ The method command getSecuritySessions
 
 Getting a response if successful.
 
-```json
+```javascript
 /**
 
  * @typedef {{}} SequrityResponse
@@ -69,7 +72,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Unsupported query method",
@@ -133,7 +136,7 @@ ws.onopen = function() { // Waiting for the connection to open
 
 ### Browser JS (JQUERY)
 
-```json
+```javascript
 /**
  * @type {getSecuritySessions}
  */

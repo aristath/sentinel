@@ -1,8 +1,10 @@
 # Get quote historical data (candlesticks).
 
-**Note (Sentinel):** TraderNet does not document a maximum historical range for `date_from`/`date_to`. Sentinel requests 20 years of daily data by default; you can request more if the API accepts it.
-
 ### Description of server request parameters and a sample response:
+
+Method of obtaining historical information as per the listing (candlesticks).
+
+(For API V2)
 
 #### Request:
 
@@ -30,36 +32,16 @@
 | params | userId | string | User ID. Optional parameter. Used to retrieve the candlestick history data for a registered user. For a GET request only API v1
 | params | id | string | ticker name. You can specify multiple tickers separated by commas
 | params | count | signed int | the number of candlesticks that should be received in addition to the specified interval, if not required - the value should be -1. (for example, if you want to get all candlesticks for the year + 100 candlesticks before the interval, the parameter should be -100)
-| params | timeframe | int #### Response:
+| params | timeframe | int | interval in minutes [ `1`, `5`, `15`, `60`, `1440` ]
+| params | intervalMode | string | required parameter, a single value `ClosedRay`
+| params | date_from | string | datetime | the start date of the interval, for which it is required to obtain information on candlesticks in the format DD.MM.yyyy hh:mm
+| params | date_to | string | datetime | the end date of the interval, for which it is necessary to obtain information on the candlesticks in the format dd.M.yyyy hh:mm
+
+#### Response:
 
 Getting a response if successful.
 
-```json
-            params
-            intervalMode
-            string
-
-
-            params
-            date_from
-            string | datetime
-            the start date of the interval, for which it is required to obtain information on candlesticks in the format DD.MM.yyyy hh:mm
-
-
-            params
-            date_to
-            string | datetime
-            the end date of the interval, for which it is necessary to obtain information on the candlesticks in the format dd.M.yyyy hh:mm
-
-
-
-
-
-
-
-
-
-
+```javascript
 /**
  * @type {FullHlocData}
  */
@@ -110,7 +92,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -141,7 +123,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {GetHlocParams}
  */

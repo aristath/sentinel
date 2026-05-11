@@ -97,17 +97,22 @@ The documentation is organized into the following categories:
 
 ## Scraping
 
-The documentation was scraped using the script at `scripts/scrape_tradernet_docs.go`.
+The documentation was scraped using the script at `scripts/scrape_tradernet_docs.py`.
 
 To re-scrape the documentation:
 
 ```bash
-cd scripts
-go run scrape_tradernet_docs.go
+python scripts/scrape_tradernet_docs.py
+```
+
+Scrape a single endpoint:
+
+```bash
+python scripts/scrape_tradernet_docs.py auth-login
 ```
 
 ## Source
 
 All documentation content is copyright Tradernet and sourced from their official API documentation website.
 
-Last updated: 2026-01-09 11:23:00
+Last updated: 2026-05-11 12:15:43

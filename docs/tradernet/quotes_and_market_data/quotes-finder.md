@@ -4,7 +4,7 @@
 
 ## Examples
 
-```json
+```javascript
 /**
  * @typedef {{}} TickerFinderDataRow
 
@@ -37,7 +37,7 @@
  */
 ```
 
-```json
+```javascript
 /**
  * @typedef {{}} TickerFinderDataRow
 
@@ -91,7 +91,7 @@ $responseExample = [
 
 ### Browser
 
-```json
+```javascript
 /**
  * @typedef {{
  *  search: string,

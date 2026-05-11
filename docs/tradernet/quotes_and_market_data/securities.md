@@ -20,9 +20,7 @@ The service enbles receiving information on securities from the server
 
 **Request parameters:**
 
-| Base parameter | Parameter | Type | Description
-|---|---|---|---|
-
+|   |   |   |
 |---|---|---|---|
 | take |   |   | Number of securities information on which is expected to be obtained
 | skip |   |   |
@@ -43,18 +41,18 @@ The service enbles receiving information on securities from the server
 |---|---|---|---|
 | ticker | string | Ticker in TS |
 | instr_type | string | Instrument type. |
-| instr_kind | string | Instrument sub-type |
-| instr_kind_с | integer | Instrument subtype code |
+| instr_kind | string | Instrument sub-type | The details on subtypes and codes are available at Instruments details
+| instr_kind_с | integer | Instrument subtype code | The details on subtypes and codes are available at Instruments details
 | code_sec | string | Day trading code |
 | code_rep | string | Night trading code |
 | code_nm | string | Instrument ticker on the exchange |
 | name | string | Name (for sorting only) |
 | reg_nb | string | Registration number |
 | issue_nb | string | Issue number |
-| face_curr_c | string | Currency |
-| mkt_id | integer | Market ID |
-| mkt_name | string | Market code |
-| mkt_short_code | string | Market short code |
+| face_curr_c | string | Currency | The details on subtypes and codes are available at Currency
+| mkt_id | integer | Market ID | The details on trading platform codes and names are available at Trading platforms
+| mkt_name | string | Market code | The details on trading platform codes and names are available at Trading platforms
+| mkt_short_code | string | Market short code | The details on trading platform codes and names are available at Trading platforms
 | fv | numeric | Bond body value |
 | step_price | numeric | Price increment |
 | x_short | boolean | Available in short |
@@ -64,7 +62,7 @@ The service enbles receiving information on securities from the server
 **Description of filtering parameters::**
 
 | Filtering operator (operator parameter) | Description
-|---|---|---|---|
+|---|---|
 | eq | equal (default)
 | neq | is not equal
 | eqormore | Is greater than or equal to
@@ -224,7 +222,7 @@ The service enbles receiving information on securities from the server
 | instr_kind_c | securities | numeric | Instrument sub-type
 | instr_kind | securities | string | Instrument sub-type
 | instr_id | securities | string | Instrument ID in the trading system
-| code_sec | securities | string | Exchange trading mode" + "TQBD, WAPN, TQQQ, TQTD, RFND, FIXN, SETL, EQEU, SADM, SDBP, TQQD, EQBD, AETS, EQR2, EQMP, EQR3, PSRP, EQW2, PTTK, PRTK, EQQI, EQEO, EQRD, PSRD, PRTD, PTTD, EQLD, EQWD, EQR, PTKD, TQDE, PTOD, FUTN, TADM, LIQR, EQLP, RPMA, EQRP, TQTF, TQQI, EQDB, TQOB, TQIF, EQWP, TQOD, CETS, EQBR, PTKK, PTEQ, NADM, TRAN, TRAD, TQCB, TQBR, EQF, EQOB"
+| code_sec | securities | string | Exchange trading mode" + " TQBD, WAPN, TQQQ, TQTD, RFND, FIXN, SETL, EQEU, SADM, SDBP, TQQD, EQBD, AETS, EQR2, EQMP, EQR3, PSRP, EQW2, PTTK, PRTK, EQQI, EQEO, EQRD, PSRD, PRTD, PTTD, EQLD, EQWD, EQR, PTKD, TQDE, PTOD, FUTN, TADM, LIQR, EQLP, RPMA, EQRP, TQTF, TQQI, EQDB, TQOB, TQIF, EQWP, TQOD, CETS, EQBR, PTKK, PTEQ, NADM, TRAN, TRAD, TQCB, TQBR, EQF, EQOB"
 | code_rep | securities | string |
 | code_nm | securities | string | Stock exchange ticker
 | name | securities | string | Name
@@ -236,10 +234,14 @@ The service enbles receiving information on securities from the server
 | mkt_name | securities | string | Market code in the TRADERNET trading system
 | lot_size_q | securities | string | Lot size
 | istrade | securities | numeric | Trading permitted in the TRADERNET trading system
-| maturity_d | securities | string | Expiry date | fv_calc | securities | string |
-| issuesize | securities | string | Volume of issued stock | fv | securities | string | nominal cost
-| latname | securities | string | Name in English | accint | securities | string | Accumulated coupon interest (ACI)
-| create_tmstmp | securities | string | Date of system entry | update_tmstmp | securities | string | Date of system update
+| maturity_d | securities | string | Expiry date
+| fv_calc | securities | string |
+| issuesize | securities | string | Volume of issued stock
+| fv | securities | string | nominal cost
+| latname | securities | string | Name in English
+| accint | securities | string | Accumulated coupon interest (ACI)
+| create_tmstmp | securities | string | Date of system entry
+| update_tmstmp | securities | string | Date of system update
 | to_delete | securities | numeric | Security is removed from the system.
 | mkt_short_code | securities | string | Short market code in the TRADERNET trading system
 | x_short | securities | numeric | Short selling access
@@ -339,13 +341,13 @@ The service enbles receiving information on securities from the server
 | codesub_nm | securities | string |
 | bloomberg_id | attributes | string |
 
-#### Examples of instrument type combinations can be found at 	 Instruments details
+#### Examples of instrument type combinations can be found at Instruments details
 
 ### Examples of using
 
 ## Examples
 
-```json
+```javascript
 /**
 * Entire list request
 * @type {Securities}
@@ -400,9 +402,9 @@ var exampleParams = {
                     "value": "AAPL.US"
                 },
                 {
-                    "field": "instr_type",
+                    "field": "type",
                     "operator": "in",
-                    "value": "Options"
+                    "value": 4
                 }
             ]
         }
@@ -419,4 +421,9 @@ $.ajax('https://tradernet.com/api/', {
 });
 ```
 
-You can get the list of instruments in JSON format by a direct request to the server, for example
+```json
+curl -X POST 'https://tradernet.com/api/?cmd=getAllSecurities' \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    -H 'Cookie: SID={your_sid}; language=en' \
+    --data-urlencode 'q={"cmd":"getAllSecurities","params":{"take":10,"skip":0}}'
+```

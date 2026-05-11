@@ -2,9 +2,13 @@
 
 ### Description of server request parameters and a sample response:
 
+A method that allows you to work with the submission of orders for execution.
+
+(for API V2)
+
 #### Request:
 
-The method command putTradeOrder
+The method command ***putTradeOrder***
 
 ```json
 {
@@ -46,7 +50,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Unsupported query method",

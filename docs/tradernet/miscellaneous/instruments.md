@@ -3,7 +3,7 @@
 **Instrument types and type name:**
 
 | Instrument type | Type name
-|---|---|---|---|
+|---|---|
 | 2 | Bonds
 | 11 | Bond Yield
 | 6 | Currency
@@ -24,7 +24,10 @@
 
 #### Type combination examples
 
+Instrument types and type name:
+
 | instr_type_c | instr_kind_c | instr_type | instr_kind
+|---|---|---|---|
 | 1 | 1 | Share | ordinary stock
 | 1 | 2 | Share | preferred share
 | 1 | 7 | Share | fund/ ETF

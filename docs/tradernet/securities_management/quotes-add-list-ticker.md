@@ -23,7 +23,6 @@
 | cmd |   | string | Request execution command
 | SID |   | string | Session ID received during authorization
 | params |   | array | Request execution parameters
-
 | params | id | integer | List ID
 | params | ticker | string | Ticker
 | params | index | integer | Ticker item number
@@ -63,7 +62,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -77,7 +76,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {addStockListTicker}
  */

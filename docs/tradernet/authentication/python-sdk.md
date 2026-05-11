@@ -6,24 +6,34 @@ MIT license
 
 ### Connection arguments
 
+public_key
+
+— Public key
+
+private_key
+
+— Private key
+
+An authorised user may receive the keys on page            «
+
+API key
+
+»
+
+login
+
+— Sign In
+
+passwd
+
+— Password.
+            The password is transferred to the Tradernet POST server by a request.
+
 ### Sample connections:
 
 #### Configuration in arguments:
 
 ```json
-        Learn more        PyPI tradernet-sdk.
-
-
-
-            An authorised user may receive the keys on page            «API key»
-
-
-
-            The password is transferred to the Tradernet POST server by a request.
-
-
-
-
 from tradernet import TraderNetAPI
 
 api = TraderNetAPI('public_key', 'private_key', 'login', 'passwd')
@@ -112,3 +122,23 @@ print(res.sendRequest('getPositionJson'))
 ```
 
 ### Pages with examples (section Python):
+
+¯
+
+Retrieving orders history for the period
+
+¯
+
+Receive orders in the current period and subscribe for changes.
+
+¯
+
+Send an order to execute.
+
+¯
+
+Sending Stop Loss and Take Profit commands for execution.
+
+¯
+
+Delete/Cancel order

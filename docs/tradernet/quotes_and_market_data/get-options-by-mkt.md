@@ -22,7 +22,6 @@ This methods allows receiving data on options.
 |---|---|---|---|
 | cmd |   | string | Request execution command
 | params |   | array | Request execution parameters
-
 | params | ltr | string | Market name
 | params | base_contract_code | string | Underlying contract code
 
@@ -54,7 +53,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -68,7 +67,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {getOptionsByMktNameAndBaseAsset}
  */

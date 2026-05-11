@@ -3,9 +3,10 @@
 **Currency codes and names:**
 
 | Code | Name
-|---|---|---|---|
+|---|---|
 | AED | AED
 | AMD | AMD
+| ARS | ARS
 | ATS | ATS
 | AUD | AUD
 | AZN | AZN
@@ -31,6 +32,7 @@
 | HKD | HKD
 | HUF | HUF
 | IEP | IEP
+| ILS | ILS
 | INR | INR
 | ISK | ISK
 | ITL | ITL
@@ -55,6 +57,7 @@
 | TMT | TMT
 | TRL | TRL
 | TRY | TRY
+| TWD | TWD
 | UAH | UAH
 | USD | US dollar
 | UZS | UZS

@@ -2,8 +2,45 @@
 
 ### Description of response data from the server
 
-[!]  The same fields can be specified in the search parameters
-
+| c | Ticker
+|---|---|
+| ltr | Exchange of the latest trade
+| name | Name of security
+| name2 | Security name in Latin
+| bbp | Best bid
+| bbc | Designations of the best bid changes (\'\' – no changes, \'D\' - down, \'U\' - up)
+| bbs | Best bid size
+| bbf | Best bid volume
+| bap | Best offer
+| bac | Designations of price change (\'\' – no changes, \'D\' - down, \'U\' - up)
+| bas | Value (size) of the best offer
+| baf | Volume of the best offer
+| pp | Previous closing
+| op | Opening price of the current trading session
+| ltp | Last trade price
+| lts | Last trade size
+| ltt | Time of last trade
+| chg | Change in the price of the last trade in points, relative to the closing price of the previous trading session
+| pcp | Percentage change relative to the closing price of the previous trading session
+| ltc | Designations of price change (\'\' – no changes, \'D\' - down, \'U\' - up)
+| mintp | Minimum trade price per day
+| maxtp | Maximum trade price per day
+| vol | Trade volume per day, in pcs
+| vlt | Trading volume per day in currency
+| yld | Yield to maturity (for bonds)
+| acd | Accumulated coupon interest (ACI)
+| fv | Face value
+| mtd | Maturity date
+| cpn | Coupon, in the currency
+| cpp | Coupon period (in days)
+| ncd | Next coupon date
+| ncp | Latest coupon date
+| dpb | Purchase margin
+| dps | Short sale margin
+| trades | Number of trades
+| min_step | Minimum price increment
+| step_price | Price increment
+| strike_price | Option strike
 
 ```json
 $responseExample = [
@@ -59,6 +96,30 @@ $responseExample = [
 
 ## Examples
 
+### JS
+
+```php
+/**
+ * @type {getStockQuotesJson}
+ */
+var exampleParams = {
+    "cmd": "getStockQuotesJson",
+    "params": {
+        "tickers": ["AAPL.US","F.US"],
+    },
+};
+
+function getStockQuotesJson(callback) {
+    $.post("https://tradernet.com/api/", {q: JSON.stringify(exampleParams)}, callback);
+}
+
+/**
+ * Get the object **/
+getStockQuotesJson(function(json){
+    console.log(json);
+});
+```
+
 ### PHP
 
 ```php
@@ -78,3 +139,5 @@ $responseExample = $publicApiClient->sendRequest('getStockQuotesJson', ['tickers
 ### REST
 
 You can get quotes in JSON format by direct query to the server, separating tickers and necessary parameters with the + sign, for example
+
+/securities/export?tickers=USD/KZT+EUR/KZT

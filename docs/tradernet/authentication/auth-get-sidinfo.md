@@ -2,6 +2,10 @@
 
 ### Description of server request parameters and a sample response:
 
+The request enables receiving user’s current session information
+
+(For API V2)
+
 #### Request:
 
 ```json
@@ -33,7 +37,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -61,7 +65,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {getSidInfo}
  */
@@ -84,7 +88,7 @@ getSidInfo(function(json){
 
 ### PHP
 
-```json
+```javascript
 /**
  * User’s session information receipt*/
 

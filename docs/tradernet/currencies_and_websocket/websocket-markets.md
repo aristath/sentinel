@@ -6,7 +6,7 @@ The server sends the 'markets' event with market status updates
 
 Getting a response if successful.
 
-```json
+```javascript
 /**
  * @property {string} t  - Current request time
  *

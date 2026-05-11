@@ -2,13 +2,16 @@
 
 ### Description of server request parameters and a sample response:
 
+Method, allowing to get a list of open security sessions of clients.
+ You can open a security session using the methods described on the page «Opening the security session.»
+
 The server sends the 'sessions' event with session updates
 
-#### Response:
+```javascript
+["sessions", [{ ... }]]
+```
 
-Getting a response if successful.
-
-```json
+```javascript
 /**
 
  * @typedef {{}} SequrityResponse

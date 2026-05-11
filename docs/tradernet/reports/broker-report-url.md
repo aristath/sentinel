@@ -2,21 +2,13 @@
 
 To get the broker's report WITHOUT authorization in the system, you will require an API key
 
+You may generate an API key through the Attention! Do not share the access key you received in the API with anyone, not even the company's employees. Do not send links containing this key by email or in messengers
+
 #### Links to the report receiving options:
 
 | File format | Report link
-|---|---|---|---|
-|
-|
-|
-|
-
-To get the report with a specific start date, you need to add the date_start parameter  ...&date_start=2020-01-01,  where it is 2020-01-01 - this is the start date for creating the report in the format YYYY-MM-DD
-
-To get the report with a specific end date, you need to add the date_end parameter  ...&date_end=2020-02-01,  where 2020-02-01 is the report generation end date in the YYYY-MM-DD format
-
-To get the report WITHOUT authorization, you need to generate an API key in the profile and add it to the end of the link as a parameter  ...&api_key=API_KEY,  where it is API_KEY - this is your key obtained from the profile ;
-
-you also need to specify the login of a client for whom you want to get the report and add it to the end of the link as a parameter  ...&auth_login=LOGIN,  where it is LOGIN - this is your login
-
-#### Generator of links to receive reports
+|---|---|
+| PDF | https://tradernet.com/cabinet/ajax-get-billing-report/?format=pdf&date_start=2026-04-11
+| XLS | https://tradernet.com/cabinet/ajax-get-billing-report/?format=xls&date_start=2026-04-11
+| XML | https://tradernet.com/cabinet/ajax-get-billing-report/?format=xml&date_start=2026-04-11
+| JSON | https://tradernet.com/cabinet/ajax-get-billing-report/?format=json&date_start=2026-04-11

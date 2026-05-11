@@ -2,18 +2,20 @@
 
 ### Description of server request parameters and a sample response:
 
+Request allows you to get a list of the most traded securities or a list of the fastest growing stocks (for a year).
+
 #### Request:
 
 ```json
-	{
-    "cmd"           (string)    :"getTopSecurities",
-    "params"        (array)     :{
-        "type"      (string)    : "stocks",
-        "exchange"  (string)    : "europe",
-        "gainers"   (int)       : 1,
-        "limit"     (int)       : 10
-     }
-}
+{
+       "cmd"           (string)    :"getTopSecurities",
+       "params"        (array)     :{
+           "type"      (string)    : "stocks",
+           "exchange"  (string)    : "europe",
+           "gainers"   (int)       : 1,
+           "limit"     (int)       : 10
+        }
+   }
 ```
 
 **Description of request parameters:**
@@ -30,7 +32,7 @@
 **Description of instrument types:**
 
 | Instrument type | Description
-|---|---|---|---|
+|---|---|
 | stocks | Stocks
 | bonds | Bonds
 | futures | Futures
@@ -40,7 +42,7 @@
 **Description of available exchanges:**
 
 | Stock Exchanges | Description
-|---|---|---|---|
+|---|---|
 | kazakhstan | Kazakhstan
 | europe | Europe
 | usa | USA
@@ -50,7 +52,7 @@
 **Description of list types:**
 
 | Value | Description
-|---|---|---|---|
+|---|---|
 | 1 | Top fastest-growing
 | 0 | Top by trading volume
 
@@ -59,13 +61,13 @@
 Exemplified reply in the event of success
 
 ```json
-		{
-ers": [
-L.US",
-S",
-S"
-			]
-		}
+{
+	"tickers": [
+		"AAPL.US",
+		"T.US",
+		"F.US"
+	]
+}
 ```
 
 **Description of request parameters:**
@@ -77,11 +79,11 @@ S"
 Exemplified reply in the event of failure
 
 ```json
-		{
-"  : 5,
-    "error" : "Exchange is missing",
-    "errMsg": "Exchange is missing"
-		}
+{
+	"code"  : 5,
+          "error" : "Exchange is missing",
+          "errMsg": "Exchange is missing"
+}
 ```
 
 **Description of response parameters:**
@@ -98,7 +100,7 @@ Exemplified reply in the event of failure
 
 ### Browser
 
-```json
+```javascript
 /**
  * @type {getTopSecurities}
  */

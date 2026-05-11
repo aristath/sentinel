@@ -2,9 +2,13 @@
 
 ### Description of server request parameters and a sample response:
 
+A method that allows you to work with the submission of orders for execution. *If all stoploss parameters are null, the stoploss order does not change; if it is null according to takeprofit, the takeprofit order does not change when setting the accompanying stoploss order; specify the parameters: stop_loss_percent, stoploss_trailing_percent (the stop_loss parameter is ignored).*
+
+(for API V2)
+
 #### Request:
 
-The method command putStopLoss
+The method command ***putStopLoss***
 
 ```json
 {
@@ -30,7 +34,7 @@ The method command putStopLoss
 
 Getting a response if successful.
 
-```json
+```javascript
  /**
  * @typedef {{}} OrderDataRow
  *
@@ -133,7 +137,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Unsupported query method",

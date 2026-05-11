@@ -42,7 +42,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "code": 1,
@@ -92,7 +92,7 @@ We get an answer in case of failure
 | Base parameter | Parameter | Type | Description
 |---|---|---|---|
 | allowed |   | int | Access. 0 or 1 depending on access to the instrument
-| allowedExpires |   | array |
+| allowedExpires |   | array | Expiration type:  1 - Good-Til-Day;  2 - Good-Til-Day +;  3 - Good-Til-Cancelled.
 | restriction |   | string|null | Ban description (if any)
 | operation |   | string|null | Transaction type (if any): B, S
 | recommendations |   | array|null | Blocking description
@@ -108,7 +108,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {checkAllowedTickerAndBanOnTrade}
  */

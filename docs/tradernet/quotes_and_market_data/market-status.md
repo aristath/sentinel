@@ -22,382 +22,75 @@ Obtaining information about market statuses and operation.
 |---|---|---|---|
 | cmd |   | string | Request execution command
 | params |   | array | Request execution parameters
-| params | market | string #### Response:
+| params | market | string | `briefName` — Market identifier. Market abbreviated name. For more details, please see the table below «Market list».
+| params | mode | string|null | Request mode: `demo`. If the parameter is not specified, the market statuses for real users will be displayed.
+
+**Market list**
+
+| Market code (briefName) | Full title | Abbreviated name
+|---|---|---|
+| * |   | all markets
+| Mkk | Central Securities Depository of Turkey (MKK) | Mkk
+| AMX | Armenia Securities Exchange | AMX
+| AIX | Astana International Exchange | AIX
+| ATHEX | Athens Stock Exchange | ATHEX
+| BIST | Borsa Istanbul | BIST
+| US_OPT | CBOE (US Options) | US_OPT
+| CMX | COMEX (Commodity Exchange) | CMX
+| CBF | Cboe Futures Exchange | CBF
+| CBT | Chicago Board of Trade | CBT
+| CME | Chicago Mercantile Exchange | CME
+| FRX | Coinbase Derivatives | FRX
+| FINERY | Crypto Finery Market | FINERY
+| CRPT | Cryptocurrency market | CRPT
+| EU | EU Europe | EU
+| EXANTE | EXANTE | EXANTE
+| EASTE | East Exchange | EASTE
+| EUX | Eurex | EUX
+| EUROBOND | Eurobonds | EUROBOND
+| EOP | Euronext Derivatives Paris | EOP
+| FORTS | FORTS Market FORTS | FORTS
+| FFSP | Freedom Finance Structural Products | FFSP
+| HKG | Hong Kong Futures Exchange | HKG
+| HKEX | Hong Kong Stock Exchange | HKEX
+| EDX | ICE Endex | EDX
+| NYB | ICE Futures U.S. | NYB
+| WCE | ICE Futures US-Canadian Grains | WCE
+| IMEX | IMEX Crypto Market | IMEX
+| ISF | ISF: ICE Futures Europe S2F | ISF
+| ITS | ITS | ITS
+| ITS_MONEY | ITS Money Market | ITS_MONEY
+| ICE | Intercontinental Exchange | ICE
+| KASE | Kazakhstan Stock Exchange | KASE
+| KASE.CUR | Kazakhstan Stock Exchange. Currency section | KASE.CUR
+| Kraken | Kraken Crypto Exchange | Kraken
+| LME | LME: London Metal Exchange | LME
+| LMAX | Lmax currency | LMAX
+| MCX.CUR | MCX Currency. Currency exchange | MCX.CUR
+| MOEX | MICEX. Stock market | MCX
+| MONEY | MONEY Foreign Exchange Market | MONEY
+| OTC.xxxx.RUR | Market for settlement of forwards on foreign stocks for Russian Rubles | OTC.xxxx.RUR
+| MGE | Minneapolis Grain Exchange (MGEX) | MGE
+| NGC | NSE IFSC | NGC
+| NYF | NYF - ICE Futures US Indices | NYF
+| FIX | NYSE/NASDAQ | FIX
+| NSE | Natl Stock Exchange of India | NSE
+| NYM | New York Mercantile Exchange | NYM
+| UZSE | Republican Stock Exchange "Toshkent" (UZSE) | UZSE
+| SGX | SGX: Singapore Exchange | SGX
+| SPBFOR | SPB Foreign securities. | SPBFOR
+| SPBEX | SPB. Russian securities. | SPBEX
+| SSE | Shanghai Stock Exchange | SSE
+| SZSE | Shenzhen Stock Exchange | SZSE
+| TSXV | TSX Venture Exchange | TSXV
+| TABADUL | Tabadul Exchange | TABADUL
+| TSX | Toronto Stock Exchange | TSX
+
+#### Response:
 
 Getting a response if successful.
 
-```json
-            params
-            mode
-            string|null
-
-
-
-
-
-
-
-        Market list
-
-
-            Full title
-            Abbreviated name
-
-
-
-
-            *
-
-            all markets
-
-
-                AMX
-                Armenia Securities Exchange
-                AMX
-
-
-                AIX
-                Astana International Exchange
-                AIX
-
-
-                ATHEX
-                Athens Stock Exchange
-                ATHEX
-
-
-                BEB.RUS
-                BEB. The market for the conversions calendar
-                BEB.RUS
-
-
-                BEX
-                BEX Best Execution
-                BEX
-
-
-                Broker Quote System (BQS)
-                Broker Quote System (BQS)
-                SBQ
-
-
-                US_OPT
-                CBOE (US Options)
-                US_OPT
-
-
-                CMX
-                COMEX (Commodity Exchange)
-                CMX
-
-
-                CBF
-                Cboe Futures Exchange
-                CBF
-
-
-                CBT
-                Chicago Board of Trade
-                CBT
-
-
-                CME
-                Chicago Mercantile Exchange
-                CME
-
-
-                SecForCrypto
-                Crypto
-                SecForCrypto
-
-
-                FINERY
-                Crypto Finery Market
-                FINERY
-
-
-                CRPT
-                Cryptocurrency market
-                CRPT
-
-
-                EU
-                EU Europe
-                EU
-
-
-                EXANTE
-                EXANTE
-                EXANTE
-
-
-                EASTE
-                East Exchange
-                EASTE
-
-
-                EUX
-                Eurex
-                EUX
-
-
-                EUROBOND
-                Eurobonds
-                EUROBOND
-
-
-                FORTS
-                FORTS Market FORTS
-                FORTS
-
-
-                FFSP
-                Freedom Finance Structural Products
-                FFSP
-
-
-                HKG
-                Hong Kong Futures Exchange
-                HKG
-
-
-                HKEX
-                Hong Kong Stock Exchange
-                HKEX
-
-
-                EDX
-                ICE Endex
-                EDX
-
-
-                NYB
-                ICE Futures U.S.
-                NYB
-
-
-                WCE
-                ICE Futures US-Canadian Grains
-                WCE
-
-
-                IMEX
-                IMEX Crypto Market
-                IMEX
-
-
-                ISF
-                ISF: ICE Futures Europe S2F
-                ISF
-
-
-                ITS
-                ITS
-                ITS
-
-
-                ITS_MONEY
-                ITS Money Market
-                ITS_MONEY
-
-
-                ICE
-                Intercontinental Exchange
-                ICE
-
-
-                KASE
-                Kazakhstan Stock Exchange
-                KASE
-
-
-                KASE.CUR
-                Kazakhstan Stock Exchange. Currency section
-                KASE.CUR
-
-
-                Kraken
-                Kraken Crypto Exchange
-                Kraken
-
-
-                LME
-                LME: London Metal Exchange
-                LME
-
-
-                LMAX
-                Lmax currency
-                LMAX
-
-
-                MCX.CUR
-                MCX Currency. Currency exchange
-                MCX.CUR
-
-
-                MCX.OTC
-                MCX Over-The-Counter Market
-                MCX.OTC
-
-
-                MCX.nottraded
-                MCX.nottraded
-                MCX.nottraded
-
-
-                MOEX
-                MICEX. Stock market
-                MCX
-
-
-                MONEY
-                MONEY Foreign Exchange Market
-                MONEY
-
-
-                OTC.xxxx.RUR
-                Market for settlement of forwards on foreign stocks for Russian Rubles
-                OTC.xxxx.RUR
-
-
-                MBANK_EU
-                MayBank EU Instruments
-                MBANK_EU
-
-
-                MBANK
-                MayBank HKE Instruments
-                MBANK
-
-
-                MBANK_US
-                MayBank US Instruments
-                MBANK_US
-
-
-                MGE
-                Minneapolis Grain Exchange (MGEX)
-                MGE
-
-
-                NGC
-                NSE IFSC
-                NGC
-
-
-                NYF
-                NYF - ICE Futures US Indices
-                NYF
-
-
-                FIX
-                NYSE/NASDAQ
-                FIX
-
-
-                NSE
-                Natl Stock Exchange of India
-                NSE
-
-
-                NYM
-                New York Mercantile Exchange
-                NYM
-
-
-                FIX.OTC
-                OTC. Foreign securities.
-                FIX.OTC
-
-
-                PFTS_OBL
-                PFTS. Obligations
-                PFTS_OBL
-
-
-                PFTS_SPOT
-                PFTS. Spot
-                PFTS_SPOT
-
-
-                PRSP_OBL
-                Perspektiva market. Obligations
-                PRSP_OBL
-
-
-                PRSP_SPOT
-                Perspektiva market. Spot
-                PRSP_SPOT
-
-
-                RTSBoard
-                RTSBoard РТС board
-                RTSBoard
-
-
-                UZSE
-                Republican Stock Exchange "Toshkent" (UZSE)
-                UZSE
-
-
-                SGC
-                SGQ system of guaranteed quotes on RTS
-                RTS
-
-
-                SGX
-                SGX: Singapore Exchange
-                SGX
-
-
-                SPBFOR
-                SPB Foreign securities.
-                SPBFOR
-
-
-                SPBEX
-                SPB. Russian securities.
-                SPBEX
-
-
-                KASE.OTC
-                Store. Kazakhstan. F24
-                KASE.OTC
-
-
-                TABADUL
-                Tabadul Exchange
-                TABADUL
-
-
-                UB_OBL
-                UB. Obligations
-                UB_OBL
-
-
-                UKR_FORTS
-                UKR_FORTS FORTS Ukraine
-                UFORTS
-
-
-                UKR_FOUND
-                UKR_FOUND Stock Ukraine
-                UFOUND
-
-
-                UX.OTC
-                UX Over-The-Counter Market
-                UX.OTC
-
-
-
-
-
-
-
-
-
+```javascript
 /**
  * @property {string} t  - Current request time
  *
@@ -430,7 +123,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -448,7 +141,7 @@ We get an answer in case of failure
 
 | Base parameter | Parameter | Type | Description
 |---|---|---|---|
-| result | markets | array[ ] | Market status list array
+| result | markets | array[ ] | Market status list array
 
 ### Examples of using
 
@@ -456,7 +149,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {getMarketStatus}
  */

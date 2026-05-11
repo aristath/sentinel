@@ -2,6 +2,8 @@
 
 ### Connecting to the API through the client.
 
+PublicApiClient for PHP PublicApiClient.php.zip.
+
 Tradernet Python SDK.
 
 #### Examples of using API using pre-made libraries

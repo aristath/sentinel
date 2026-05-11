@@ -2,6 +2,8 @@
 
 ### Description of server request parameters and a sample response:
 
+Request for user's trades history.
+
 #### Request:
 
 ```json
@@ -27,8 +29,8 @@
 | cmd |   | string | Request execution command
 | SID |   | string | SID received during the user's authorization
 | params |   | array | Request execution parameters
-| params | beginDate | date | Request execution parameters. Period start date, format ISO 8601 YYYY-MM-DD
-| params | endDate | date | Request execution parameters. Period end date, format ISO 8601 YYYY-MM-DD
+| params | beginDate | date | Request execution parameters. Period start date, format ISO 8601 *YYYY-MM-DD*
+| params | endDate | date | Request execution parameters. Period end date, format ISO 8601 *YYYY-MM-DD*
 | params | tradeId | int|null | Request execution parameters. From which Trade ID to start retrieving report data. Optional parameter
 | params | max | int|null | Request execution parameters. Number of trades. If 0 or no parameter is specified - then all trades. Optional parameter
 | params | nt_ticker | string|null | Request execution parameters. Instrument ticker. Optional parameter
@@ -39,7 +41,7 @@
 
 Getting a response if successful.
 
-```json
+```javascript
 /**
  * @typedef {{}} MaxTradeIdRow (max_trade_id)
  * @property {string} @text - Last Trade ID
@@ -144,7 +146,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Bad json",
@@ -172,7 +174,7 @@ We get an answer in case of failure
 
 ### JS (jQuery)
 
-```json
+```javascript
 /**
  * @type {Trades}
  */

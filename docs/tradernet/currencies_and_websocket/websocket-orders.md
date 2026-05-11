@@ -8,7 +8,7 @@ The server sends the 'orders' event with order updates
 
 Getting a response if successful.
 
-```json
+```javascript
 /**
  * @typedef {{}} OrderDataRow
  *

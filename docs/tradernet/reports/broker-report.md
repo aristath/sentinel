@@ -2,9 +2,13 @@
 
 ### Description of server request parameters and a sample response:
 
+Broker report generation method.
+
+(For API V2)
+
 #### Request:
 
-The method command getBrokerReport
+The method command ***getBrokerReport***
 
 ```json
 {
@@ -26,20 +30,20 @@ The method command getBrokerReport
 | Base parameter | Parameter | Type | Description
 |---|---|---|---|
 | cmd |   | string | Request execution command
-| SID |   | string | SID received during the user's authorization. (For API V1). Not used, if API Keys and headers are used X-NtApi-Sig, X-NtApi-PublicKey
-| nonce |   | string | We recommend using the current timestamp as a nonce parameter. More information on the page « API key», paragraph 4. If the ID parameter is passed, the nonce parameter is not used
+| SID |   | string | SID received during the user's authorization. (For API V1). Not used, if API Keys and headers are used *X-NtApi-Sig*, *X-NtApi-PublicKey*
+| nonce |   | string | We recommend using the current timestamp as a *nonce* parameter. More information on the page «API key», paragraph 4. If the *ID* parameter is passed, the *nonce* parameter is not used
 | params |   | array | Request execution parameters
-| params | date_start | string|date|null | Starting date. Optional parameter, if flag is used recent
-| params | date_end | string|date|null | Expiry date. Optional parameter, if flag is used recent
-| params | time_period | string|time|null | Time cut maybe 23:59:59 or 08:40:00. Optional parameter, if flag is used recent
-| params | recent | int|null | Accepts value of 1 or 0. Parameter that returns a date slice: report start date - yesterday 23:59:59; report end date - today 23:59:59. Optional parameter. If used, parameters are ignored date_start, date_end, time_period
-| params | type | string|null | Data block from the report, optional parameter, possible values are shown in the table below  «Description of type parameter options»
-| params | format | string|null | Report in the selected format. Acceptable formats: json, html, xml, xls, pdf. Default — json
+| params | date_start | string|date|null | Starting date. Optional parameter, if flag is used *recent*
+| params | date_end | string|date|null | Expiry date. Optional parameter, if flag is used *recent*
+| params | time_period | string|time|null | Time cut maybe 23:59:59 or 08:40:00. Optional parameter, if flag is used *recent*
+| params | recent | int|null | Accepts value of 1 or 0. Parameter that returns a date slice: report start date - yesterday 23:59:59; report end date - today 23:59:59. Optional parameter. If used, parameters are ignored *date_start*, *date_end*, *time_period*
+| params | type | string|null | Data block from the report, optional parameter, possible values are shown in the table below «Description of type parameter options»
+| params | format | string|null | Report in the selected format. Acceptable formats: *json*, *html*, *xml*, *xls*, *pdf*. Default — *json*
 
 **Description of type parameter options:**
 
 | Value | Description
-|---|---|---|---|
+|---|---|
 | account_at_start | Data array on the account status at the start time of the requested report period
 | account_at_end | Data array on the account status at the date the end time of the requested report period
 | trades | Dat array on trades for the requested report period
@@ -77,7 +81,7 @@ Getting a response if successful.
 
 We get an answer in case of failure
 
-```json
+```javascript
 // Common error
 {
     "errMsg" : "Unsupported query method",
@@ -103,7 +107,7 @@ We get an answer in case of failure
 
 ### JS (jQuery) using the SID parameter:
 
-```json
+```javascript
 /**
  * @type {reports}
  */
@@ -132,7 +136,7 @@ getBrokerReport(function(json){
 
 ### JS (jQuery) using the X-NtApi-Sig header:
 
-```json
+```javascript
 /**
  * @type {reports}
  */
