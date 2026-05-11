@@ -49,3 +49,9 @@ TUI/sentinel-tui
 # World binary
 world/world
 .aider*
+
+# Local scratch / HAR exports
+.tmp/
+
+# Ergon Studio working dir
+.ergon.studio/
