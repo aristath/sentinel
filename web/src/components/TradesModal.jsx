@@ -60,8 +60,8 @@ export function TradesModal({ opened, onClose }) {
     queryFn: () => getTrades({
       symbol: filters.symbol || undefined,
       side: filters.side || undefined,
-      start_date: filters.startDate ? filters.startDate.toISOString().split('T')[0] : undefined,
-      end_date: filters.endDate ? filters.endDate.toISOString().split('T')[0] : undefined,
+      start_date: filters.startDate || undefined,
+      end_date: filters.endDate || undefined,
       limit: pageSize,
       offset: (page - 1) * pageSize,
     }),

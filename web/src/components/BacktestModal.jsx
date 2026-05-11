@@ -35,8 +35,8 @@ import { formatCurrency, formatPercent } from '../utils/formatting';
 
 export function BacktestModal({ opened, onClose }) {
   // Configuration state
-  const [startDate, setStartDate] = useState(dayjs().subtract(5, 'year').toDate());
-  const [endDate, setEndDate] = useState(dayjs().subtract(1, 'day').toDate());
+  const [startDate, setStartDate] = useState(dayjs().subtract(5, 'year').format('YYYY-MM-DD'));
+  const [endDate, setEndDate] = useState(dayjs().subtract(1, 'day').format('YYYY-MM-DD'));
   const [initialCapital, setInitialCapital] = useState(10000);
   const [monthlyDeposit, setMonthlyDeposit] = useState(500);
   const [rebalanceFrequency, setRebalanceFrequency] = useState('weekly');
@@ -66,7 +66,6 @@ export function BacktestModal({ opened, onClose }) {
   // EventSource reference for cancellation
   const eventSourceRef = useRef(null);
 
-  const formatDate = (date) => dayjs(date).format('YYYY-MM-DD');
 
   const startBacktest = useCallback(() => {
     setStatus('running');
@@ -81,8 +80,8 @@ export function BacktestModal({ opened, onClose }) {
     setItemsTotal(0);
 
     const params = new URLSearchParams({
-      start_date: formatDate(startDate),
-      end_date: formatDate(endDate),
+      start_date: startDate,
+      end_date: endDate,
       initial_capital: initialCapital.toString(),
       monthly_deposit: monthlyDeposit.toString(),
       rebalance_frequency: rebalanceFrequency,
@@ -199,7 +198,7 @@ export function BacktestModal({ opened, onClose }) {
             label="Start Date"
             value={startDate}
             onChange={setStartDate}
-            maxDate={dayjs().subtract(1, 'month').toDate()}
+            maxDate={dayjs().subtract(1, 'month').format('YYYY-MM-DD')}
             clearable={false}
           />
 
@@ -208,7 +207,7 @@ export function BacktestModal({ opened, onClose }) {
             value={endDate}
             onChange={setEndDate}
             minDate={startDate}
-            maxDate={dayjs().subtract(1, 'day').toDate()}
+            maxDate={dayjs().subtract(1, 'day').format('YYYY-MM-DD')}
             clearable={false}
           />
 

@@ -14,3 +14,11 @@ if (!window.matchMedia) {
     };
   };
 }
+
+if (!window.ResizeObserver) {
+  window.ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}

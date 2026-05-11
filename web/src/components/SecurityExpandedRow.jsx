@@ -93,7 +93,7 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
         borderTop: `1px solid ${catppuccin.surface0}`,
       }}
     >
-      <Grid gutter="md">
+      <Grid gap="md">
         {/* Left Column: Chart & Stats */}
         <Grid.Col span={{ base: 12, md: 6, lg: 4 }}>
           <Stack gap="md">
