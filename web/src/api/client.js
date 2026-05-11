@@ -40,6 +40,8 @@ export const getVersion = () => request('/version');
 // Portfolio
 export const getPortfolio = () => request('/portfolio');
 export const getPositions = () => request('/positions');
+export const getPortfolioStructure = (force = false) =>
+  request(`/portfolio/structure${force ? '?force=true' : ''}`);
 
 // Securities
 export const getSecurities = () => request('/securities');

@@ -16,9 +16,44 @@ import {
   Box,
   UnstyledButton,
 } from '@mantine/core';
-import { IconAlertTriangle, IconChevronUp, IconChevronDown, IconSelector, IconChevronRight } from '@tabler/icons-react';
+import { IconAlertTriangle, IconChevronUp, IconChevronDown, IconSelector, IconChevronRight, IconStarFilled } from '@tabler/icons-react';
 import { SecurityExpandedRow } from './SecurityExpandedRow';
 import { formatCurrencySymbol as formatCurrency, formatPercent } from '../utils/formatting';
+import { usePortfolioStructure } from '../hooks/usePortfolioStructure';
+import { catppuccin } from '../theme';
+
+const MAX_STARS = 7;
+
+/**
+ * Build a {ticker -> praamsRatio} map from the structure payload. Tickers in
+ * upstream are upper-case (e.g. "AAPL.US"); sentinel symbols match. Falls
+ * back to an empty map if the structure endpoint is unavailable.
+ */
+function buildPraamsMap(structure) {
+  const map = new Map();
+  const assets = structure?.portfolioAnalysis?.initial?.assets;
+  if (!Array.isArray(assets)) return map;
+  for (const a of assets) {
+    if (a?.ticker && a?.praamsRatio !== undefined) {
+      map.set(String(a.ticker).toUpperCase(), a.praamsRatio);
+    }
+  }
+  return map;
+}
+
+function PraamsCell({ rating }) {
+  if (rating === undefined || rating === null) {
+    return <Text size="sm" c="dimmed">-</Text>;
+  }
+  return (
+    <Tooltip label={`PRAAMS rating ${rating}/${MAX_STARS}`}>
+      <Group gap={4} wrap="nowrap">
+        <IconStarFilled size={12} color={catppuccin.yellow} />
+        <Text size="sm" fw={500}>{rating}/{MAX_STARS}</Text>
+      </Group>
+    </Tooltip>
+  );
+}
 
 // Sortable column header component
 function SortableHeader({ children, sorted, reversed, onSort }) {
@@ -35,6 +70,9 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
   const [expandedSymbols, setExpandedSymbols] = useState(new Set());
   const [sortColumn, setSortColumn] = useState(null);
   const [sortReversed, setSortReversed] = useState(false);
+
+  const { data: structure } = usePortfolioStructure();
+  const praamsByTicker = useMemo(() => buildPraamsMap(structure), [structure]);
 
   const toggleExpanded = (symbol) => {
     setExpandedSymbols((prev) => {
@@ -91,6 +129,11 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
           aVal = a.recommendation ? (a.recommendation.action === 'buy' ? 1 : -1) * Math.abs(a.recommendation.value_delta_eur || 0) : 0;
           bVal = b.recommendation ? (b.recommendation.action === 'buy' ? 1 : -1) * Math.abs(b.recommendation.value_delta_eur || 0) : 0;
           break;
+        case 'praams':
+          // Missing → -1 so it sorts below rated entries.
+          aVal = praamsByTicker.get(String(a.symbol || '').toUpperCase()) ?? -1;
+          bVal = praamsByTicker.get(String(b.symbol || '').toUpperCase()) ?? -1;
+          break;
         default:
           return 0;
       }
@@ -101,9 +144,13 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
     });
 
     return sortReversed ? sorted.reverse() : sorted;
-  }, [securities, sortColumn, sortReversed]);
+  }, [securities, sortColumn, sortReversed, praamsByTicker]);
 
-  const numColumns = 7;
+  // PRAAMS column only shows when we actually have a rating for at least one
+  // current holding — keeps the UI honest before credentials are configured
+  // and avoids a column of dashes.
+  const showPraams = praamsByTicker.size > 0;
+  const numColumns = showPraams ? 8 : 7;
 
   const allExpanded = sortedSecurities.length > 0 && sortedSecurities.every((s) => expandedSymbols.has(s.symbol));
   const noneExpanded = expandedSymbols.size === 0;
@@ -166,6 +213,13 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
                 Recommendation
               </SortableHeader>
             </Table.Th>
+            {showPraams && (
+              <Table.Th>
+                <SortableHeader sorted={sortColumn === 'praams'} reversed={sortReversed} onSort={() => handleSort('praams')}>
+                  PRAAMS
+                </SortableHeader>
+              </Table.Th>
+            )}
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -307,6 +361,13 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
                       <Text size="sm" c="dimmed">-</Text>
                     )}
                   </Table.Td>
+
+                  {/* PRAAMS rating (only when we have structure data) */}
+                  {showPraams && (
+                    <Table.Td>
+                      <PraamsCell rating={praamsByTicker.get(String(symbol || '').toUpperCase())} />
+                    </Table.Td>
+                  )}
                 </Table.Tr>
 
                 {/* Expanded Row */}

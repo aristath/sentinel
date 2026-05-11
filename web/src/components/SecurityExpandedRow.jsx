@@ -20,16 +20,54 @@ import {
   Tooltip,
   ActionIcon,
 } from '@mantine/core';
-import { IconTrash, IconAlertTriangle } from '@tabler/icons-react';
+import { IconTrash, IconAlertTriangle, IconStarFilled } from '@tabler/icons-react';
 import { SecurityChart } from './SecurityChart';
 import { catppuccin } from '../theme';
 import { formatCurrencySymbol as formatCurrency, formatPercent } from '../utils/formatting';
 import { useCategories, parseCommaSeparated } from '../hooks/useCategories';
+import { usePortfolioStructure } from '../hooks/usePortfolioStructure';
+
+const REPLACEMENTS_TO_SHOW = 5;
+
+/**
+ * Find the replacePositions[] entry for a given symbol (case-insensitive).
+ * Returns the entry or null.
+ */
+function findReplacementEntry(structure, symbol) {
+  const list = structure?.portfolioAnalysis?.replacePositions;
+  if (!Array.isArray(list) || !symbol) return null;
+  const upper = String(symbol).toUpperCase();
+  return list.find(
+    (r) => String(r?.assetToReplace?.ticker || '').toUpperCase() === upper
+  ) || null;
+}
+
+function ReplacementRow({ candidate }) {
+  if (!candidate) return null;
+  return (
+    <Group gap="xs" wrap="nowrap" align="center">
+      <Group gap={4} wrap="nowrap" style={{ width: 56, flexShrink: 0 }}>
+        <IconStarFilled size={11} color={catppuccin.yellow} />
+        <Text size="xs" fw={500}>
+          {candidate.praamsRatio}/7
+        </Text>
+      </Group>
+      <Text size="xs" fw={500} style={{ width: 100, flexShrink: 0 }}>
+        {candidate.ticker}
+      </Text>
+      <Text size="xs" c="dimmed" lineClamp={1}>
+        {candidate.issuer}
+      </Text>
+    </Group>
+  );
+}
 
 export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [localMultiplier, setLocalMultiplier] = useState(null);
   const { data: categories } = useCategories();
+  const { data: structure } = usePortfolioStructure();
+  const replacement = findReplacementEntry(structure, security?.symbol);
 
   // Reset local state when security changes
   useEffect(() => {
@@ -318,6 +356,35 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
             </Box>
           </Stack>
         </Grid.Col>
+
+        {/* PRAAMS replacement suggestions (full-width row, only when we have
+            structure data and an entry for this ticker) */}
+        {replacement?.improveOverall?.length > 0 && (
+          <Grid.Col span={12}>
+            <Box
+              p="sm"
+              style={{
+                background: catppuccin.base,
+                borderRadius: 'var(--mantine-radius-sm)',
+                borderLeft: `3px solid ${catppuccin.yellow}`,
+              }}
+            >
+              <Group gap="xs" mb={6}>
+                <IconStarFilled size={12} color={catppuccin.yellow} />
+                <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+                  PRAAMS replacement suggestions
+                </Text>
+              </Group>
+              <Stack gap={4}>
+                {replacement.improveOverall
+                  .slice(0, REPLACEMENTS_TO_SHOW)
+                  .map((c) => (
+                    <ReplacementRow key={c.assetId ?? c.ticker} candidate={c} />
+                  ))}
+              </Stack>
+            </Box>
+          </Grid.Col>
+        )}
       </Grid>
     </Box>
   );

@@ -30,6 +30,9 @@ import { AllocationRadarCard } from '../components/AllocationRadarCard';
 import { JobsCard } from '../components/JobsCard';
 import { MarketsOpenCard } from '../components/MarketsOpenCard';
 import { PortfolioPnLChart } from '../components/PortfolioPnLChart';
+import { PortfolioRatingCard } from '../components/PortfolioRatingCard';
+import { CompositionCard } from '../components/CompositionCard';
+import { ForwardReturnCard } from '../components/ForwardReturnCard';
 import LoadingState from '../components/LoadingState';
 import ErrorState from '../components/ErrorState';
 import {
@@ -322,6 +325,7 @@ function UnifiedPage() {
         {/* Left Sidebar - Allocation Cards */}
         <Stack gap="md" className="unified__sidebar">
           <MarketsOpenCard />
+          <PortfolioRatingCard />
           <SecurityAllocationCard
             securities={securities}
             recommendations={recommendations}
@@ -336,6 +340,8 @@ function UnifiedPage() {
             securities={securities}
             recommendations={recommendations}
           />
+          <CompositionCard />
+          <ForwardReturnCard />
         </Stack>
 
         {/* Main Content */}
