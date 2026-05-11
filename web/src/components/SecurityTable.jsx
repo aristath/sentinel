@@ -46,7 +46,7 @@ function PraamsCell({ rating }) {
     return <Text size="sm" c="dimmed">-</Text>;
   }
   return (
-    <Tooltip label={`PRAAMS rating ${rating}/${MAX_STARS}`}>
+    <Tooltip label={`Risk/Return (PRAAMS) rating ${rating}/${MAX_STARS}`}>
       <Group gap={4} wrap="nowrap">
         <IconStarFilled size={12} color={catppuccin.yellow} />
         <Text size="sm" fw={500}>{rating}/{MAX_STARS}</Text>
@@ -216,7 +216,7 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
             {showPraams && (
               <Table.Th>
                 <SortableHeader sorted={sortColumn === 'praams'} reversed={sortReversed} onSort={() => handleSort('praams')}>
-                  PRAAMS
+                  Risk/Return (PRAAMS)
                 </SortableHeader>
               </Table.Th>
             )}

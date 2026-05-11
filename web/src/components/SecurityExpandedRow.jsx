@@ -372,7 +372,7 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
               <Group gap="xs" mb={6}>
                 <IconStarFilled size={12} color={catppuccin.yellow} />
                 <Text size="xs" fw={600} tt="uppercase" c="dimmed">
-                  PRAAMS replacement suggestions
+                  Risk/Return (PRAAMS) replacement suggestions
                 </Text>
               </Group>
               <Stack gap={4}>
