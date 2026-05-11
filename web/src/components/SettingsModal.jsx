@@ -13,6 +13,7 @@ import {
   Tabs,
   Group,
   Button,
+  Divider,
 } from '@mantine/core';
 import { IconSettings, IconCoin, IconBrain, IconKey, IconCloudUpload } from '@tabler/icons-react';
 import { getSettings, updateSetting, updateSettingsBatch } from '../api/client';
@@ -437,6 +438,30 @@ export function SettingsModal({ opened, onClose }) {
                 value={settings?.tradernet_api_secret || ''}
                 onChange={(e) => handleChange('tradernet_api_secret', e.target.value)}
                 placeholder="Enter API secret"
+              />
+
+              <Divider label="Freedom24 web login" labelPosition="left" mt="md" />
+
+              <Text size="xs" c="dimmed">
+                Used only to fetch PRAAMS portfolio-structure data (Portfolio Ratio,
+                Risk/Return radar, sector/region breakdowns, replacement suggestions),
+                which is not exposed by the public API.
+              </Text>
+
+              <TextInput
+                label="Freedom24 Login"
+                description="Email used to sign in at freedom24.com"
+                value={settings?.freedom24_login || ''}
+                onChange={(e) => handleChange('freedom24_login', e.target.value)}
+                placeholder="you@example.com"
+              />
+
+              <PasswordInput
+                label="Freedom24 Password"
+                description="Web login password (not your API secret)"
+                value={settings?.freedom24_password || ''}
+                onChange={(e) => handleChange('freedom24_password', e.target.value)}
+                placeholder="Enter password"
               />
 
             </Stack>

@@ -10,6 +10,7 @@ import { BacktestModal } from '../components/BacktestModal';
 import { TradesModal } from '../components/TradesModal';
 import { SchedulerModal } from '../components/SchedulerModal';
 import { SecurityExpandedRow } from '../components/SecurityExpandedRow';
+import { SettingsModal } from '../components/SettingsModal';
 
 const wrap = (ui) => (
   <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
@@ -37,6 +38,10 @@ describe('upgrade smoke test', () => {
 
   it('renders SchedulerModal (Table.* subcomponents)', () => {
     render(wrap(<SchedulerModal opened onClose={() => {}} />));
+  });
+
+  it('renders SettingsModal (Divider + freedom24 fields)', () => {
+    render(wrap(<SettingsModal opened onClose={() => {}} />));
   });
 
   it('renders SecurityExpandedRow (Grid gap, Grid.Col responsive span)', () => {
