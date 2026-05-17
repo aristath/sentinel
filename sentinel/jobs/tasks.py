@@ -111,9 +111,12 @@ async def sync_trades(db, broker) -> None:
             if not isinstance(first_row, dict):
                 first_row = {}
             latest_ts_raw = first_row.get("executed_at")
-            try:
-                latest_ts = int(latest_ts_raw)
-            except (TypeError, ValueError):
+            if isinstance(latest_ts_raw, str | int | float):
+                try:
+                    latest_ts = int(latest_ts_raw)
+                except ValueError:
+                    latest_ts = 0
+            else:
                 latest_ts = 0
             if latest_ts > 0:
                 # Re-fetch a small overlap window to avoid missing delayed broker entries.
