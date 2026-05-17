@@ -5,9 +5,39 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from sentinel.planner import Planner, RebalanceEngine
+from sentinel.planner.analyzer import PortfolioAnalyzer
 from sentinel.planner.models import TradeRecommendation
 from sentinel.planner.rebalance_rules import desired_tranche_stage, get_forced_opportunity_exit
 from sentinel.strategy import recent_dd252_min
+
+
+class TestRebalanceSummary:
+    @pytest.mark.asyncio
+    async def test_uses_configured_rebalance_threshold_pct(self, monkeypatch):
+        """The portfolio summary should respect the UI/settings threshold knob."""
+        settings = MagicMock()
+        settings.get = AsyncMock(return_value=10)
+        analyzer = PortfolioAnalyzer(
+            db=MagicMock(),
+            portfolio=MagicMock(),
+            currency=MagicMock(),
+            settings=settings,
+        )
+        analyzer.get_current_allocations = AsyncMock(return_value={"A": 0.44, "B": 0.56})
+
+        async def fake_ideal(_calculator):
+            return {"A": 0.50, "B": 0.50}
+
+        monkeypatch.setattr(
+            "sentinel.planner.allocation.AllocationCalculator.calculate_ideal_portfolio",
+            fake_ideal,
+        )
+
+        summary = await analyzer.get_rebalance_summary()
+
+        assert summary["rebalance_threshold_pct"] == 10
+        assert summary["status"] == "aligned"
+        assert summary["needs_rebalance"] is False
 
 
 class TestDeficitSells:

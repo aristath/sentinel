@@ -273,7 +273,11 @@ class Portfolio:
 
     async def needs_rebalance(self) -> bool:
         """Check if portfolio needs rebalancing based on threshold."""
-        threshold = await self._settings.get("rebalance_threshold", 0.05)
+        threshold_pct = await self._settings.get("rebalance_threshold_pct", 5)
+        try:
+            threshold = max(0.0, float(threshold_pct)) / 100.0
+        except (TypeError, ValueError):
+            threshold = 0.05
         deviations = await self.deviation_from_targets()
 
         for dev in deviations["geography"].values():

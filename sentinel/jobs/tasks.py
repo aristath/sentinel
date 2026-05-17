@@ -445,8 +445,12 @@ async def trading_execute(broker, db, planner) -> None:
 async def trading_rebalance(planner) -> None:
     """Check if portfolio needs rebalancing and generate recommendations."""
     summary = await planner.get_rebalance_summary()
+    if "needs_rebalance" in summary:
+        needs_rebalance = bool(summary["needs_rebalance"])
+    else:
+        needs_rebalance = summary.get("status") in {"minor_drift", "needs_rebalance"}
 
-    if summary["needs_rebalance"]:
+    if needs_rebalance:
         logger.warning(f"Portfolio needs rebalancing! Total deviation: {summary['total_deviation']:.1%}")
 
         recommendations = await planner.get_recommendations()

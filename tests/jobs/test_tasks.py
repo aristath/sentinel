@@ -76,6 +76,7 @@ def mock_planner():
         return_value={
             "needs_rebalance": False,
             "total_deviation": 0.05,
+            "status": "aligned",
         }
     )
     planner.calculate_ideal_portfolio = AsyncMock(return_value={"AAPL.US": 0.5})
@@ -299,6 +300,22 @@ class TestTradingRebalance:
         await trading_rebalance(mock_planner)
 
         mock_planner.get_rebalance_summary.assert_awaited_once()
+        mock_planner.get_recommendations.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_rebalance_accepts_planner_status_shape(self, mock_planner):
+        """Planner summary status is enough to trigger recommendation logging."""
+        from sentinel.jobs.tasks import trading_rebalance
+
+        mock_planner.get_rebalance_summary.return_value = {
+            "total_deviation": 0.12,
+            "max_deviation": 0.08,
+            "status": "needs_rebalance",
+        }
+
+        await trading_rebalance(mock_planner)
+
+        mock_planner.get_recommendations.assert_awaited_once()
 
 
 class TestPlanningRefresh:

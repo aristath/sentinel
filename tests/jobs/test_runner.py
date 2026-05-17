@@ -72,7 +72,7 @@ def mock_planner():
     """Mock planner for testing."""
     planner = AsyncMock()
     planner.get_recommendations = AsyncMock(return_value=[])
-    planner.get_rebalance_summary = AsyncMock(return_value={"needs_rebalance": False})
+    planner.get_rebalance_summary = AsyncMock(return_value={"needs_rebalance": False, "status": "aligned"})
     planner.calculate_ideal_portfolio = AsyncMock(return_value={})
     return planner
 

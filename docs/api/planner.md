@@ -93,6 +93,8 @@ Returns a high-level summary of how well the portfolio is aligned with its ideal
   "total_deviation": 1.39,
   "max_deviation": 0.29,
   "average_deviation": 0.034,
+  "rebalance_threshold_pct": 5,
+  "needs_rebalance": true,
   "status": "needs_rebalance"
 }
 ```
@@ -102,4 +104,6 @@ Returns a high-level summary of how well the portfolio is aligned with its ideal
 | `total_deviation` | Sum of absolute allocation deviations across all securities |
 | `max_deviation` | Largest single-security deviation |
 | `average_deviation` | Mean deviation per security |
-| `status` | `aligned` or `needs_rebalance` |
+| `rebalance_threshold_pct` | Configured deviation threshold used for the status |
+| `needs_rebalance` | Boolean convenience field for scheduler/UI consumers |
+| `status` | `aligned`, `minor_drift`, or `needs_rebalance` |

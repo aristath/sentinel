@@ -55,6 +55,7 @@ class Planner:
             db=self._db,
             portfolio=self._portfolio,
             currency=self._currency,
+            settings=self._settings,
         )
         self._rebalance_engine = RebalanceEngine(
             db=self._db,

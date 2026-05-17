@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.portfolio import Portfolio
+from sentinel.settings import Settings
 
 
 class PortfolioAnalyzer:
@@ -19,6 +20,7 @@ class PortfolioAnalyzer:
         db: Database | None = None,
         portfolio: Portfolio | None = None,
         currency: Currency | None = None,
+        settings: Settings | None = None,
     ):
         """Initialize analyzer with optional dependencies.
 
@@ -26,10 +28,12 @@ class PortfolioAnalyzer:
             db: Database instance (uses singleton if None)
             portfolio: Portfolio instance (uses singleton if None)
             currency: Currency instance (uses singleton if None)
+            settings: Settings instance (uses singleton if None)
         """
         self._db = db or Database()
         self._portfolio = portfolio or Portfolio()
         self._currency = currency or Currency()
+        self._settings = settings or Settings()
 
     def _is_simulation_context(self) -> bool:
         """Return True when running against the in-memory backtest database."""
@@ -172,6 +176,29 @@ class PortfolioAnalyzer:
         snapshot = await maybe_snapshot
         return snapshot
 
+    async def _rebalance_threshold(self) -> float:
+        """Return the configured rebalance threshold as a fraction."""
+        raw = await self._settings.get("rebalance_threshold_pct", 5)
+        try:
+            threshold_pct = float(raw)
+        except (TypeError, ValueError):
+            threshold_pct = 5.0
+        return max(0.0, threshold_pct) / 100.0
+
+    @staticmethod
+    def _empty_rebalance_summary(threshold: float) -> dict:
+        return {
+            "total_securities": 0,
+            "aligned_count": 0,
+            "needs_adjustment_count": 0,
+            "total_deviation": 0.0,
+            "max_deviation": 0.0,
+            "average_deviation": 0.0,
+            "rebalance_threshold_pct": threshold * 100,
+            "needs_rebalance": False,
+            "status": "aligned",
+        }
+
     async def get_rebalance_summary(self) -> dict:
         """Get summary of portfolio alignment with ideal allocations.
 
@@ -180,25 +207,19 @@ class PortfolioAnalyzer:
         """
         from sentinel.planner.allocation import AllocationCalculator
 
+        threshold = await self._rebalance_threshold()
         current = await self.get_current_allocations()
 
         calculator = AllocationCalculator(
             db=self._db,
             portfolio=self._portfolio,
             currency=self._currency,
+            settings=self._settings,
         )
         ideal = await calculator.calculate_ideal_portfolio()
 
         if not current or not ideal:
-            return {
-                "total_securities": 0,
-                "aligned_count": 0,
-                "needs_adjustment_count": 0,
-                "total_deviation": 0.0,
-                "max_deviation": 0.0,
-                "average_deviation": 0.0,
-                "status": "aligned",
-            }
+            return self._empty_rebalance_summary(threshold)
 
         # Calculate deviations
         all_symbols = set(current.keys()) | set(ideal.keys())
@@ -211,22 +232,12 @@ class PortfolioAnalyzer:
             deviations.append(deviation)
 
         if not deviations:
-            return {
-                "total_securities": 0,
-                "aligned_count": 0,
-                "needs_adjustment_count": 0,
-                "total_deviation": 0.0,
-                "max_deviation": 0.0,
-                "average_deviation": 0.0,
-                "status": "aligned",
-            }
+            return self._empty_rebalance_summary(threshold)
 
         total_deviation = sum(deviations)
         max_deviation = max(deviations) if deviations else 0
         avg_deviation = total_deviation / len(deviations)
 
-        # Determine status
-        threshold = 0.05  # 5%
         aligned_count = sum(1 for d in deviations if d < threshold)
         needs_adjustment = len(deviations) - aligned_count
 
@@ -236,6 +247,7 @@ class PortfolioAnalyzer:
             status = "minor_drift"
         else:
             status = "needs_rebalance"
+        needs_rebalance = status != "aligned"
 
         return {
             "total_securities": len(all_symbols),
@@ -244,6 +256,8 @@ class PortfolioAnalyzer:
             "total_deviation": total_deviation,
             "max_deviation": max_deviation,
             "average_deviation": avg_deviation,
+            "rebalance_threshold_pct": threshold * 100,
+            "needs_rebalance": needs_rebalance,
             "status": status,
         }
 
