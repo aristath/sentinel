@@ -6,7 +6,7 @@ Base path: `/api/settings`
 
 ## `GET /api/settings`
 
-Returns all application settings, merging stored values with defaults. The response includes every key stored in the database, so it will contain more fields than the documented defaults — notably legacy fields, analytics/ML configuration, computed exchange rates, and the LED bridge health snapshot.
+Returns all application settings, merging stored values with defaults. Runtime snapshots such as exchange rates and LED bridge health may also appear in the same key-value store.
 
 **Response** (abbreviated)
 ```json
@@ -40,7 +40,7 @@ Returns all application settings, merging stored values with defaults. The respo
   "strategy_lot_coarse_max_pct": 0.3,
   "strategy_coarse_max_new_lots_per_cycle": 1,
   "strategy_core_floor_pct": 0.05,
-  "strategy_opportunity_cooloff_days": 15,
+  "strategy_opportunity_cooloff_days": 7,
   "strategy_core_cooloff_days": 21,
   "strategy_same_side_cooloff_days": 15,
   "strategy_rotation_time_stop_days": 90,
@@ -59,17 +59,6 @@ Returns all application settings, merging stored values with defaults. The respo
   "r2_secret_key": "",
   "r2_bucket_name": "",
   "r2_backup_retention_days": 30,
-  "optimization_method": "classic",
-  "entropy_method": "shannon",
-  "entropy_weight": 0.3,
-  "tsallis_q": 2.0,
-  "te_lag": 5,
-  "te_bins": 10,
-  "te_influence_threshold": 0.1,
-  "rmt_auto_q": true,
-  "use_cleaned_correlation": true,
-  "use_transfer_entropy": true,
-  "scoring:calculate": 0.3,
   "exchange_rates": {
     "EUR": 1.0,
     "USD": 0.8555,
@@ -96,14 +85,6 @@ Returns all application settings, merging stored values with defaults. The respo
 |---|---|
 | `exchange_rates` | Current FX rates to EUR, embedded as a convenience (same data as `GET /api/exchange-rates`) |
 | `led_bridge_health` | Latest bridge health snapshot (same data as `GET /api/led/bridge/health`) |
-| `optimization_method` | Portfolio optimisation algorithm (`classic`, etc.) |
-| `entropy_method` | Entropy method for analytics (`shannon`, `tsallis`) |
-| `rmt_auto_q` | Auto-tune Random Matrix Theory q parameter |
-| `use_cleaned_correlation` | Use RMT-cleaned correlation matrix in analytics |
-| `use_transfer_entropy` | Include transfer entropy in analytics pipeline |
-| `strategy_funding_protect_multiplier` | Multiplier for protecting funding sources |
-| `strategy_funding_lock_multiplier` | Multiplier for locking in high-conviction funding sources |
-| `strategy_core_conviction_threshold` | Minimum conviction to classify as core |
 
 ---
 
@@ -128,13 +109,19 @@ Set a single setting value.
 
 ## `PUT /api/settings`
 
-Atomically update the four core strategy-tuning settings. All four keys must be present; partial updates are rejected.
+Atomically update the strategy-tuning settings shown in the Strategy tab. All keys must be present; partial updates are rejected.
 
 **Required keys**
 - `strategy_core_target_pct` — Core sleeve target (0–100). Must sum to 100 with opportunity target.
 - `strategy_opportunity_target_pct` — Opportunity sleeve target (0–100).
 - `strategy_min_opp_score` — Minimum score to classify a security as opportunity (0–1).
 - `strategy_core_floor_pct` — Core floor fraction (0–1).
+- `strategy_entry_t1_dd`, `strategy_entry_t2_dd`, `strategy_entry_t3_dd` — Drawdown tranche thresholds (-0.9–0).
+- `strategy_entry_memory_days` — Recent-dip memory window (1–252).
+- `strategy_memory_max_boost` — Maximum recent-dip opportunity boost (0–0.5).
+- `strategy_opportunity_addon_threshold` — Opportunity score required for additional accumulation (0–1).
+- `strategy_max_opportunity_buys_per_cycle` — Total opportunity buys allowed per cycle (0–50).
+- `strategy_max_new_opportunity_buys_per_cycle` — New opportunity positions allowed per cycle (0–50).
 
 **Request body**
 ```json
@@ -143,7 +130,15 @@ Atomically update the four core strategy-tuning settings. All four keys must be 
     "strategy_core_target_pct": 80,
     "strategy_opportunity_target_pct": 20,
     "strategy_min_opp_score": 0.55,
-    "strategy_core_floor_pct": 0.05
+    "strategy_core_floor_pct": 0.05,
+    "strategy_entry_t1_dd": -0.1,
+    "strategy_entry_t2_dd": -0.16,
+    "strategy_entry_t3_dd": -0.22,
+    "strategy_entry_memory_days": 45,
+    "strategy_memory_max_boost": 0.12,
+    "strategy_opportunity_addon_threshold": 0.75,
+    "strategy_max_opportunity_buys_per_cycle": 1,
+    "strategy_max_new_opportunity_buys_per_cycle": 1
   }
 }
 ```

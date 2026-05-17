@@ -51,12 +51,6 @@ Manually trigger a job by type. Runs immediately, regardless of schedule.
 | `trading:rebalance` | Generate new trade recommendations via Planner |
 | `trading:balance_fix` | Fix quantity mismatches between DB and broker |
 | `planning:refresh` | Refresh planner state without generating trades |
-| `scoring:calculate` | Recalculate contrarian scores for all securities |
-| `analytics:correlation` | Update correlation matrices |
-| `analytics:regime` | Update market regime detection |
-| `analytics:transfer_entropy` | Compute transfer entropy between securities |
-| `ml:retrain` | Retrain ML scoring models |
-| `ml:monitor` | Monitor ML model performance |
 | `backup:r2` | Upload DB backup to Cloudflare R2 |
 
 **Response**
