@@ -60,7 +60,10 @@ async def get_cache_stats() -> dict:
 
 
 @cache_router.post("/clear")
-async def clear_cache(name: str | None = None) -> dict:
+async def clear_cache(
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+    name: str | None = None,
+) -> dict:
     """
     Clear cache entries.
 
@@ -70,10 +73,17 @@ async def clear_cache(name: str | None = None) -> dict:
     if name:
         cache = Cache(name)
         cleared = cache.clear()
-        return {"cleared": {name: cleared}}
+        db_cleared = 0
+        if name == "planner":
+            db_cleared = await deps.db.cache_clear(prefix="planner:")
+        elif name.startswith("planner:"):
+            await deps.db.cache_delete(name)
+            db_cleared = 1
+        return {"cleared": {name: cleared}, "db_cleared": db_cleared}
     else:
         cleared = Cache.clear_all()
-        return {"cleared": cleared}
+        db_cleared = await deps.db.cache_clear()
+        return {"cleared": cleared, "db_cleared": db_cleared}
 
 
 # Backtest router endpoints

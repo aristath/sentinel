@@ -228,6 +228,164 @@ class TestDeficitSellsSimulatedCash:
 
 class TestContrarianSizing:
     @pytest.mark.asyncio
+    async def test_strategic_core_buy_does_not_require_opportunity_score(self):
+        db = MagicMock()
+        db.get_all_positions = AsyncMock(return_value=[])
+        db.get_all_securities = AsyncMock(
+            return_value=[
+                {
+                    "symbol": "AMD",
+                    "currency": "EUR",
+                    "min_lot": 1,
+                    "allow_buy": 1,
+                    "allow_sell": 1,
+                    "user_multiplier": 0.9,
+                }
+            ]
+        )
+        db.get_prices = AsyncMock(return_value=[{"date": i, "close": 100.0} for i in range(300)])
+        db.cache_get = AsyncMock(return_value=None)
+        db.cache_set = AsyncMock()
+
+        engine = RebalanceEngine(db=db)
+        engine._broker = MagicMock()
+        engine._settings = MagicMock()
+        settings_values = {
+            "min_trade_value": 100.0,
+            "transaction_fee_fixed": 2.0,
+            "transaction_fee_percent": 0.2,
+            "strategy_lot_standard_max_pct": 0.08,
+            "strategy_lot_coarse_max_pct": 0.30,
+            "strategy_min_opp_score": 0.55,
+            "strategy_entry_t1_dd": -0.10,
+            "strategy_entry_t2_dd": -0.16,
+            "strategy_entry_t3_dd": -0.22,
+            "strategy_entry_memory_days": 42,
+            "strategy_memory_max_boost": 0.18,
+            "max_position_pct": 25,
+            "strategy_opportunity_addon_threshold": 0.75,
+            "strategy_rotation_time_stop_days": 90,
+            "strategy_opportunity_cooloff_days": 0,
+            "strategy_core_cooloff_days": 0,
+            "strategy_same_side_cooloff_days": 0,
+            "strategy_core_new_min_score": 0.30,
+            "strategy_core_new_min_dip_score": 0.20,
+            "strategy_coarse_max_new_lots_per_cycle": 1,
+            "strategy_core_floor_pct": 0.05,
+            "strategy_max_opportunity_buys_per_cycle": 4,
+            "strategy_max_new_opportunity_buys_per_cycle": 2,
+        }
+        engine._settings.get = AsyncMock(side_effect=lambda key, default=None: settings_values.get(key, default))
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=10_000.0)
+        engine._currency = MagicMock()
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._get_deficit_sells = AsyncMock(return_value=[])
+
+        recs = await engine.get_recommendations(
+            ideal={"AMD": 0.20},
+            current={"AMD": 0.0},
+            total_value=10_000.0,
+            as_of_date="2025-01-15",
+            precomputed_rebalance_signals={
+                "AMD": {
+                    "opp_score": 0.0,
+                    "opp_score_raw": 0.0,
+                    "dip_score": 0.0,
+                    "cycle_turn": 0,
+                    "freefall_block": 0,
+                    "sleeve": "core",
+                    "clara_target_pct": 0.20,
+                    "effective_user_multiplier": 0.9,
+                }
+            },
+            precomputed_sleeves={"AMD": "core"},
+        )
+
+        assert len(recs) == 1
+        assert recs[0].action == "buy"
+        assert recs[0].reason_code == "rebalance_buy"
+
+    @pytest.mark.asyncio
+    async def test_neutral_core_target_still_requires_opportunity_quality_for_new_name(self):
+        db = MagicMock()
+        db.get_all_positions = AsyncMock(return_value=[])
+        db.get_all_securities = AsyncMock(
+            return_value=[
+                {
+                    "symbol": "BASE",
+                    "currency": "EUR",
+                    "min_lot": 1,
+                    "allow_buy": 1,
+                    "allow_sell": 1,
+                    "user_multiplier": 0.5,
+                }
+            ]
+        )
+        db.get_prices = AsyncMock(return_value=[{"date": i, "close": 100.0} for i in range(300)])
+        db.cache_get = AsyncMock(return_value=None)
+        db.cache_set = AsyncMock()
+
+        engine = RebalanceEngine(db=db)
+        engine._broker = MagicMock()
+        engine._settings = MagicMock()
+        settings_values = {
+            "min_trade_value": 100.0,
+            "transaction_fee_fixed": 2.0,
+            "transaction_fee_percent": 0.2,
+            "strategy_lot_standard_max_pct": 0.08,
+            "strategy_lot_coarse_max_pct": 0.30,
+            "strategy_min_opp_score": 0.55,
+            "strategy_entry_t1_dd": -0.10,
+            "strategy_entry_t2_dd": -0.16,
+            "strategy_entry_t3_dd": -0.22,
+            "strategy_entry_memory_days": 42,
+            "strategy_memory_max_boost": 0.18,
+            "max_position_pct": 25,
+            "strategy_opportunity_addon_threshold": 0.75,
+            "strategy_rotation_time_stop_days": 90,
+            "strategy_opportunity_cooloff_days": 0,
+            "strategy_core_cooloff_days": 0,
+            "strategy_same_side_cooloff_days": 0,
+            "strategy_core_new_min_score": 0.30,
+            "strategy_core_new_min_dip_score": 0.20,
+            "strategy_coarse_max_new_lots_per_cycle": 1,
+            "strategy_core_floor_pct": 0.05,
+            "strategy_max_opportunity_buys_per_cycle": 4,
+            "strategy_max_new_opportunity_buys_per_cycle": 2,
+        }
+        engine._settings.get = AsyncMock(side_effect=lambda key, default=None: settings_values.get(key, default))
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=10_000.0)
+        engine._currency = MagicMock()
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._get_deficit_sells = AsyncMock(return_value=[])
+
+        recs = await engine.get_recommendations(
+            ideal={"BASE": 0.20},
+            current={"BASE": 0.0},
+            total_value=10_000.0,
+            as_of_date="2025-01-15",
+            precomputed_rebalance_signals={
+                "BASE": {
+                    "opp_score": 0.0,
+                    "opp_score_raw": 0.0,
+                    "dip_score": 0.0,
+                    "cycle_turn": 0,
+                    "freefall_block": 0,
+                    "sleeve": "core",
+                    "clara_target_pct": 0.20,
+                    "effective_user_multiplier": 0.5,
+                }
+            },
+            precomputed_sleeves={"BASE": "core"},
+        )
+
+        assert recs == []
+
+    @pytest.mark.asyncio
     async def test_coarse_lot_buy_is_capped_to_one_lot(self):
         db = MagicMock()
         db.get_all_positions = AsyncMock(return_value=[])

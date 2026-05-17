@@ -8,7 +8,7 @@ This is a facade that delegates to specialized components:
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from sentinel.broker import Broker
 from sentinel.currency import Currency
@@ -71,6 +71,10 @@ class Planner:
             dict: symbol -> target allocation percentage (0-1)
         """
         return await self._allocation_calculator.calculate_ideal_portfolio(as_of_date=as_of_date)
+
+    def get_last_allocation_diagnostics(self, as_of_date: Optional[str] = None) -> dict[str, Any]:
+        """Return diagnostics from the most recent allocation run for this as-of context."""
+        return self._allocation_calculator.get_last_signal_bundle(as_of_date=as_of_date) or {}
 
     async def get_current_allocations(self, as_of_date: Optional[str] = None) -> dict[str, float]:
         """Get current portfolio allocations by symbol.

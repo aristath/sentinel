@@ -8,6 +8,7 @@ import json
 import logging
 from dataclasses import asdict
 from datetime import datetime, timezone
+from typing import Any
 
 from sentinel.broker import Broker
 from sentinel.currency import Currency
@@ -21,9 +22,9 @@ from sentinel.strategy import (
     effective_opportunity_score,
     recent_dd252_min,
 )
-from sentinel.utils.scoring import adjust_score_for_conviction
 
 from .models import TradeRecommendation
+from .preferences import has_strategic_buy_pressure
 from .rebalance_cash import apply_cash_constraint, generate_deficit_sells, get_deficit_sells
 from .rebalance_rules import (
     calculate_priority,
@@ -48,7 +49,7 @@ class RebalanceEngine:
         return f"planner:recommendations:{float(min_trade_value):.2f}"
 
     @staticmethod
-    def _normalize_conviction(value: object) -> float:
+    def _normalize_conviction(value: Any) -> float:
         """Normalize conviction into [0.0, 1.0]."""
         try:
             parsed = float(value)
@@ -260,11 +261,10 @@ class RebalanceEngine:
         for symbol in all_symbols:
             sec = securities_map.get(symbol)
             pos = positions_map.get(symbol)
-            conviction = self._normalize_conviction(sec.get("user_multiplier", 0.5) if sec else 0.5)
-
             hist_rows = hist_prices_map.get(symbol, [])
             closes = [float(r["close"]) for r in reversed(hist_rows) if r.get("close") is not None]
             cached_signal = rebalance_signals_map.get(symbol)
+            signal: dict[str, float | int | str]
             if isinstance(cached_signal, dict):
                 signal = dict(cached_signal)
                 raw_score = float(signal.get("opp_score_raw", signal.get("opp_score", 0.0)) or 0.0)
@@ -288,7 +288,7 @@ class RebalanceEngine:
                 signal["opp_score_raw"] = raw_score
                 signal["opp_score"] = effective_score
                 signal["memory_boosted"] = 1 if effective_score > raw_score else 0
-            contrarian_scores[symbol] = adjust_score_for_conviction(effective_score, conviction)
+            contrarian_scores[symbol] = effective_score
 
             # Get price
             price = self._get_price(symbol, current_quotes, pos, hist_rows)
@@ -387,7 +387,9 @@ class RebalanceEngine:
             current=current,
             total_value=total_value,
             symbol_convictions={
-                symbol: self._normalize_conviction(sec.get("user_multiplier", 0.5))
+                symbol: self._normalize_conviction(
+                    symbol_signals.get(symbol, {}).get("effective_user_multiplier", sec.get("user_multiplier", 0.5))
+                )
                 for symbol, sec in securities_map.items()
             },
             preloaded_positions=all_positions,
@@ -617,16 +619,20 @@ class RebalanceEngine:
                 return None
 
         if delta > 0 and forced_sell_qty <= 0:
-            # For new core names, require minimum contrarian quality to avoid pure drift-driven churn.
+            # For new core names without strategic preference pressure, require
+            # minimum contrarian quality to avoid pure drift-driven churn.
             if sleeve == "core" and current_alloc <= 1e-6 and lot_class == "standard":
-                core_new_min_score = settings_ctx["strategy_core_new_min_score"]
-                core_new_min_dip = settings_ctx["strategy_core_new_min_dip_score"]
-                dip_score = float(signal.get("dip_score", 0.0) or 0.0)
-                cycle_turn = int(signal.get("cycle_turn", 0) or 0)
-                if opp_score < core_new_min_score:
-                    return None
-                if dip_score < core_new_min_dip and cycle_turn == 0:
-                    return None
+                clara_target = float(signal.get("clara_target_pct", 0.0) or 0.0)
+                effective_preference = float(signal.get("effective_user_multiplier", 0.5) or 0.5)
+                if clara_target <= 1e-9 or not has_strategic_buy_pressure(effective_preference):
+                    core_new_min_score = settings_ctx["strategy_core_new_min_score"]
+                    core_new_min_dip = settings_ctx["strategy_core_new_min_dip_score"]
+                    dip_score = float(signal.get("dip_score", 0.0) or 0.0)
+                    cycle_turn = int(signal.get("cycle_turn", 0) or 0)
+                    if opp_score < core_new_min_score:
+                        return None
+                    if dip_score < core_new_min_dip and cycle_turn == 0:
+                        return None
 
             # Tranche entry control for opportunity sleeve.
             desired_stage = 0
@@ -784,6 +790,11 @@ class RebalanceEngine:
             ticket_pct=ticket_pct,
             core_floor_active=core_floor_active,
             memory_entry=memory_entry,
+            effective_user_multiplier=float(signal.get("effective_user_multiplier", 0.5) or 0.5),
+            clara_target_pct=float(signal.get("clara_target_pct", 0.0) or 0.0),
+            baseline_target_pct=float(signal.get("baseline_target_pct", 0.0) or 0.0),
+            opportunity_target_pct=float(signal.get("opportunity_target_pct", 0.0) or 0.0),
+            clara_freshness=float(signal.get("clara_freshness", 0.0) or 0.0),
         )
 
     async def _check_cooloff_violation(

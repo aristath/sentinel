@@ -5,6 +5,8 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from .preferences import has_strategic_buy_pressure
+
 
 def desired_tranche_stage(dd252: float, t1: float = -0.12, t2: float = -0.20, t3: float = -0.28) -> int:
     """Map drawdown value to target tranche stage (0..3)."""
@@ -101,6 +103,15 @@ def generate_buy_reason(
     dip = float(signal.get("dip_score", 0.0))
     cap = float(signal.get("capitulation_score", 0.0))
     turn = int(signal.get("cycle_turn", 0))
+    clara_target = float(signal.get("clara_target_pct", 0.0) or 0.0) * 100
+    effective_preference = float(signal.get("effective_user_multiplier", 0.5) or 0.5)
+
+    if clara_target > 0 and has_strategic_buy_pressure(effective_preference):
+        return (
+            f"Strategic preference buy: underweight by {underweight:.1f}%, "
+            f"Clara target={clara_target:.1f}%, effective preference={effective_preference:.2f}, "
+            f"lot={lot_class}"
+        )
 
     if current_alloc == 0:
         return (

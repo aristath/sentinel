@@ -2,17 +2,86 @@
 
 import inspect
 import json
+import math
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
+from sentinel.planner.preferences import preference_snapshot, utc_now_iso
 from sentinel.security import Security
 from sentinel.strategy import classify_lot_size, compute_contrarian_signal
 
 router = APIRouter(prefix="/securities", tags=["securities"])
 prices_router = APIRouter(prefix="/prices", tags=["prices"])
+MAX_ANALYSIS_LENGTH = 20_000
+
+
+async def _invalidate_planner_cache(deps: CommonDependencies) -> None:
+    invalidator = getattr(deps.db, "invalidate_planner_cache", None)
+    if callable(invalidator):
+        maybe = invalidator()
+        if inspect.isawaitable(maybe):
+            await maybe
+        return
+    cache_clear = getattr(deps.db, "cache_clear", None)
+    if callable(cache_clear):
+        maybe = cache_clear(prefix="planner:")
+        if inspect.isawaitable(maybe):
+            await maybe
+
+
+def _validate_user_multiplier(value: Any) -> float:
+    if isinstance(value, bool):
+        raise HTTPException(status_code=400, detail="'user_multiplier' must be a number between 0.0 and 1.0")
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        raise HTTPException(status_code=400, detail="'user_multiplier' must be a number between 0.0 and 1.0") from None
+    if not math.isfinite(parsed) or parsed < 0.0 or parsed > 1.0:
+        raise HTTPException(status_code=400, detail="'user_multiplier' must be between 0.0 and 1.0")
+    return parsed
+
+
+def _validate_analysis(value: object) -> str:
+    if not isinstance(value, str):
+        raise HTTPException(status_code=400, detail="'analysis' must be a non-empty string")
+    analysis = value.strip()
+    if not analysis:
+        raise HTTPException(status_code=400, detail="'analysis' must be a non-empty string")
+    if len(analysis) > MAX_ANALYSIS_LENGTH:
+        raise HTTPException(status_code=400, detail=f"'analysis' must be at most {MAX_ANALYSIS_LENGTH} characters")
+    return analysis
+
+
+async def _security_payload(symbol: str, deps: CommonDependencies) -> dict[str, Any]:
+    sec = await deps.db.get_security(symbol)
+    if not sec:
+        raise HTTPException(status_code=404, detail="Security not found")
+    position = await deps.db.get_position(symbol)
+    weekly_fade = await deps.settings.get("clara_preference_weekly_fade", 0.9)
+    pref = preference_snapshot(sec, weekly_fade=float(weekly_fade if weekly_fade is not None else 0.9))
+    return {
+        "symbol": sec.get("symbol"),
+        "name": sec.get("name"),
+        "currency": sec.get("currency", "EUR"),
+        "geography": sec.get("geography"),
+        "industry": sec.get("industry"),
+        "aliases": sec.get("aliases"),
+        "min_lot": sec.get("min_lot", 1),
+        "active": sec.get("active", 1),
+        "allow_buy": sec.get("allow_buy", 1),
+        "allow_sell": sec.get("allow_sell", 1),
+        "user_multiplier": pref["user_multiplier"],
+        "effective_user_multiplier": pref["effective_user_multiplier"],
+        "user_multiplier_age_weeks": pref["user_multiplier_age_weeks"],
+        "user_multiplier_updated_at": sec.get("user_multiplier_updated_at"),
+        "user_multiplier_source": sec.get("user_multiplier_source"),
+        "user_multiplier_analysis": sec.get("user_multiplier_analysis"),
+        "quantity": position.get("quantity", 0) if position else 0,
+        "current_price": position.get("current_price") if position else None,
+    }
 
 
 @router.get("")
@@ -143,23 +212,59 @@ async def get_all_aliases(
     ]
 
 
-@router.get("/{symbol}")
-async def get_security(symbol: str) -> dict[str, Any]:
-    """Get a specific security."""
-    security = Security(symbol)
-    if not await security.exists():
+@router.post("/preference")
+async def update_security_preference(
+    data: dict,
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict[str, Any]:
+    """Update one security's Clara strategic preference and analysis."""
+    symbol = data.get("symbol")
+    if not isinstance(symbol, str) or not symbol.strip():
+        raise HTTPException(status_code=400, detail="'symbol' is required")
+    symbol = symbol.strip()
+
+    existing = await deps.db.get_security(symbol)
+    if not existing:
         raise HTTPException(status_code=404, detail="Security not found")
-    await security.load()
-    return {
-        "symbol": security.symbol,
-        "name": security.name,
-        "currency": security.currency,
-        "geography": security.geography,
-        "industry": security.industry,
-        "aliases": security.aliases,
-        "quantity": security.quantity,
-        "current_price": security.current_price,
-    }
+
+    if "user_multiplier" not in data:
+        raise HTTPException(status_code=400, detail="'user_multiplier' is required")
+    user_multiplier = _validate_user_multiplier(data.get("user_multiplier"))
+    analysis = _validate_analysis(data.get("analysis"))
+    now = utc_now_iso()
+
+    updater = getattr(deps.db, "update_user_multiplier_preference", None)
+    if callable(updater):
+        maybe = updater(
+            symbol,
+            user_multiplier=user_multiplier,
+            analysis=analysis,
+            source="clara",
+            updated_at=now,
+        )
+        if inspect.isawaitable(maybe):
+            await maybe
+    else:
+        await deps.db.upsert_security(
+            symbol,
+            user_multiplier=user_multiplier,
+            user_multiplier_updated_at=now,
+            user_multiplier_source="clara",
+            user_multiplier_analysis=analysis,
+        )
+
+    await deps.settings.set("clara_preferences_updated_at", now)
+    await _invalidate_planner_cache(deps)
+    return await _security_payload(symbol, deps)
+
+
+@router.get("/{symbol}")
+async def get_security(
+    symbol: str,
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict[str, Any]:
+    """Get a specific security."""
+    return await _security_payload(symbol, deps)
 
 
 @router.put("/{symbol}")
@@ -167,7 +272,7 @@ async def update_security(
     symbol: str,
     data: dict,
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
-) -> dict[str, str]:
+) -> dict[str, Any]:
     """Update security metadata and execution controls."""
     existing = await deps.db.get_security(symbol)
     if not existing:
@@ -180,15 +285,43 @@ async def update_security(
         "aliases",
         "allow_buy",
         "allow_sell",
-        "user_multiplier",
         "active",
     ]
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 
     if updates:
         await deps.db.upsert_security(symbol, **updates)
+        await _invalidate_planner_cache(deps)
 
-    return {"status": "ok"}
+    if "user_multiplier" in data:
+        user_multiplier = _validate_user_multiplier(data.get("user_multiplier"))
+        analysis = data.get("user_multiplier_analysis")
+        if analysis is None:
+            analysis = "Manual preference override from Sentinel UI."
+        analysis = _validate_analysis(analysis)
+        now = utc_now_iso()
+        updater = getattr(deps.db, "update_user_multiplier_preference", None)
+        if callable(updater):
+            maybe = updater(
+                symbol,
+                user_multiplier=user_multiplier,
+                analysis=analysis,
+                source="manual",
+                updated_at=now,
+            )
+            if inspect.isawaitable(maybe):
+                await maybe
+        else:
+            await deps.db.upsert_security(
+                symbol,
+                user_multiplier=user_multiplier,
+                user_multiplier_updated_at=now,
+                user_multiplier_source="manual",
+                user_multiplier_analysis=analysis,
+            )
+        await _invalidate_planner_cache(deps)
+
+    return await _security_payload(symbol, deps)
 
 
 @router.get("/{symbol}/prices")
@@ -249,9 +382,9 @@ async def get_unified_view(
     """
     from sentinel.planner import Planner
     from sentinel.planner.analyzer import PortfolioAnalyzer
+    from sentinel.planner.preferences import preference_snapshot
     from sentinel.portfolio import Portfolio
     from sentinel.price_validator import PriceValidator, get_price_anomaly_warning
-    from sentinel.utils.scoring import adjust_score_for_conviction
 
     # Get all active securities
     securities = await deps.db.get_all_securities(active_only=True)
@@ -318,20 +451,43 @@ async def get_unified_view(
     lot_coarse_raw = await deps.settings.get("strategy_lot_coarse_max_pct", 0.30)
     core_floor_raw = await deps.settings.get("strategy_core_floor_pct", 0.05)
     min_opp_raw = await deps.settings.get("strategy_min_opp_score", 0.55)
+    weekly_fade_raw = await deps.settings.get("clara_preference_weekly_fade", 0.9)
     fee_fixed = float(2.0 if fee_fixed_raw is None else fee_fixed_raw)
     fee_pct = float(0.2 if fee_pct_raw is None else fee_pct_raw) / 100.0
     lot_standard_max_pct = float(0.08 if lot_standard_raw is None else lot_standard_raw)
     lot_coarse_max_pct = float(0.30 if lot_coarse_raw is None else lot_coarse_raw)
     core_floor_pct = float(0.05 if core_floor_raw is None else core_floor_raw)
     min_opp_score = float(0.55 if min_opp_raw is None else min_opp_raw)
-    cache_getter = getattr(deps.db, "cache_get", None)
+    weekly_fade = float(0.9 if weekly_fade_raw is None else weekly_fade_raw)
     sleeves_map = {}
-    if callable(cache_getter):
+    allocation_decomposition = {}
+    global_decomposition = {}
+    cache_getter = None
+    if as_of is not None:
+        diagnostics_getter = getattr(planner, "get_last_allocation_diagnostics", None)
+        diagnostics = diagnostics_getter(as_of_date=as_of) if callable(diagnostics_getter) else {}
+        if isinstance(diagnostics, dict):
+            sleeves_map = diagnostics.get("sleeves", {}) or {}
+            parsed_decomposition = diagnostics.get("allocation_decomposition", {}) or {}
+            if isinstance(parsed_decomposition, dict):
+                allocation_decomposition = parsed_decomposition.get("symbols", {}) or {}
+                global_decomposition = parsed_decomposition.get("global", {}) or {}
+    else:
+        cache_getter = getattr(deps.db, "cache_get", None)
+    if as_of is None and callable(cache_getter):
         maybe_cache = cache_getter("planner:contrarian_sleeves")
         if inspect.isawaitable(maybe_cache):
             maybe_cache = await maybe_cache
         if isinstance(maybe_cache, (str, bytes, bytearray)):
             sleeves_map = json.loads(maybe_cache) if maybe_cache else {}
+        maybe_cache = cache_getter("planner:allocation_decomposition")
+        if inspect.isawaitable(maybe_cache):
+            maybe_cache = await maybe_cache
+        if isinstance(maybe_cache, (str, bytes, bytearray)) and maybe_cache:
+            parsed_decomposition = json.loads(maybe_cache)
+            if isinstance(parsed_decomposition, dict):
+                allocation_decomposition = parsed_decomposition.get("symbols", {}) or {}
+                global_decomposition = parsed_decomposition.get("global", {}) or {}
 
     # Build unified response
     result = []
@@ -412,16 +568,18 @@ async def get_unified_view(
             standard_max_pct=lot_standard_max_pct,
             coarse_max_pct=lot_coarse_max_pct,
         )
-        user_multiplier = sec.get("user_multiplier", 0.5) or 0.5
+        preference = preference_snapshot(sec, weekly_fade=weekly_fade)
+        decomposition = allocation_decomposition.get(symbol, {})
         sleeve = sleeves_map.get(symbol)
+        if sleeve is None:
+            sleeve = decomposition.get("allocation_sleeve")
         if sleeve is None:
             sleeve = "opportunity" if float(signal.get("opp_score", 0.0) or 0.0) >= min_opp_score else "core"
         core_floor_active = bool(
             sleeve == "core" and has_position and total_value > 0 and ((value_eur / total_value) <= core_floor_pct)
         )
 
-        # Contrarian score with user conviction adjustment
-        adjusted_contrarian_score = adjust_score_for_conviction(float(signal.get("opp_score", 0.0)), user_multiplier)
+        contrarian_score = float(signal.get("opp_score", 0.0) or 0.0)
 
         # Recommendation info
         rec_info = None
@@ -446,7 +604,12 @@ async def get_unified_view(
                 "active": sec.get("active", 1),
                 "allow_buy": sec.get("allow_buy", 1),
                 "allow_sell": sec.get("allow_sell", 1),
-                "user_multiplier": sec.get("user_multiplier", 0.5),
+                "user_multiplier": preference["user_multiplier"],
+                "effective_user_multiplier": preference["effective_user_multiplier"],
+                "user_multiplier_age_weeks": preference["user_multiplier_age_weeks"],
+                "user_multiplier_updated_at": sec.get("user_multiplier_updated_at"),
+                "user_multiplier_source": sec.get("user_multiplier_source"),
+                "user_multiplier_analysis": sec.get("user_multiplier_analysis"),
                 "aliases": sec.get("aliases"),
                 # Position data
                 "has_position": has_position,
@@ -464,8 +627,8 @@ async def get_unified_view(
                 "current_allocation": current_alloc,
                 "post_plan_allocation": post_plan_alloc,
                 "ideal_allocation": ideal_alloc,
-                # Score data (adjusted by user conviction)
-                "contrarian_score": adjusted_contrarian_score,
+                # Score data
+                "contrarian_score": contrarian_score,
                 # Deterministic strategy diagnostics
                 "opp_score": signal.get("opp_score"),
                 "dip_score": signal.get("dip_score"),
@@ -476,6 +639,12 @@ async def get_unified_view(
                 "lot_class": lot_profile["lot_class"],
                 "sleeve": sleeve,
                 "core_floor_active": core_floor_active,
+                "clara_freshness": global_decomposition.get("clara_freshness"),
+                "allocation_sleeves": global_decomposition or None,
+                "baseline_target_pct": float(decomposition.get("baseline_target_pct", 0.0) or 0.0) * 100,
+                "clara_target_pct": float(decomposition.get("clara_target_pct", 0.0) or 0.0) * 100,
+                "opportunity_target_pct": float(decomposition.get("opportunity_target_pct", 0.0) or 0.0) * 100,
+                "final_target_pct": float(decomposition.get("final_target_pct", ideal.get(symbol, 0)) or 0.0) * 100,
                 # Price history (simplified for charts, oldest first)
                 "prices": [{"date": p["date"], "close": p["close"]} for p in reversed(prices)],
                 # Recommendation

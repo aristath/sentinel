@@ -51,7 +51,6 @@ export function SettingsModal({ opened, onClose }) {
     setStrategyDraft({
       strategy_core_target_pct: Number(settings.strategy_core_target_pct ?? 80),
       strategy_opportunity_target_pct: Number(settings.strategy_opportunity_target_pct ?? 20),
-      strategy_opportunity_target_max_pct: Number(settings.strategy_opportunity_target_max_pct ?? 30),
       strategy_min_opp_score: Number(settings.strategy_min_opp_score ?? 0.55),
       strategy_core_floor_pct: Number(settings.strategy_core_floor_pct ?? 0.05),
       strategy_entry_t1_dd: Number(settings.strategy_entry_t1_dd ?? -0.10),
@@ -199,8 +198,8 @@ export function SettingsModal({ opened, onClose }) {
           <Tabs.Panel value="strategy" pt="md">
             <Stack gap="md">
               <NumberInput
-                label="Core Target %"
-                description="Baseline allocation sleeve for core holdings"
+                label="Strategic Target %"
+                description="Strategic allocation sleeve before tactical opportunity"
                 value={strategyDraft?.strategy_core_target_pct ?? settings?.strategy_core_target_pct ?? 80}
                 onChange={(value) => handleStrategyChange('strategy_core_target_pct', value)}
                 min={0}
@@ -213,16 +212,6 @@ export function SettingsModal({ opened, onClose }) {
                 description="Tactical sleeve for high-opportunity names"
                 value={strategyDraft?.strategy_opportunity_target_pct ?? settings?.strategy_opportunity_target_pct ?? 20}
                 onChange={(value) => handleStrategyChange('strategy_opportunity_target_pct', value)}
-                min={0}
-                max={100}
-                suffix="%"
-              />
-
-              <NumberInput
-                label="Opportunity Target Max %"
-                description="Dynamic cap for opportunity sleeve during broad/strong dip regimes"
-                value={strategyDraft?.strategy_opportunity_target_max_pct ?? settings?.strategy_opportunity_target_max_pct ?? 30}
-                onChange={(value) => handleStrategyChange('strategy_opportunity_target_max_pct', value)}
                 min={0}
                 max={100}
                 suffix="%"

@@ -246,6 +246,23 @@ class TestSecurities:
         assert stored_quote["ltp"] == 100.5
         assert stored_quote["chg5"] == 2.5
 
+    @pytest.mark.asyncio
+    async def test_user_multiplier_preference_metadata_columns_exist(self, temp_db):
+        """Preference metadata columns are available after schema initialization."""
+        await temp_db.upsert_security("TEST.EU", user_multiplier=0.7)
+        updated = await temp_db.update_user_multiplier_preference(
+            "TEST.EU",
+            user_multiplier=0.2,
+            analysis="Clara analysis",
+            source="clara",
+            updated_at="2026-05-17T00:00:00+00:00",
+        )
+
+        assert updated["user_multiplier"] == 0.2
+        assert updated["user_multiplier_source"] == "clara"
+        assert updated["user_multiplier_analysis"] == "Clara analysis"
+        assert updated["user_multiplier_updated_at"] == "2026-05-17T00:00:00+00:00"
+
 
 class TestPositions:
     """Tests for position operations."""

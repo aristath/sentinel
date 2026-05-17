@@ -17,6 +17,25 @@ from sentinel.database import Database
 from sentinel.settings import Settings
 
 
+def strategy_values(**overrides):
+    values = {
+        "strategy_core_target_pct": 70,
+        "strategy_opportunity_target_pct": 30,
+        "strategy_min_opp_score": 0.6,
+        "strategy_core_floor_pct": 0.1,
+        "strategy_entry_t1_dd": -0.10,
+        "strategy_entry_t2_dd": -0.16,
+        "strategy_entry_t3_dd": -0.22,
+        "strategy_entry_memory_days": 45,
+        "strategy_memory_max_boost": 0.12,
+        "strategy_opportunity_addon_threshold": 0.75,
+        "strategy_max_opportunity_buys_per_cycle": 1,
+        "strategy_max_new_opportunity_buys_per_cycle": 1,
+    }
+    values.update(overrides)
+    return values
+
+
 @pytest_asyncio.fixture
 async def deps():
     fd, path = tempfile.mkstemp(suffix=".db")
@@ -59,14 +78,7 @@ async def test_settings_batch_http_success(deps):
     client = _build_client(deps)
     resp = client.put(
         "/api/settings",
-        json={
-            "values": {
-                "strategy_core_target_pct": 70,
-                "strategy_opportunity_target_pct": 30,
-                "strategy_min_opp_score": 0.6,
-                "strategy_core_floor_pct": 0.1,
-            }
-        },
+        json={"values": strategy_values()},
     )
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
@@ -77,14 +89,7 @@ async def test_settings_batch_http_rejects_boolean(deps):
     client = _build_client(deps)
     resp = client.put(
         "/api/settings",
-        json={
-            "values": {
-                "strategy_core_target_pct": True,
-                "strategy_opportunity_target_pct": 30,
-                "strategy_min_opp_score": 0.6,
-                "strategy_core_floor_pct": 0.1,
-            }
-        },
+        json={"values": strategy_values(strategy_core_target_pct=True)},
     )
     assert resp.status_code == 400
     assert "must be a number" in resp.json().get("detail", "")

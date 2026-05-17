@@ -10,11 +10,18 @@ from datetime import datetime, timezone
 from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.planner.analyzer import PortfolioAnalyzer
+from sentinel.planner.preferences import (
+    apply_max_cap,
+    effective_user_multiplier,
+    freshness_from_timestamp,
+    normalize_user_multiplier,
+    normalize_weights,
+    preference_tilt,
+)
 from sentinel.portfolio import Portfolio
 from sentinel.settings import Settings
 from sentinel.strategy import (
     compute_contrarian_signal,
-    compute_symbol_targets,
     effective_opportunity_score,
     recent_dd252_min,
 )
@@ -105,15 +112,6 @@ class AllocationCalculator:
         # Clamp to [-1, +1]
         return max(-1.0, min(1.0, avg_deviation))
 
-    @staticmethod
-    def _normalize_conviction(value: object) -> float:
-        """Normalize conviction into [0.0, 1.0]."""
-        try:
-            parsed = float(value)
-        except (TypeError, ValueError):
-            return 0.5
-        return max(0.0, min(1.0, parsed))
-
     async def _load_strategy_settings(self) -> dict[str, float]:
         keys_defaults: dict[str, float] = {
             "diversification_impact_pct": 10,
@@ -124,10 +122,10 @@ class AllocationCalculator:
             "max_dividend_reinvestment_boost": 0.15,
             "strategy_core_target_pct": 70,
             "strategy_opportunity_target_pct": 30,
-            "strategy_opportunity_target_max_pct": 45,
             "strategy_min_opp_score": 0.55,
             "max_position_pct": 35,
-            "min_position_pct": 1,
+            "clara_preference_weekly_fade": 0.90,
+            "clara_preference_strength": 5.0,
         }
         keys = list(keys_defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, keys_defaults[k]) for k in keys])
@@ -136,10 +134,10 @@ class AllocationCalculator:
     async def calculate_ideal_portfolio(self, as_of_date: str | None = None) -> dict[str, float]:
         """Calculate ideal portfolio allocations using deterministic contrarian strategy.
 
-        Per-security conviction (0..1) is used as a core preference weight:
+        Per-security `user_multiplier` (0..1) is used as Clara's strategic preference:
         - 0.5 = neutral
-        - 1.0 = strongest "keep/add" preference
-        - 0.0 = weakest preference (eligible to be deprioritized)
+        - 1.0 = strongest strategic overweight preference
+        - 0.0 = strongest avoid/near-zero preference
 
         Diversification adjustment:
         - Securities in underweight categories get a boost
@@ -159,7 +157,7 @@ class AllocationCalculator:
                 if isinstance(maybe_cached, (str, bytes, bytearray)):
                     return json.loads(maybe_cached)
 
-        # Get all securities with user conviction values
+        # Get all securities with Clara strategic preference values
         securities = await self._db.get_all_securities(active_only=True)
         if not securities:
             return {}
@@ -182,11 +180,19 @@ class AllocationCalculator:
         entry_t3_dd = config["strategy_entry_t3_dd"]
         entry_memory_days = int(config["strategy_entry_memory_days"])
         memory_max_boost = config["strategy_memory_max_boost"]
+        weekly_fade = config["clara_preference_weekly_fade"]
+        preference_strength = config["clara_preference_strength"]
 
         symbol_signals: dict[str, dict[str, float | int]] = {}
         rebalance_signals: dict[str, dict[str, float | int]] = {}
-        user_multipliers: dict[str, float] = {}
+        baseline_raw_weights: dict[str, float] = {}
+        clara_raw_weights: dict[str, float] = {}
+        opportunity_raw_weights: dict[str, float] = {}
+        preference_details: dict[str, dict[str, float]] = {}
         symbols = [sec["symbol"] for sec in securities]
+        as_of_now: datetime | None = None
+        if as_of_date is not None:
+            as_of_now = datetime.strptime(as_of_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         prices_by_symbol: dict[str, list[dict]] | None = None
         get_prices_multi = getattr(self._db, "get_prices_for_symbols", None)
         if callable(get_prices_multi):
@@ -204,9 +210,17 @@ class AllocationCalculator:
             prices_by_symbol = {symbol: prices for symbol, prices in zip(symbols, all_prices, strict=False)}
         for sec in securities:
             symbol = sec["symbol"]
-            conviction = self._normalize_conviction(sec.get("user_multiplier", 0.5))
-            # Continuous preference multiplier (no binary cutoff).
-            user_multipliers[symbol] = 0.2 + (1.8 * conviction)
+            stored_preference = normalize_user_multiplier(sec.get("user_multiplier", 0.5))
+            effective_preference = effective_user_multiplier(
+                stored_preference,
+                sec.get("user_multiplier_updated_at"),
+                weekly_fade,
+                now=as_of_now,
+            )
+            preference_details[symbol] = {
+                "user_multiplier": stored_preference,
+                "effective_user_multiplier": effective_preference,
+            }
 
             raw = prices_by_symbol.get(symbol, [])
             closes = [float(p["close"]) for p in reversed(raw) if p.get("close") is not None]
@@ -226,9 +240,6 @@ class AllocationCalculator:
             signal["dd252_recent_min"] = recent_min
             signal["opp_score"] = effective_opp
             signal["memory_boosted"] = 1 if effective_opp > raw_opp else 0
-            rebalance_signals[symbol] = dict(signal)
-            # Conviction influences tactical opportunity intensity continuously.
-            signal["opp_score"] = max(0.0, min(1.0, float(signal["opp_score"]) * (0.2 + (0.8 * conviction))))
 
             # Apply diversification multiplier
             if div_impact > 0:
@@ -238,6 +249,11 @@ class AllocationCalculator:
                 signal["opp_score"] = max(0.0, min(1.0, float(signal.get("opp_score", 0.0)) * div_multiplier))
 
             symbol_signals[symbol] = signal
+            rebalance_signals[symbol] = dict(signal)
+
+            baseline_weight = max(0.001, float(signal.get("core_rank", 0.0) or 0.0) + 1.0)
+            baseline_raw_weights[symbol] = baseline_weight
+            clara_raw_weights[symbol] = baseline_weight * preference_tilt(effective_preference, preference_strength)
 
         # Apply dividend reinvestment boost
         max_div_boost = config["max_dividend_reinvestment_boost"]
@@ -253,30 +269,119 @@ class AllocationCalculator:
 
         core_target = config["strategy_core_target_pct"] / 100.0
         opportunity_target = config["strategy_opportunity_target_pct"] / 100.0
-        max_opportunity_target = config["strategy_opportunity_target_max_pct"] / 100.0
         min_opp_score = config["strategy_min_opp_score"]
+        core_target = max(0.0, min(1.0, core_target))
+        opportunity_target = max(0.0, min(1.0, opportunity_target))
+        if core_target + opportunity_target <= 0:
+            core_target = 0.8
+            opportunity_target = 0.2
+        total_sleeves = core_target + opportunity_target
+        core_target /= total_sleeves
+        opportunity_target /= total_sleeves
 
-        allocations, sleeves = compute_symbol_targets(
-            symbol_signals,
-            user_multipliers,
-            core_target=core_target,
-            opportunity_target=opportunity_target,
-            min_opp_score=min_opp_score,
-            max_opportunity_target=max_opportunity_target,
-        )
+        for symbol, signal in symbol_signals.items():
+            opp_score = float(signal.get("opp_score", 0.0) or 0.0)
+            if opp_score < min_opp_score:
+                continue
+            vol20 = max(float(signal.get("vol20", 0.0) or 0.0), 1e-6)
+            opportunity_raw_weights[symbol] = opp_score / vol20
+
+        baseline_weights = normalize_weights(baseline_raw_weights)
+        clara_weights = normalize_weights(clara_raw_weights)
+        opportunity_weights = normalize_weights(opportunity_raw_weights)
+
+        global_updated_at = await self._settings.get("clara_preferences_updated_at")
+        if global_updated_at is None:
+            preference_updates = [
+                str(sec["user_multiplier_updated_at"]) for sec in securities if sec.get("user_multiplier_updated_at")
+            ]
+            global_updated_at = max(preference_updates, default=None)
+        clara_freshness = freshness_from_timestamp(global_updated_at, weekly_fade, now=as_of_now)
+        clara_sleeve = core_target * clara_freshness
+        baseline_sleeve = core_target * (1.0 - clara_freshness)
+        tactical_sleeve = opportunity_target if opportunity_weights else 0.0
+
+        allocations: dict[str, float] = {}
+        decomposition: dict[str, dict[str, float | str]] = {}
+        sleeves: dict[str, str] = {}
+        for symbol in symbols:
+            clara_component = clara_sleeve * clara_weights.get(symbol, 0.0)
+            baseline_component = baseline_sleeve * baseline_weights.get(symbol, 0.0)
+            opportunity_component = tactical_sleeve * opportunity_weights.get(symbol, 0.0)
+            final_weight = clara_component + baseline_component + opportunity_component
+            if final_weight <= 0:
+                continue
+            allocations[symbol] = final_weight
+            sleeve = "opportunity" if opportunity_component > 0 else "core"
+            sleeves[symbol] = sleeve
+            detail = preference_details.get(symbol, {})
+            decomposition[symbol] = {
+                "baseline_target_pct": baseline_component,
+                "clara_target_pct": clara_component,
+                "opportunity_target_pct": opportunity_component,
+                "final_target_pct": final_weight,
+                "allocation_sleeve": sleeve,
+                "clara_freshness": clara_freshness,
+                "effective_user_multiplier": detail.get("effective_user_multiplier", 0.5),
+                "user_multiplier": detail.get("user_multiplier", 0.5),
+            }
+
+        allocations = normalize_weights(allocations)
+        for symbol, detail in decomposition.items():
+            signal_update = {
+                "sleeve": str(detail["allocation_sleeve"]),
+                "effective_user_multiplier": float(detail["effective_user_multiplier"]),
+                "user_multiplier": float(detail["user_multiplier"]),
+                "baseline_target_pct": float(detail["baseline_target_pct"]),
+                "clara_target_pct": float(detail["clara_target_pct"]),
+                "opportunity_target_pct": float(detail["opportunity_target_pct"]),
+                "final_target_pct": float(detail["final_target_pct"]),
+                "clara_freshness": float(detail["clara_freshness"]),
+            }
+            rebalance_signals.setdefault(symbol, {}).update(signal_update)
+            symbol_signals.setdefault(symbol, {}).update(signal_update)
+        # Enforce hard max position bounds. Minimum position is a trade-practicality
+        # constraint now, not an allocation floor.
+        max_position = config["max_position_pct"] / 100.0
+        bounded = apply_max_cap(allocations, max_position)
+        for symbol, final_weight in bounded.items():
+            if symbol in decomposition:
+                original_weight = float(decomposition[symbol].get("final_target_pct", 0.0) or 0.0)
+                scale = final_weight / original_weight if original_weight > 0 else 1.0
+                decomposition[symbol]["baseline_target_pct"] = (
+                    float(decomposition[symbol].get("baseline_target_pct", 0.0) or 0.0) * scale
+                )
+                decomposition[symbol]["clara_target_pct"] = (
+                    float(decomposition[symbol].get("clara_target_pct", 0.0) or 0.0) * scale
+                )
+                decomposition[symbol]["opportunity_target_pct"] = (
+                    float(decomposition[symbol].get("opportunity_target_pct", 0.0) or 0.0) * scale
+                )
+                decomposition[symbol]["final_target_pct"] = final_weight
+                signal_update = {
+                    "baseline_target_pct": float(decomposition[symbol]["baseline_target_pct"]),
+                    "clara_target_pct": float(decomposition[symbol]["clara_target_pct"]),
+                    "opportunity_target_pct": float(decomposition[symbol]["opportunity_target_pct"]),
+                    "final_target_pct": float(decomposition[symbol]["final_target_pct"]),
+                }
+                rebalance_signals.setdefault(symbol, {}).update(signal_update)
+                symbol_signals.setdefault(symbol, {}).update(signal_update)
+
+        allocation_decomposition = {
+            "global": {
+                "clara_freshness": clara_freshness,
+                "clara_strategic_sleeve": clara_sleeve,
+                "sentinel_baseline_sleeve": baseline_sleeve,
+                "tactical_opportunity_sleeve": tactical_sleeve,
+            },
+            "symbols": decomposition,
+        }
         self._last_signal_bundle = {
             "as_of_date": as_of_date,
             "rebalance_signals": rebalance_signals,
             "sleeves": sleeves,
+            "allocation_decomposition": allocation_decomposition,
         }
-
-        # Enforce position bounds and renormalize to 100% invested
-        max_position = config["max_position_pct"] / 100.0
-        min_position = config["min_position_pct"] / 100.0
-        bounded = {s: max(min_position, min(max_position, w)) for s, w in allocations.items() if w > 0}
-        total = sum(bounded.values())
-        if total > 0:
-            bounded = {s: w / total for s, w in bounded.items()}
 
         # Cache live allocations/diagnostics for downstream APIs/rebalance.
         # Do not cache as-of signals to avoid polluting live state.
@@ -293,6 +398,13 @@ class AllocationCalculator:
                 if inspect.isawaitable(maybe_set):
                     await maybe_set
                 maybe_set = cache_setter("planner:contrarian_sleeves", json.dumps(sleeves), ttl_seconds=600)
+                if inspect.isawaitable(maybe_set):
+                    await maybe_set
+                maybe_set = cache_setter(
+                    "planner:allocation_decomposition",
+                    json.dumps(allocation_decomposition),
+                    ttl_seconds=600,
+                )
                 if inspect.isawaitable(maybe_set):
                     await maybe_set
                 maybe_set = cache_setter(

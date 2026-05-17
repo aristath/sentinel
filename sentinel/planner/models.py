@@ -29,6 +29,11 @@ class TradeRecommendation:
     ticket_pct: Optional[float] = None
     core_floor_active: Optional[bool] = None
     memory_entry: Optional[bool] = None
+    effective_user_multiplier: Optional[float] = None
+    clara_target_pct: Optional[float] = None
+    baseline_target_pct: Optional[float] = None
+    opportunity_target_pct: Optional[float] = None
+    clara_freshness: Optional[float] = None
 
 
 @dataclass

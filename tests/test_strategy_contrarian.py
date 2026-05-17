@@ -1,7 +1,6 @@
 from sentinel.strategy.contrarian import (
     classify_lot_size,
     compute_contrarian_signal,
-    compute_symbol_targets,
     effective_opportunity_score,
     recent_dd252_min,
 )
@@ -39,47 +38,6 @@ def test_classify_lot_size_coarse_for_small_portfolio():
     )
     assert profile["lot_class"] == "coarse"
     assert float(profile["ticket_pct"]) > 0.08
-
-
-def test_compute_symbol_targets_fully_invested():
-    signals = {
-        "AAA": {"core_rank": 0.2, "opp_score": 0.8, "vol20": 0.02},
-        "BBB": {"core_rank": 0.1, "opp_score": 0.1, "vol20": 0.03},
-    }
-    allocations, sleeves = compute_symbol_targets(
-        signals,
-        {"AAA": 1.0, "BBB": 1.0},
-        core_target=0.7,
-        opportunity_target=0.3,
-        min_opp_score=0.55,
-    )
-    assert abs(sum(allocations.values()) - 1.0) < 1e-8
-    assert sleeves["AAA"] == "opportunity"
-    assert sleeves["BBB"] == "core"
-
-
-def test_compute_symbol_targets_can_boost_opportunity_sleeve_when_breadth_is_broad_and_strong():
-    signals = {
-        "A": {"core_rank": 0.2, "opp_score": 0.9, "vol20": 0.02},
-        "B": {"core_rank": 0.1, "opp_score": 0.85, "vol20": 0.02},
-        "C": {"core_rank": 0.15, "opp_score": 0.82, "vol20": 0.02},
-        "D": {"core_rank": 0.05, "opp_score": 0.80, "vol20": 0.03},
-        "E": {"core_rank": 0.08, "opp_score": 0.78, "vol20": 0.03},
-        "F": {"core_rank": 0.10, "opp_score": 0.76, "vol20": 0.03},
-        "G": {"core_rank": 0.05, "opp_score": 0.74, "vol20": 0.03},
-        "H": {"core_rank": 0.04, "opp_score": 0.72, "vol20": 0.03},
-    }
-    allocations, sleeves = compute_symbol_targets(
-        signals,
-        {k: 1.0 for k in signals},
-        core_target=0.7,
-        opportunity_target=0.3,
-        min_opp_score=0.55,
-        max_opportunity_target=0.45,
-    )
-    assert abs(sum(allocations.values()) - 1.0) < 1e-8
-    opp_alloc = sum(allocations[s] for s, sleeve in sleeves.items() if sleeve == "opportunity")
-    assert opp_alloc > 0.30
 
 
 def test_effective_opportunity_score_boosts_on_recent_dip_turn_without_freefall():

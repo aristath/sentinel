@@ -25,8 +25,9 @@ Returns all securities in the universe (including inactive ones).
     "allow_sell": 1,
     "market_id": "93",
     "user_multiplier": 0.5,
-    "ml_enabled": 0,
-    "ml_blend_ratio": 0.3,
+    "user_multiplier_updated_at": "2026-05-17T12:00:00+00:00",
+    "user_multiplier_source": "clara",
+    "user_multiplier_analysis": "Long-term strategic fit remains neutral.",
     "aliases": "Apple, MacBook, Apple Silicon",
     "quote_data": null,
     "quote_updated_at": null,
@@ -40,8 +41,10 @@ Returns all securities in the universe (including inactive ones).
 |---|---|
 | `market_id` | Broker market identifier string |
 | `data` | Raw JSON metadata blob from broker (security details, market info) |
-| `ml_enabled` | Whether ML-enhanced scoring is active for this security |
-| `ml_blend_ratio` | Weight of ML score vs contrarian score (0–1) |
+| `user_multiplier` | Stored Clara strategic preference, 0 avoid, 0.5 neutral, 1 prefer |
+| `user_multiplier_updated_at` | Last per-security preference update timestamp |
+| `user_multiplier_source` | Preference source, usually `clara`, `manual`, or `migration` |
+| `user_multiplier_analysis` | Human-readable rationale for the stored preference |
 | `quote_data` | Latest raw quote data from broker (null if not yet synced) |
 | `quote_updated_at` | Timestamp of last quote sync |
 | `last_synced` | Date of last metadata sync |
@@ -95,6 +98,28 @@ Note: `aliases` is a comma-separated string, not an array.
 
 ---
 
+## `POST /api/securities/preference`
+
+Updates one security's Clara strategic preference and stores the analysis explaining the decision.
+
+**Request body**
+```json
+{
+  "symbol": "MOH.GR",
+  "user_multiplier": 0.02,
+  "analysis": "Too exposed to fossil-fuel demand for the long-term portfolio."
+}
+```
+
+**Response**
+Returns the updated single-security payload, including stored and effective faded preference fields.
+
+**Errors**
+- `400` — Missing/invalid `symbol`, `user_multiplier`, or `analysis`
+- `404` — Security not found
+
+---
+
 ## `GET /api/securities/{symbol}`
 
 Returns details for a single security including current position data.
@@ -108,6 +133,12 @@ Returns details for a single security including current position data.
   "geography": "US",
   "industry": "Technology",
   "aliases": "Apple, MacBook, Apple Silicon",
+  "user_multiplier": 0.5,
+  "effective_user_multiplier": 0.5,
+  "user_multiplier_age_weeks": 0.0,
+  "user_multiplier_updated_at": "2026-05-17T12:00:00+00:00",
+  "user_multiplier_source": "clara",
+  "user_multiplier_analysis": "Long-term strategic fit remains neutral.",
   "quantity": 5.0,
   "current_price": 270.94
 }
@@ -129,12 +160,19 @@ Update security metadata and execution controls. Only the following fields are a
 | `aliases` | string | Comma-separated search aliases for companion apps |
 | `allow_buy` | int (0/1) | Whether buys are permitted |
 | `allow_sell` | int (0/1) | Whether sells are permitted |
-| `user_multiplier` | float | Conviction multiplier applied to contrarian score |
+| `user_multiplier` | float | Manual strategic preference override. Clara integrations should prefer `POST /api/securities/preference`. |
+| `user_multiplier_analysis` | string | Optional rationale when setting `user_multiplier` manually |
 | `active` | int (0/1) | Active flag |
 
 **Response**
 ```json
-{ "status": "ok" }
+{
+  "symbol": "AAPL.US",
+  "user_multiplier": 0.6,
+  "effective_user_multiplier": 0.6,
+  "user_multiplier_source": "manual",
+  "user_multiplier_analysis": "Manual preference override from Sentinel UI."
+}
 ```
 
 **Errors**

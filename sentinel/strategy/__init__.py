@@ -3,7 +3,6 @@
 from .contrarian import (
     classify_lot_size,
     compute_contrarian_signal,
-    compute_symbol_targets,
     effective_opportunity_score,
     recent_dd252_min,
 )
@@ -11,7 +10,6 @@ from .contrarian import (
 __all__ = [
     "classify_lot_size",
     "compute_contrarian_signal",
-    "compute_symbol_targets",
     "effective_opportunity_score",
     "recent_dd252_min",
 ]

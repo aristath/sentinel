@@ -1,5 +1,6 @@
 """Settings and LED API routes."""
 
+import inspect
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -10,6 +11,7 @@ from typing_extensions import Annotated
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.broker import Broker
 from sentinel.led import LEDController
+from sentinel.settings import REMOVED_SETTINGS
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 STRATEGY_KEYS = {
@@ -17,6 +19,39 @@ STRATEGY_KEYS = {
     "strategy_opportunity_target_pct",
     "strategy_min_opp_score",
     "strategy_core_floor_pct",
+    "strategy_entry_t1_dd",
+    "strategy_entry_t2_dd",
+    "strategy_entry_t3_dd",
+    "strategy_entry_memory_days",
+    "strategy_memory_max_boost",
+    "strategy_opportunity_addon_threshold",
+    "strategy_max_opportunity_buys_per_cycle",
+    "strategy_max_new_opportunity_buys_per_cycle",
+}
+PLANNER_SETTING_KEYS = {
+    *STRATEGY_KEYS,
+    "clara_preference_weekly_fade",
+    "clara_preference_strength",
+    "clara_preferences_updated_at",
+    "max_position_pct",
+    "min_position_pct",
+    "min_trade_value",
+    "transaction_fee_fixed",
+    "transaction_fee_percent",
+    "diversification_impact_pct",
+    "max_dividend_reinvestment_boost",
+    "strategy_lot_standard_max_pct",
+    "strategy_lot_coarse_max_pct",
+    "strategy_coarse_max_new_lots_per_cycle",
+    "strategy_core_new_min_score",
+    "strategy_core_new_min_dip_score",
+    "strategy_opportunity_cooloff_days",
+    "strategy_core_cooloff_days",
+    "strategy_same_side_cooloff_days",
+    "strategy_rotation_time_stop_days",
+    "strategy_max_funding_sells_per_cycle",
+    "strategy_max_funding_turnover_pct",
+    "strategy_funding_conviction_bias",
 }
 
 # Global LED controller reference (set by app lifespan)
@@ -119,7 +154,15 @@ async def set_setting(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, str]:
     """Set a setting value."""
+    if key in REMOVED_SETTINGS:
+        raise HTTPException(status_code=400, detail=f"Setting '{key}' has been removed")
     await deps.settings.set(key, value.get("value"))
+    if key in PLANNER_SETTING_KEYS:
+        invalidator = getattr(deps.db, "invalidate_planner_cache", None)
+        if callable(invalidator):
+            maybe = invalidator()
+            if inspect.isawaitable(maybe):
+                await maybe
     return {"status": "ok"}
 
 
@@ -163,8 +206,32 @@ async def set_settings_batch(
         raise HTTPException(status_code=400, detail="'strategy_min_opp_score' must be in [0, 1]")
     if parsed_values["strategy_core_floor_pct"] < 0 or parsed_values["strategy_core_floor_pct"] > 1:
         raise HTTPException(status_code=400, detail="'strategy_core_floor_pct' must be in [0, 1]")
+    for key in ("strategy_entry_t1_dd", "strategy_entry_t2_dd", "strategy_entry_t3_dd"):
+        if parsed_values[key] < -0.9 or parsed_values[key] > 0:
+            raise HTTPException(status_code=400, detail=f"'{key}' must be in [-0.9, 0]")
+    if parsed_values["strategy_entry_t3_dd"] > parsed_values["strategy_entry_t2_dd"]:
+        raise HTTPException(status_code=400, detail="'strategy_entry_t3_dd' must be <= 'strategy_entry_t2_dd'")
+    if parsed_values["strategy_entry_t2_dd"] > parsed_values["strategy_entry_t1_dd"]:
+        raise HTTPException(status_code=400, detail="'strategy_entry_t2_dd' must be <= 'strategy_entry_t1_dd'")
+    if parsed_values["strategy_entry_memory_days"] < 1 or parsed_values["strategy_entry_memory_days"] > 252:
+        raise HTTPException(status_code=400, detail="'strategy_entry_memory_days' must be in [1, 252]")
+    if parsed_values["strategy_memory_max_boost"] < 0 or parsed_values["strategy_memory_max_boost"] > 0.5:
+        raise HTTPException(status_code=400, detail="'strategy_memory_max_boost' must be in [0, 0.5]")
+    if (
+        parsed_values["strategy_opportunity_addon_threshold"] < 0
+        or parsed_values["strategy_opportunity_addon_threshold"] > 1
+    ):
+        raise HTTPException(status_code=400, detail="'strategy_opportunity_addon_threshold' must be in [0, 1]")
+    for key in ("strategy_max_opportunity_buys_per_cycle", "strategy_max_new_opportunity_buys_per_cycle"):
+        if parsed_values[key] < 0 or parsed_values[key] > 50:
+            raise HTTPException(status_code=400, detail=f"'{key}' must be in [0, 50]")
 
     await deps.db.set_settings_batch({key: parsed_values[key] for key in sorted(STRATEGY_KEYS)})
+    invalidator = getattr(deps.db, "invalidate_planner_cache", None)
+    if callable(invalidator):
+        maybe = invalidator()
+        if inspect.isawaitable(maybe):
+            await maybe
 
     return {"status": "ok"}
 

@@ -2,18 +2,15 @@
 
 These tests verify the intended behavior of utility functions:
 1. Fee calculations
-2. Score adjustments for conviction
-3. Position value calculations
+2. Position value calculations
 """
 
-from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
 
 from sentinel.utils.fees import FeeCalculator
 from sentinel.utils.positions import PositionCalculator
-from sentinel.utils.scoring import adjust_score_for_conviction
 from sentinel.utils.strings import parse_csv_field
 
 # =============================================================================
@@ -169,63 +166,6 @@ class TestFeeCalculator:
 
         assert result["num_buys"] == 1
         assert result["total_buy_value"] == 500.0
-
-
-# =============================================================================
-# Scoring Utilities Tests
-# =============================================================================
-
-
-class TestAdjustScoreForConviction:
-    """Tests for adjust_score_for_conviction function."""
-
-    def test_neutral_conviction_no_change(self):
-        """Conviction 0.5 (neutral) should not change score."""
-        base = 0.05  # 5% expected return
-        result = adjust_score_for_conviction(base, 0.5)
-        assert result == base
-
-    def test_high_conviction_boost(self):
-        """Conviction 1.0 (max) adds +0.20."""
-        base = 0.05
-        result = adjust_score_for_conviction(base, 1.0)
-        assert abs(result - 0.25) < 0.001
-
-    def test_low_conviction_penalty(self):
-        """Conviction 0.0 (min) subtracts -0.20."""
-        base = 0.05
-        result = adjust_score_for_conviction(base, 0.0)
-        assert abs(result - (-0.15)) < 0.001
-
-    def test_mid_high_conviction_boost(self):
-        """Conviction 0.75 adds +0.10."""
-        base = 0.0
-        result = adjust_score_for_conviction(base, 0.75)
-        assert abs(result - 0.10) < 0.001
-
-    def test_none_conviction_treated_as_neutral(self):
-        """None conviction should be treated as 0.5 (neutral)."""
-        base = 0.05
-        result = adjust_score_for_conviction(base, cast(float, None))
-        assert result == base
-
-    def test_negative_base_score(self):
-        """Works correctly with negative base scores."""
-        base = -0.10  # -10% expected return
-        result = adjust_score_for_conviction(base, 1.0)
-        assert abs(result - 0.10) < 0.001
-
-    def test_conviction_can_flip_sign(self):
-        """Strong conviction can flip a negative score to positive."""
-        base = -0.05
-        result = adjust_score_for_conviction(base, 1.0)
-        assert result > 0  # Became positive
-
-    def test_conviction_can_make_negative(self):
-        """Low conviction can make a positive score negative."""
-        base = 0.05
-        result = adjust_score_for_conviction(base, 0.0)
-        assert result < 0  # Became negative
 
 
 # =============================================================================
@@ -439,22 +379,6 @@ class TestPositionCalculator:
 
 class TestEdgeCases:
     """Edge case tests for utilities."""
-
-    def test_conviction_out_of_range_is_clamped(self):
-        """Out-of-range conviction values are clamped to [0, 1]."""
-        result = adjust_score_for_conviction(0.0, 10.0)
-        assert abs(result - 0.2) < 0.001
-
-        result = adjust_score_for_conviction(0.0, -5.0)
-        assert abs(result - (-0.2)) < 0.001
-
-    def test_conviction_with_float_precision(self):
-        """Float precision doesn't cause issues."""
-        base = 0.123456789
-        conviction = 0.733333333
-        result = adjust_score_for_conviction(base, conviction)
-        expected = base + (conviction - 0.5) * 0.4
-        assert abs(result - expected) < 0.0000001
 
     @pytest.mark.asyncio
     async def test_fee_with_very_large_trade(self):

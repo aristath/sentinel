@@ -1,5 +1,7 @@
 """Planner API routes for portfolio recommendations and rebalancing."""
 
+import inspect
+import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -63,6 +65,14 @@ async def get_recommendations(
                 "contrarian_score": r.contrarian_score,
                 "priority": r.priority,
                 "reason": r.reason,
+                "sleeve": r.sleeve,
+                "effective_user_multiplier": r.effective_user_multiplier,
+                "clara_target_pct": (r.clara_target_pct * 100) if r.clara_target_pct is not None else None,
+                "baseline_target_pct": (r.baseline_target_pct * 100) if r.baseline_target_pct is not None else None,
+                "opportunity_target_pct": (
+                    r.opportunity_target_pct * 100 if r.opportunity_target_pct is not None else None
+                ),
+                "clara_freshness": r.clara_freshness,
             }
             for r in recommendations
         ],
@@ -77,15 +87,26 @@ async def get_recommendations(
 
 
 @router.get("/ideal")
-async def get_ideal_portfolio() -> dict:
+async def get_ideal_portfolio(
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict:
     """Get the calculated ideal portfolio allocations."""
     planner = Planner()
     ideal = await planner.calculate_ideal_portfolio()
     current = await planner.get_current_allocations()
+    decomposition = None
+    cache_getter = getattr(deps.db, "cache_get", None)
+    if callable(cache_getter):
+        cached = cache_getter("planner:allocation_decomposition")
+        if inspect.isawaitable(cached):
+            cached = await cached
+        if isinstance(cached, (str, bytes, bytearray)):
+            decomposition = json.loads(cached)
 
     return {
         "ideal": {k: v * 100 for k, v in ideal.items()},
         "current": {k: v * 100 for k, v in current.items()},
+        "allocation_decomposition": decomposition,
     }
 
 

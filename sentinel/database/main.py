@@ -10,7 +10,7 @@ Usage:
 
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -99,6 +99,11 @@ class Database(BaseDatabase):
         await self.conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, json_value))
         await self.conn.commit()
 
+    async def delete_setting(self, key: str) -> None:
+        """Delete a setting value."""
+        await self.conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+        await self.conn.commit()
+
     async def set_settings_batch(self, values: dict[str, Any]) -> None:
         """Set multiple settings atomically in one transaction."""
         await self.conn.execute("BEGIN")
@@ -148,6 +153,29 @@ class Database(BaseDatabase):
                 (json.dumps(quote_data), now, symbol),
             )
         await self.conn.commit()
+
+    async def update_user_multiplier_preference(
+        self,
+        symbol: str,
+        *,
+        user_multiplier: float,
+        analysis: str,
+        source: str,
+        updated_at: str | None = None,
+    ) -> dict | None:
+        """Update one security's Clara/user preference metadata."""
+        updated_at = updated_at or datetime.now(timezone.utc).isoformat()
+        await self.conn.execute(
+            """UPDATE securities
+               SET user_multiplier = ?,
+                   user_multiplier_updated_at = ?,
+                   user_multiplier_source = ?,
+                   user_multiplier_analysis = ?
+               WHERE symbol = ?""",
+            (user_multiplier, updated_at, source, analysis, symbol),
+        )
+        await self.conn.commit()
+        return await self.get_security(symbol)
 
     # -------------------------------------------------------------------------
     # Prices (extended methods beyond BaseDatabase)
@@ -301,6 +329,10 @@ class Database(BaseDatabase):
             cursor = await self.conn.execute("DELETE FROM cache")
         await self.conn.commit()
         return cursor.rowcount
+
+    async def invalidate_planner_cache(self) -> int:
+        """Clear DB-backed planner cache entries."""
+        return await self.cache_clear(prefix="planner:")
 
     async def cache_cleanup_expired(self) -> int:
         """Remove all expired cache entries."""
@@ -665,6 +697,36 @@ class Database(BaseDatabase):
         """Initialize database schema."""
         await self.conn.executescript(SCHEMA)
         await self.conn.commit()
+        await self._migrate_schema()
+
+    async def _migrate_schema(self) -> None:
+        """Apply lightweight schema migrations for existing local databases."""
+        cursor = await self.conn.execute("PRAGMA table_info(securities)")
+        security_columns = {row["name"] for row in await cursor.fetchall()}
+        migrations = {
+            "user_multiplier_updated_at": "ALTER TABLE securities ADD COLUMN user_multiplier_updated_at TEXT",
+            "user_multiplier_source": (
+                "ALTER TABLE securities ADD COLUMN user_multiplier_source TEXT NOT NULL DEFAULT 'migration'"
+            ),
+            "user_multiplier_analysis": "ALTER TABLE securities ADD COLUMN user_multiplier_analysis TEXT",
+        }
+        for column, statement in migrations.items():
+            if column not in security_columns:
+                await self.conn.execute(statement)
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        await self.conn.execute("UPDATE securities SET user_multiplier = 0.5 WHERE user_multiplier IS NULL")
+        await self.conn.execute(
+            "UPDATE securities SET user_multiplier_updated_at = ? WHERE user_multiplier_updated_at IS NULL",
+            (now_iso,),
+        )
+        await self.conn.execute(
+            """UPDATE securities
+               SET user_multiplier_source = 'migration'
+               WHERE user_multiplier_source IS NULL OR user_multiplier_source = ''""",
+        )
+        await self.conn.execute("DELETE FROM settings WHERE key = 'strategy_opportunity_target_max_pct'")
+        await self.conn.commit()
 
 
 SCHEMA = """
@@ -686,7 +748,10 @@ CREATE TABLE IF NOT EXISTS securities (
     active INTEGER DEFAULT 1,
     allow_buy INTEGER DEFAULT 1,
     allow_sell INTEGER DEFAULT 1,
-    user_multiplier REAL DEFAULT 0.5,  -- User conviction (0.0 low conviction, 0.5 neutral, 1.0 high conviction)
+    user_multiplier REAL DEFAULT 0.5,  -- Clara strategic preference (0 avoid, 0.5 neutral, 1 prefer)
+    user_multiplier_updated_at TEXT,
+    user_multiplier_source TEXT NOT NULL DEFAULT 'migration',
+    user_multiplier_analysis TEXT,
     aliases TEXT,  -- Comma-separated alternative names for news/sentiment search
     data TEXT,  -- Raw Tradernet API response (JSON)
     last_synced INTEGER,

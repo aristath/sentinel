@@ -135,6 +135,11 @@ export const updateSecurity = (symbol, data) => {
     body: JSON.stringify(processedData),
   });
 };
+export const updateSecurityPreference = ({ symbol, user_multiplier, analysis }) =>
+  request('/securities/preference', {
+    method: 'POST',
+    body: JSON.stringify({ symbol, user_multiplier, analysis }),
+  });
 
 // Allocation
 export const getAllocation = () => request('/allocation/current');

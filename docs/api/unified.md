@@ -27,6 +27,10 @@ Returns a single merged view of all active securities, combining position data, 
     "allow_buy": 1,
     "allow_sell": 1,
     "user_multiplier": 0.5,
+    "effective_user_multiplier": 0.5,
+    "user_multiplier_age_weeks": 0.0,
+    "user_multiplier_source": "clara",
+    "user_multiplier_analysis": "Long-term strategic fit remains neutral.",
     "aliases": null,
 
     "has_position": true,
@@ -43,6 +47,12 @@ Returns a single merged view of all active securities, combining position data, 
     "current_allocation": 3.82,
     "post_plan_allocation": 4.10,
     "ideal_allocation": 4.50,
+    "allocation_sleeve": "core",
+    "baseline_target_pct": 1.10,
+    "clara_target_pct": 3.40,
+    "opportunity_target_pct": 0.00,
+    "final_target_pct": 4.50,
+    "clara_freshness": 1.0,
 
     "contrarian_score": 0.61,
     "opp_score": 0.63,
@@ -77,7 +87,11 @@ Returns a single merged view of all active securities, combining position data, 
 
 | Field | Description |
 |---|---|
-| `user_multiplier` | Per-security conviction multiplier (0–1) applied to contrarian score |
+| `user_multiplier` | Stored Clara strategic preference, 0 avoid, 0.5 neutral, 1 prefer |
+| `effective_user_multiplier` | Preference after temporal fade toward neutral |
+| `user_multiplier_age_weeks` | Age of the per-security preference timestamp |
+| `user_multiplier_source` | Preference source, usually `clara`, `manual`, or `migration` |
+| `user_multiplier_analysis` | Human-readable rationale for the stored preference |
 | `aliases` | Alternative names/tickers for companion apps |
 
 **Position**
@@ -96,12 +110,18 @@ Returns a single merged view of all active securities, combining position data, 
 | `current_allocation` | Current position as % of total portfolio |
 | `post_plan_allocation` | Allocation after applying all recommendations |
 | `ideal_allocation` | Target allocation from the Planner |
+| `allocation_sleeve` | Primary sleeve for the target, `core` or `opportunity` |
+| `baseline_target_pct` | Baseline deterministic core target contribution |
+| `clara_target_pct` | Clara strategic preference target contribution |
+| `opportunity_target_pct` | Tactical contrarian opportunity target contribution |
+| `final_target_pct` | Final target after normalization and position caps |
+| `clara_freshness` | Global Clara freshness coefficient after temporal fade |
 
 **Contrarian signals**
 
 | Field | Description |
 |---|---|
-| `contrarian_score` | `opp_score` adjusted by `user_multiplier` — used for display |
+| `contrarian_score` | Tactical opportunity score used for display and opportunity rules |
 | `opp_score` | Raw opportunity score (0–1) |
 | `dip_score` | Dip detection score |
 | `capitulation_score` | Capitulation/oversold score |

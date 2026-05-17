@@ -98,6 +98,10 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
     allow_buy,
     allow_sell,
     user_multiplier,
+    effective_user_multiplier,
+    user_multiplier_updated_at,
+    user_multiplier_source,
+    user_multiplier_analysis,
     has_position,
     quantity,
     avg_cost,
@@ -121,7 +125,11 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
   const isUnderweight = allocationDelta > 0.5;
   const isOverweight = allocationDelta < -0.5;
 
-  const effectiveMultiplier = Math.max(0, Math.min(1, localMultiplier ?? user_multiplier ?? 0.5));
+  const storedMultiplier = Math.max(0, Math.min(1, localMultiplier ?? user_multiplier ?? 0.5));
+  const effectiveMultiplier = Math.max(0, Math.min(1, effective_user_multiplier ?? user_multiplier ?? 0.5));
+  const preferenceTimestamp = user_multiplier_updated_at
+    ? new Date(user_multiplier_updated_at).toLocaleString()
+    : null;
 
   return (
     <Box
@@ -271,14 +279,19 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
               disabled={isUpdating}
             />
 
-            {/* Conviction Multiplier */}
+            {/* Clara Preference */}
             <Box>
               <Group justify="space-between" mb={4}>
-                <Text size="xs" c="dimmed">Conviction</Text>
-                <Text size="xs" fw={500}>{effectiveMultiplier.toFixed(2)}</Text>
+                <Text size="xs" c="dimmed">Clara strategic preference</Text>
+                <Group gap="xs">
+                  <Text size="xs" fw={500}>{storedMultiplier.toFixed(2)}</Text>
+                  {Math.abs(storedMultiplier - effectiveMultiplier) > 0.005 && (
+                    <Text size="xs" c="dimmed">effective {effectiveMultiplier.toFixed(2)}</Text>
+                  )}
+                </Group>
               </Group>
               <Slider
-                value={effectiveMultiplier}
+                value={storedMultiplier}
                 onChange={setLocalMultiplier}
                 onChangeEnd={(v) => {
                   setLocalMultiplier(null);
@@ -295,6 +308,31 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
                 disabled={isUpdating}
                 size="xs"
               />
+              {(user_multiplier_analysis || user_multiplier_source || preferenceTimestamp) && (
+                <Box
+                  mt="sm"
+                  p="xs"
+                  style={{
+                    background: catppuccin.base,
+                    borderRadius: 'var(--mantine-radius-sm)',
+                    border: `1px solid ${catppuccin.surface0}`,
+                  }}
+                >
+                  <Group gap="xs" mb={user_multiplier_analysis ? 4 : 0}>
+                    {user_multiplier_source && (
+                      <Badge variant="light" color={user_multiplier_source === 'clara' ? 'violet' : 'gray'} size="xs">
+                        {user_multiplier_source}
+                      </Badge>
+                    )}
+                    {preferenceTimestamp && <Text size="xs" c="dimmed">{preferenceTimestamp}</Text>}
+                  </Group>
+                  {user_multiplier_analysis && (
+                    <Text size="xs" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                      {user_multiplier_analysis}
+                    </Text>
+                  )}
+                </Box>
+              )}
             </Box>
           </Stack>
         </Grid.Col>

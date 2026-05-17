@@ -1,8 +1,14 @@
 """Tests for securities API endpoints."""
 
+import os
+import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi import HTTPException
+
+from sentinel.database import Database
+from sentinel.settings import Settings
 
 
 @pytest.mark.asyncio
@@ -165,3 +171,169 @@ async def test_get_unified_view_as_of_uses_historical_price_not_live_position_pr
 
     assert result
     assert result[0]["current_price"] == 100.0
+
+
+@pytest.mark.asyncio
+async def test_get_unified_view_as_of_uses_as_of_allocation_diagnostics_not_live_cache():
+    """As-of allocation decomposition should come from the as-of planner run, not live cache."""
+    from sentinel.api.routers.securities import get_unified_view
+
+    mock_deps = _make_unified_mocks(one_security=True)
+    mock_deps.db.cache_get = AsyncMock(return_value='{"AAPL": "opportunity"}')
+    mock_deps.db.get_prices_bulk = AsyncMock(return_value={"AAPL": []})
+
+    mock_planner = MagicMock()
+    mock_planner.get_recommendations = AsyncMock(return_value=[])
+    mock_planner.calculate_ideal_portfolio = AsyncMock(return_value={"AAPL": 0.42})
+    mock_planner.get_current_allocations = AsyncMock(return_value={})
+    mock_planner.get_last_allocation_diagnostics.return_value = {
+        "sleeves": {"AAPL": "core"},
+        "allocation_decomposition": {
+            "global": {
+                "clara_freshness": 0.12,
+                "clara_strategic_sleeve": 0.08,
+                "sentinel_baseline_sleeve": 0.72,
+                "tactical_opportunity_sleeve": 0.20,
+            },
+            "symbols": {
+                "AAPL": {
+                    "allocation_sleeve": "core",
+                    "baseline_target_pct": 0.20,
+                    "clara_target_pct": 0.12,
+                    "opportunity_target_pct": 0.10,
+                    "final_target_pct": 0.42,
+                }
+            },
+        },
+    }
+
+    with patch("sentinel.planner.Planner", return_value=mock_planner):
+        result = await get_unified_view(mock_deps, period="1Y", as_of="2024-01-15")
+
+    mock_deps.db.cache_get.assert_not_awaited()
+    assert result[0]["sleeve"] == "core"
+    assert result[0]["clara_freshness"] == 0.12
+    assert result[0]["baseline_target_pct"] == 20.0
+    assert result[0]["final_target_pct"] == 42.0
+
+
+@pytest.mark.asyncio
+async def test_update_security_preference_persists_analysis_and_invalidates_planner_cache():
+    from sentinel.api.routers.securities import update_security_preference
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    db = Database(path)
+    await db.connect()
+    settings = Settings()
+    settings._db = db
+    await settings.init_defaults()
+    try:
+        await db.upsert_security("MOH.GR", name="Motor Oil Hellas", user_multiplier=0.5)
+        await db.cache_set("planner:ideal_portfolio", "{}", ttl_seconds=600)
+        deps = MagicMock()
+        deps.db = db
+        deps.settings = settings
+
+        result = await update_security_preference(
+            {
+                "symbol": "MOH.GR",
+                "user_multiplier": 0.02,
+                "analysis": "Too fossil-heavy for the long-term portfolio.",
+            },
+            deps,
+        )
+
+        stored = await db.get_security("MOH.GR")
+        assert stored is not None
+        assert result["symbol"] == "MOH.GR"
+        assert result["user_multiplier"] == 0.02
+        assert result["user_multiplier_source"] == "clara"
+        assert result["user_multiplier_analysis"] == "Too fossil-heavy for the long-term portfolio."
+        assert stored["user_multiplier"] == 0.02
+        assert stored["user_multiplier_source"] == "clara"
+        assert await settings.get("clara_preferences_updated_at") is not None
+        assert await db.cache_get("planner:ideal_portfolio") is None
+    finally:
+        await db.close()
+        db.remove_from_cache()
+        for ext in ("", "-wal", "-shm"):
+            target = path + ext
+            if os.path.exists(target):
+                os.unlink(target)
+
+
+@pytest.mark.asyncio
+async def test_manual_security_preference_does_not_refresh_global_clara_freshness():
+    from sentinel.api.routers.securities import update_security
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    db = Database(path)
+    await db.connect()
+    settings = Settings()
+    settings._db = db
+    await settings.init_defaults()
+    try:
+        await db.upsert_security("AMD.EU", name="AMD", user_multiplier=0.5)
+        await settings.set("clara_preferences_updated_at", "2026-01-01T00:00:00+00:00")
+        deps = MagicMock()
+        deps.db = db
+        deps.settings = settings
+
+        result = await update_security("AMD.EU", {"user_multiplier": 0.9}, deps)
+
+        stored = await db.get_security("AMD.EU")
+        assert stored is not None
+        assert result["user_multiplier"] == 0.9
+        assert stored["user_multiplier_source"] == "manual"
+        assert await settings.get("clara_preferences_updated_at") == "2026-01-01T00:00:00+00:00"
+    finally:
+        await db.close()
+        db.remove_from_cache()
+        for ext in ("", "-wal", "-shm"):
+            target = path + ext
+            if os.path.exists(target):
+                os.unlink(target)
+
+
+@pytest.mark.asyncio
+async def test_update_security_preference_rejects_missing_user_multiplier():
+    from sentinel.api.routers.securities import update_security_preference
+
+    deps = MagicMock()
+    deps.db.get_security = AsyncMock(return_value={"symbol": "MOH.GR"})
+
+    with pytest.raises(HTTPException) as exc:
+        await update_security_preference(
+            {
+                "symbol": "MOH.GR",
+                "user_multipler": 0.02,
+                "analysis": "typo field",
+            },
+            deps,
+        )
+
+    assert exc.value.status_code == 400
+    assert "user_multiplier" in exc.value.detail
+
+
+@pytest.mark.asyncio
+async def test_update_security_preference_rejects_non_finite_user_multiplier():
+    from sentinel.api.routers.securities import update_security_preference
+
+    deps = MagicMock()
+    deps.db.get_security = AsyncMock(return_value={"symbol": "MOH.GR"})
+
+    with pytest.raises(HTTPException) as exc:
+        await update_security_preference(
+            {
+                "symbol": "MOH.GR",
+                "user_multiplier": float("nan"),
+                "analysis": "NaN should not be accepted.",
+            },
+            deps,
+        )
+
+    assert exc.value.status_code == 400
+    assert "user_multiplier" in exc.value.detail

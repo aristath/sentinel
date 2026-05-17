@@ -48,7 +48,6 @@ DEFAULTS = {
     # Contrarian strategy
     "strategy_core_target_pct": 80,
     "strategy_opportunity_target_pct": 20,
-    "strategy_opportunity_target_max_pct": 30,
     "strategy_min_opp_score": 0.55,
     "strategy_entry_t1_dd": -0.10,
     "strategy_entry_t2_dd": -0.16,
@@ -71,6 +70,10 @@ DEFAULTS = {
     "strategy_max_funding_sells_per_cycle": 2,
     "strategy_max_funding_turnover_pct": 0.12,
     "strategy_funding_conviction_bias": 1.0,
+    # Clara strategic preferences
+    "clara_preference_weekly_fade": 0.90,
+    "clara_preference_strength": 5.0,
+    "clara_preferences_updated_at": None,
     # LED Display (Arduino UNO Q orbital visualization)
     "led_display_enabled": False,  # Disabled by default for dev environments
     "led_brightness": 200,  # Global LED brightness 0-255
@@ -80,6 +83,10 @@ DEFAULTS = {
     "r2_secret_key": "",
     "r2_bucket_name": "",
     "r2_backup_retention_days": 30,
+}
+
+REMOVED_SETTINGS = {
+    "strategy_opportunity_target_max_pct",
 }
 
 
@@ -94,6 +101,8 @@ class Settings:
 
     async def get(self, key: str, default: Any = None) -> Any:
         """Get a setting value."""
+        if key in REMOVED_SETTINGS:
+            return default
         value = await self._db.get_setting(key)
         if value is None:
             return default if default is not None else DEFAULTS.get(key)
@@ -106,12 +115,16 @@ class Settings:
     async def all(self) -> dict:
         """Get all settings with defaults applied."""
         stored = await self._db.get_all_settings()
+        for key in REMOVED_SETTINGS:
+            stored.pop(key, None)
         result = DEFAULTS.copy()
         result.update(stored)
         return result
 
     async def init_defaults(self) -> None:
         """Initialize default settings if not already set."""
+        for key in REMOVED_SETTINGS:
+            await self._db.delete_setting(key)
         for key, value in DEFAULTS.items():
             existing = await self._db.get_setting(key)
             if existing is None:

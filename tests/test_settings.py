@@ -14,7 +14,7 @@ import pytest
 import pytest_asyncio
 
 from sentinel.database import Database
-from sentinel.settings import DEFAULTS, Settings
+from sentinel.settings import DEFAULTS, REMOVED_SETTINGS, Settings
 
 
 @pytest_asyncio.fixture
@@ -84,7 +84,6 @@ class TestSettingsDefaults:
         strategy_keys = [
             "strategy_core_target_pct",
             "strategy_opportunity_target_pct",
-            "strategy_opportunity_target_max_pct",
             "strategy_min_opp_score",
             "strategy_entry_t1_dd",
             "strategy_entry_t2_dd",
@@ -104,6 +103,9 @@ class TestSettingsDefaults:
             "strategy_max_funding_sells_per_cycle",
             "strategy_max_funding_turnover_pct",
             "strategy_funding_conviction_bias",
+            "clara_preference_weekly_fade",
+            "clara_preference_strength",
+            "clara_preferences_updated_at",
         ]
         for key in strategy_keys:
             assert key in DEFAULTS, f"Missing strategy default: {key}"
@@ -229,6 +231,15 @@ class TestSettingsAll:
 
         assert result["trading_mode"] == "live"
 
+    @pytest.mark.asyncio
+    async def test_all_filters_removed_settings(self, temp_settings):
+        """Removed knobs should not leak through the settings API."""
+        await temp_settings.set("strategy_opportunity_target_max_pct", 30)
+
+        result = await temp_settings.all()
+
+        assert "strategy_opportunity_target_max_pct" not in result
+
 
 class TestSettingsInitDefaults:
     """Tests for initializing default settings."""
@@ -256,6 +267,16 @@ class TestSettingsInitDefaults:
         # Custom value should be preserved
         result = await temp_settings.get("trading_mode")
         assert result == "live"
+
+    @pytest.mark.asyncio
+    async def test_init_defaults_removes_retired_settings(self, temp_settings):
+        """init_defaults() deletes settings that no longer affect behavior."""
+        await temp_settings.set("strategy_opportunity_target_max_pct", 30)
+
+        await temp_settings.init_defaults()
+
+        for key in REMOVED_SETTINGS:
+            assert await temp_settings._db.get_setting(key) is None
 
 
 class TestSettingsValidation:
