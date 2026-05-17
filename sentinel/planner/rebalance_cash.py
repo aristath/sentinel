@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import inspect
 import math
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from sentinel.strategy import compute_contrarian_signal
@@ -286,35 +287,7 @@ async def apply_cash_constraint(
         if actual_eur < min_trade_value:
             continue
 
-        final_buys.append(
-            TradeRecommendation(
-                symbol=buy.symbol,
-                action="buy",
-                current_allocation=buy.current_allocation,
-                target_allocation=buy.target_allocation,
-                allocation_delta=buy.allocation_delta,
-                current_value_eur=buy.current_value_eur,
-                target_value_eur=buy.target_value_eur,
-                value_delta_eur=actual_eur,
-                quantity=rounded_qty,
-                price=buy.price,
-                currency=buy.currency,
-                lot_size=buy.lot_size,
-                contrarian_score=buy.contrarian_score,
-                priority=buy.priority,
-                reason=buy.reason,
-                reason_code=buy.reason_code,
-                sleeve=buy.sleeve,
-                lot_class=buy.lot_class,
-                ticket_pct=buy.ticket_pct,
-                core_floor_active=buy.core_floor_active,
-                effective_user_multiplier=buy.effective_user_multiplier,
-                clara_target_pct=buy.clara_target_pct,
-                baseline_target_pct=buy.baseline_target_pct,
-                opportunity_target_pct=buy.opportunity_target_pct,
-                clara_freshness=buy.clara_freshness,
-            )
-        )
+        final_buys.append(replace(buy, value_delta_eur=actual_eur, quantity=rounded_qty))
 
     final_buys.sort(key=lambda x: -x.priority)
 
@@ -352,33 +325,7 @@ async def apply_cash_constraint(
                 else:
                     new_eur = new_local_value
 
-                final_buys[i] = TradeRecommendation(
-                    symbol=buy.symbol,
-                    action="buy",
-                    current_allocation=buy.current_allocation,
-                    target_allocation=buy.target_allocation,
-                    allocation_delta=buy.allocation_delta,
-                    current_value_eur=buy.current_value_eur,
-                    target_value_eur=buy.target_value_eur,
-                    value_delta_eur=new_eur,
-                    quantity=new_qty,
-                    price=buy.price,
-                    currency=buy.currency,
-                    lot_size=buy.lot_size,
-                    contrarian_score=buy.contrarian_score,
-                    priority=buy.priority,
-                    reason=buy.reason,
-                    reason_code=buy.reason_code,
-                    sleeve=buy.sleeve,
-                    lot_class=buy.lot_class,
-                    ticket_pct=buy.ticket_pct,
-                    core_floor_active=buy.core_floor_active,
-                    effective_user_multiplier=buy.effective_user_multiplier,
-                    clara_target_pct=buy.clara_target_pct,
-                    baseline_target_pct=buy.baseline_target_pct,
-                    opportunity_target_pct=buy.opportunity_target_pct,
-                    clara_freshness=buy.clara_freshness,
-                )
+                final_buys[i] = replace(buy, value_delta_eur=new_eur, quantity=new_qty)
                 leftover -= one_lot_cost
                 added_any = True
 

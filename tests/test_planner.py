@@ -533,6 +533,56 @@ class TestContrarianSizing:
 
 class TestCashFundingRotation:
     @pytest.mark.asyncio
+    async def test_scaled_buy_preserves_recommendation_metadata(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(
+            side_effect=lambda key, default=None: {
+                "transaction_fee_fixed": 0.0,
+                "transaction_fee_percent": 0.0,
+            }.get(key, default)
+        )
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=250.0)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._generate_deficit_sells = AsyncMock(return_value=[])
+
+        buy = TradeRecommendation(
+            symbol="MEM",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.5,
+            allocation_delta=0.5,
+            current_value_eur=0.0,
+            target_value_eur=500.0,
+            value_delta_eur=500.0,
+            quantity=5,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.8,
+            priority=10.0,
+            reason="memory buy",
+            reason_code="entry_t1",
+            sleeve="opportunity",
+            memory_entry=True,
+        )
+
+        recs = await engine._apply_cash_constraint(
+            [buy],
+            min_trade_value=100.0,
+            symbol_convictions={"MEM": 0.9},
+        )
+
+        assert len(recs) == 1
+        assert recs[0].quantity == 2
+        assert recs[0].value_delta_eur == 200.0
+        assert recs[0].memory_entry is True
+        assert recs[0].reason_code == "entry_t1"
+
+    @pytest.mark.asyncio
     async def test_apply_cash_constraint_requests_funding_sells_when_budget_short(self):
         engine = RebalanceEngine(db=MagicMock())
         engine._settings = MagicMock()
