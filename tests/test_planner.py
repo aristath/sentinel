@@ -5,10 +5,35 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from sentinel.planner import Planner, RebalanceEngine
+from sentinel.planner.allocation import AllocationCalculator
 from sentinel.planner.analyzer import PortfolioAnalyzer
 from sentinel.planner.models import TradeRecommendation
 from sentinel.planner.rebalance_rules import desired_tranche_stage, get_forced_opportunity_exit
+from sentinel.settings import DEFAULTS
 from sentinel.strategy import recent_dd252_min
+
+
+class TestPlannerSettings:
+    @pytest.mark.asyncio
+    async def test_planner_component_fallbacks_use_settings_defaults(self):
+        settings = MagicMock()
+        settings.get = AsyncMock(side_effect=lambda _key, default=None: default)
+
+        allocation = AllocationCalculator(settings=settings)
+        allocation_config = await allocation._load_strategy_settings()
+
+        assert allocation_config["strategy_core_target_pct"] == DEFAULTS["strategy_core_target_pct"]
+        assert allocation_config["strategy_opportunity_target_pct"] == DEFAULTS["strategy_opportunity_target_pct"]
+        assert allocation_config["strategy_entry_memory_days"] == DEFAULTS["strategy_entry_memory_days"]
+
+        rebalance = RebalanceEngine(settings=settings)
+        runtime_config = await rebalance._load_runtime_settings()
+
+        assert runtime_config["strategy_memory_max_boost"] == DEFAULTS["strategy_memory_max_boost"]
+        assert (
+            runtime_config["strategy_max_opportunity_buys_per_cycle"]
+            == DEFAULTS["strategy_max_opportunity_buys_per_cycle"]
+        )
 
 
 class TestRebalanceSummary:

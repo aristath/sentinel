@@ -19,7 +19,7 @@ from sentinel.planner.preferences import (
     preference_tilt,
 )
 from sentinel.portfolio import Portfolio
-from sentinel.settings import Settings
+from sentinel.settings import DEFAULTS, Settings
 from sentinel.strategy import (
     compute_contrarian_signal,
     effective_opportunity_score,
@@ -114,18 +114,18 @@ class AllocationCalculator:
 
     async def _load_strategy_settings(self) -> dict[str, float]:
         keys_defaults: dict[str, float] = {
-            "diversification_impact_pct": 10,
-            "strategy_entry_t1_dd": -0.10,
-            "strategy_entry_t3_dd": -0.22,
-            "strategy_entry_memory_days": 42,
-            "strategy_memory_max_boost": 0.18,
-            "max_dividend_reinvestment_boost": 0.15,
-            "strategy_core_target_pct": 70,
-            "strategy_opportunity_target_pct": 30,
-            "strategy_min_opp_score": 0.55,
-            "max_position_pct": 35,
-            "clara_preference_weekly_fade": 0.90,
-            "clara_preference_strength": 5.0,
+            "diversification_impact_pct": DEFAULTS["diversification_impact_pct"],
+            "strategy_entry_t1_dd": DEFAULTS["strategy_entry_t1_dd"],
+            "strategy_entry_t3_dd": DEFAULTS["strategy_entry_t3_dd"],
+            "strategy_entry_memory_days": DEFAULTS["strategy_entry_memory_days"],
+            "strategy_memory_max_boost": DEFAULTS["strategy_memory_max_boost"],
+            "max_dividend_reinvestment_boost": DEFAULTS["max_dividend_reinvestment_boost"],
+            "strategy_core_target_pct": DEFAULTS["strategy_core_target_pct"],
+            "strategy_opportunity_target_pct": DEFAULTS["strategy_opportunity_target_pct"],
+            "strategy_min_opp_score": DEFAULTS["strategy_min_opp_score"],
+            "max_position_pct": DEFAULTS["max_position_pct"],
+            "clara_preference_weekly_fade": DEFAULTS["clara_preference_weekly_fade"],
+            "clara_preference_strength": DEFAULTS["clara_preference_strength"],
         }
         keys = list(keys_defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, keys_defaults[k]) for k in keys])

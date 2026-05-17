@@ -15,7 +15,7 @@ from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.portfolio import Portfolio
 from sentinel.price_validator import PriceValidator, check_trade_blocking
-from sentinel.settings import Settings
+from sentinel.settings import DEFAULTS, Settings
 from sentinel.strategy import (
     classify_lot_size,
     compute_contrarian_signal,
@@ -82,28 +82,28 @@ class RebalanceEngine:
 
     async def _load_runtime_settings(self) -> dict[str, float]:
         defaults: dict[str, float] = {
-            "transaction_fee_fixed": 2.0,
-            "transaction_fee_percent": 0.2,
-            "strategy_lot_standard_max_pct": 0.08,
-            "strategy_lot_coarse_max_pct": 0.30,
-            "strategy_min_opp_score": 0.55,
-            "strategy_entry_t1_dd": -0.10,
-            "strategy_entry_t2_dd": -0.16,
-            "strategy_entry_t3_dd": -0.22,
-            "strategy_entry_memory_days": 42,
-            "strategy_memory_max_boost": 0.18,
-            "max_position_pct": 25,
-            "strategy_opportunity_addon_threshold": 0.75,
-            "strategy_rotation_time_stop_days": 90,
-            "strategy_opportunity_cooloff_days": 7,
-            "strategy_core_cooloff_days": 21,
-            "strategy_same_side_cooloff_days": 15,
-            "strategy_core_new_min_score": 0.30,
-            "strategy_core_new_min_dip_score": 0.20,
-            "strategy_coarse_max_new_lots_per_cycle": 1,
-            "strategy_core_floor_pct": 0.05,
-            "strategy_max_opportunity_buys_per_cycle": 4,
-            "strategy_max_new_opportunity_buys_per_cycle": 2,
+            "transaction_fee_fixed": DEFAULTS["transaction_fee_fixed"],
+            "transaction_fee_percent": DEFAULTS["transaction_fee_percent"],
+            "strategy_lot_standard_max_pct": DEFAULTS["strategy_lot_standard_max_pct"],
+            "strategy_lot_coarse_max_pct": DEFAULTS["strategy_lot_coarse_max_pct"],
+            "strategy_min_opp_score": DEFAULTS["strategy_min_opp_score"],
+            "strategy_entry_t1_dd": DEFAULTS["strategy_entry_t1_dd"],
+            "strategy_entry_t2_dd": DEFAULTS["strategy_entry_t2_dd"],
+            "strategy_entry_t3_dd": DEFAULTS["strategy_entry_t3_dd"],
+            "strategy_entry_memory_days": DEFAULTS["strategy_entry_memory_days"],
+            "strategy_memory_max_boost": DEFAULTS["strategy_memory_max_boost"],
+            "max_position_pct": DEFAULTS["max_position_pct"],
+            "strategy_opportunity_addon_threshold": DEFAULTS["strategy_opportunity_addon_threshold"],
+            "strategy_rotation_time_stop_days": DEFAULTS["strategy_rotation_time_stop_days"],
+            "strategy_opportunity_cooloff_days": DEFAULTS["strategy_opportunity_cooloff_days"],
+            "strategy_core_cooloff_days": DEFAULTS["strategy_core_cooloff_days"],
+            "strategy_same_side_cooloff_days": DEFAULTS["strategy_same_side_cooloff_days"],
+            "strategy_core_new_min_score": DEFAULTS["strategy_core_new_min_score"],
+            "strategy_core_new_min_dip_score": DEFAULTS["strategy_core_new_min_dip_score"],
+            "strategy_coarse_max_new_lots_per_cycle": DEFAULTS["strategy_coarse_max_new_lots_per_cycle"],
+            "strategy_core_floor_pct": DEFAULTS["strategy_core_floor_pct"],
+            "strategy_max_opportunity_buys_per_cycle": DEFAULTS["strategy_max_opportunity_buys_per_cycle"],
+            "strategy_max_new_opportunity_buys_per_cycle": DEFAULTS["strategy_max_new_opportunity_buys_per_cycle"],
         }
         keys = list(defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, defaults[k]) for k in keys])
