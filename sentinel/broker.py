@@ -130,6 +130,132 @@ class Broker:
             logger.error(f"Failed to get quotes: {e}")
             return {}
 
+    async def get_user_stock_lists(self) -> dict | None:
+        """Get the user's saved ticker lists from TraderNet."""
+        if not self._api:
+            logger.warning("get_user_stock_lists: API not initialized")
+            return None
+
+        try:
+            response = self._api.authorized_request("getUserStockLists")
+        except Exception as e:
+            logger.error(f"Failed to get user stock lists: {e}")
+            return None
+
+        if not isinstance(response, dict):
+            logger.error(f"Unexpected getUserStockLists response type: {type(response).__name__}")
+            return None
+        if response.get("errMsg"):
+            logger.error(f"TraderNet getUserStockLists error: {response.get('errMsg')} (code={response.get('code')})")
+            return None
+        if not isinstance(response.get("userStockLists"), list):
+            logger.error("TraderNet getUserStockLists response missing userStockLists")
+            return None
+
+        return response
+
+    async def get_default_stock_list(self) -> dict | None:
+        """Return the broker's default saved ticker list."""
+        lists_payload = await self.get_user_stock_lists()
+        if not lists_payload:
+            return None
+
+        default_id = lists_payload.get("defaultId")
+        user_lists = lists_payload.get("userStockLists") or []
+        for item in user_lists:
+            if isinstance(item, dict) and item.get("id") == default_id:
+                return item
+
+        logger.error("TraderNet user stock lists response did not include defaultId=%s", default_id)
+        return None
+
+    async def add_stock_list_ticker(self, ticker: str) -> bool:
+        """Add a ticker to the default saved ticker list."""
+        if not self._api:
+            logger.warning("add_stock_list_ticker: API not initialized")
+            return False
+
+        stock_list = await self.get_default_stock_list()
+        if not stock_list:
+            return False
+
+        tickers = stock_list.get("tickers") or []
+        if ticker in tickers:
+            return True
+
+        list_id = stock_list.get("id")
+        if list_id is None:
+            logger.error("Cannot add %s to default stock list without list id", ticker)
+            return False
+
+        try:
+            response = self._api.authorized_request(
+                "addStockListTicker",
+                {"id": list_id, "ticker": ticker, "index": len(tickers)},
+            )
+        except Exception as e:
+            logger.error(f"Failed to add {ticker} to default stock list: {e}")
+            return False
+
+        updated_tickers = self._stock_list_response_tickers(response, list_id)
+        return updated_tickers is not None and ticker in updated_tickers
+
+    async def delete_stock_list_ticker(self, ticker: str) -> bool:
+        """Remove a ticker from the default saved ticker list."""
+        if not self._api:
+            logger.warning("delete_stock_list_ticker: API not initialized")
+            return False
+
+        stock_list = await self.get_default_stock_list()
+        if not stock_list:
+            return False
+
+        tickers = stock_list.get("tickers") or []
+        if ticker not in tickers:
+            return True
+
+        list_id = stock_list.get("id")
+        if list_id is None:
+            logger.error("Cannot delete %s from default stock list without list id", ticker)
+            return False
+
+        try:
+            response = self._api.authorized_request("deleteStockListTicker", {"id": list_id, "ticker": ticker})
+        except Exception as e:
+            logger.error(f"Failed to delete {ticker} from default stock list: {e}")
+            return False
+
+        updated_tickers = self._stock_list_response_tickers(response, list_id)
+        return updated_tickers is not None and ticker not in updated_tickers
+
+    def _stock_list_response_tickers(self, response: object, list_id: int) -> set[str] | None:
+        if not isinstance(response, dict):
+            logger.error("Unexpected stock-list mutation response type: %s", type(response).__name__)
+            return None
+        if response.get("errMsg"):
+            logger.error(
+                "TraderNet stock-list mutation error: %s (code=%s)",
+                response.get("errMsg"),
+                response.get("code"),
+            )
+            return None
+
+        user_lists = response.get("userStockLists")
+        if not isinstance(user_lists, list):
+            logger.error("TraderNet stock-list mutation response missing userStockLists")
+            return None
+
+        for item in user_lists:
+            if isinstance(item, dict) and item.get("id") == list_id:
+                tickers = item.get("tickers")
+                if not isinstance(tickers, list):
+                    logger.error("TraderNet stock-list mutation response has invalid tickers")
+                    return None
+                return {ticker for ticker in tickers if isinstance(ticker, str)}
+
+        logger.error("TraderNet stock-list mutation response missing list id %s", list_id)
+        return None
+
     async def get_historical_prices(self, symbol: str, days: int = 365) -> list[dict]:
         """Get historical prices for a symbol."""
         if not self._api:

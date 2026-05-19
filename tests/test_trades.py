@@ -654,6 +654,98 @@ class TestBrokerHasPendingOrders:
             assert await broker.has_pending_orders() is True
 
 
+class TestBrokerStockLists:
+    """Tests for TraderNet user stock-list wrappers."""
+
+    @pytest.mark.asyncio
+    async def test_delete_stock_list_ticker_returns_false_on_mutation_error(self):
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        mock_api = MagicMock()
+        mock_api.authorized_request.side_effect = [
+            {
+                "defaultId": 1,
+                "userStockLists": [{"id": 1, "name": "default", "tickers": ["AMD.EU"]}],
+            },
+            {"errMsg": "Bad json", "code": 2},
+        ]
+
+        with patch.object(broker, "_api", mock_api):
+            assert await broker.delete_stock_list_ticker("AMD.EU") is False
+
+    @pytest.mark.asyncio
+    async def test_delete_stock_list_ticker_returns_false_on_malformed_mutation_response(self):
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        mock_api = MagicMock()
+        mock_api.authorized_request.side_effect = [
+            {
+                "defaultId": 1,
+                "userStockLists": [{"id": 1, "name": "default", "tickers": ["AMD.EU"]}],
+            },
+            {"userStockLists": []},
+        ]
+
+        with patch.object(broker, "_api", mock_api):
+            assert await broker.delete_stock_list_ticker("AMD.EU") is False
+
+    @pytest.mark.asyncio
+    async def test_delete_stock_list_ticker_returns_false_on_malformed_default_list_item(self):
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        mock_api = MagicMock()
+        mock_api.authorized_request.return_value = {
+            "defaultId": 1,
+            "userStockLists": [None],
+        }
+
+        with patch.object(broker, "_api", mock_api):
+            assert await broker.delete_stock_list_ticker("AMD.EU") is False
+
+    @pytest.mark.asyncio
+    async def test_delete_stock_list_ticker_returns_false_on_malformed_mutation_list_item(self):
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        mock_api = MagicMock()
+        mock_api.authorized_request.side_effect = [
+            {
+                "defaultId": 1,
+                "userStockLists": [{"id": 1, "name": "default", "tickers": ["AMD.EU"]}],
+            },
+            {
+                "defaultId": 1,
+                "userStockLists": [None],
+            },
+        ]
+
+        with patch.object(broker, "_api", mock_api):
+            assert await broker.delete_stock_list_ticker("AMD.EU") is False
+
+    @pytest.mark.asyncio
+    async def test_delete_stock_list_ticker_returns_true_when_ticker_absent_after_mutation(self):
+        from sentinel.broker import Broker
+
+        broker = Broker()
+        mock_api = MagicMock()
+        mock_api.authorized_request.side_effect = [
+            {
+                "defaultId": 1,
+                "userStockLists": [{"id": 1, "name": "default", "tickers": ["AMD.EU"]}],
+            },
+            {
+                "defaultId": 1,
+                "userStockLists": [{"id": 1, "name": "default", "tickers": []}],
+            },
+        ]
+
+        with patch.object(broker, "_api", mock_api):
+            assert await broker.delete_stock_list_ticker("AMD.EU") is True
+
+
 class TestSyncTradesJob:
     """Tests for sync_trades job task."""
 
