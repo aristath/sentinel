@@ -564,8 +564,14 @@ async def trading_balance_fix(db, broker) -> None:
 
 async def planning_refresh(db, planner, broker) -> None:
     """Refresh trading plan by clearing caches and regenerating recommendations."""
+    from sentinel.universe import reconcile_universe_from_freedom24_default_list
+
     # Ensure planner sees manual broker trades before refreshing recommendations.
     await sync_trades(db, broker)
+
+    universe_result = await reconcile_universe_from_freedom24_default_list(db, broker)
+    if universe_result.changed:
+        logger.info("Freedom24 universe reconciliation changed state: %s", universe_result.as_dict())
 
     # Clear planner-related caches
     cleared = await db.cache_clear("planner:")

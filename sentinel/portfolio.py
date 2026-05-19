@@ -16,6 +16,7 @@ from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.security import Security
 from sentinel.settings import Settings
+from sentinel.universe import BROKER_POSITION_UNIVERSE_SOURCE, import_security_from_broker
 from sentinel.utils.positions import PositionCalculator
 from sentinel.utils.strings import parse_csv_field
 
@@ -47,9 +48,13 @@ class Portfolio:
 
             # Ensure security exists in database
             existing = await self._db.get_security(symbol)
-            if not existing:
-                await self._db.upsert_security(
-                    symbol, name=pos.get("name", symbol), currency=pos.get("currency", "EUR"), active=1
+            if not existing or int(existing.get("active", 0) or 0) == 0:
+                await import_security_from_broker(
+                    self._db,
+                    self._broker,
+                    symbol,
+                    fallback_info=pos,
+                    universe_source=BROKER_POSITION_UNIVERSE_SOURCE,
                 )
 
             # Update position

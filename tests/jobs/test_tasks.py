@@ -326,10 +326,19 @@ class TestPlanningRefresh:
         """Verify trades are synced before planner cache refresh."""
         from sentinel.jobs.tasks import planning_refresh
 
-        with patch("sentinel.jobs.tasks.sync_trades", new=AsyncMock()) as mock_sync_trades:
+        reconcile_result = MagicMock()
+        reconcile_result.changed = False
+        with (
+            patch("sentinel.jobs.tasks.sync_trades", new=AsyncMock()) as mock_sync_trades,
+            patch(
+                "sentinel.universe.reconcile_universe_from_freedom24_default_list",
+                new=AsyncMock(return_value=reconcile_result),
+            ) as mock_reconcile,
+        ):
             await planning_refresh(mock_db, mock_planner, mock_broker)
 
         mock_sync_trades.assert_awaited_once_with(mock_db, mock_broker)
+        mock_reconcile.assert_awaited_once_with(mock_db, mock_broker)
         mock_db.cache_clear.assert_awaited_once_with("planner:")
         mock_planner.calculate_ideal_portfolio.assert_awaited_once()
 

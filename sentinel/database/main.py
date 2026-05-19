@@ -709,6 +709,8 @@ class Database(BaseDatabase):
                 "ALTER TABLE securities ADD COLUMN user_multiplier_source TEXT NOT NULL DEFAULT 'migration'"
             ),
             "user_multiplier_analysis": "ALTER TABLE securities ADD COLUMN user_multiplier_analysis TEXT",
+            "universe_source": "ALTER TABLE securities ADD COLUMN universe_source TEXT NOT NULL DEFAULT 'migration'",
+            "universe_last_seen_at": "ALTER TABLE securities ADD COLUMN universe_last_seen_at TEXT",
         }
         for column, statement in migrations.items():
             if column not in security_columns:
@@ -752,6 +754,8 @@ CREATE TABLE IF NOT EXISTS securities (
     user_multiplier_updated_at TEXT,
     user_multiplier_source TEXT NOT NULL DEFAULT 'migration',
     user_multiplier_analysis TEXT,
+    universe_source TEXT NOT NULL DEFAULT 'migration',
+    universe_last_seen_at TEXT,
     aliases TEXT,  -- Comma-separated alternative names for news/sentiment search
     data TEXT,  -- Raw Tradernet API response (JSON)
     last_synced INTEGER,
