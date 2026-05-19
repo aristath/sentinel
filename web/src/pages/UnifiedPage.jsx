@@ -191,18 +191,12 @@ function UnifiedPage() {
 
   const deleteMutation = useMutation({
     mutationFn: ({ symbol, sellPosition }) => deleteSecurity(symbol, sellPosition),
-    onMutate: async ({ symbol }) => {
+    onMutate: async () => {
       // Cancel any outgoing refetches
       await queryClient.cancelQueries({ queryKey: ['unified', period] });
 
       // Snapshot the previous value
       const prev = queryClient.getQueryData(['unified', period]);
-
-      // Optimistically remove the security
-      queryClient.setQueryData(['unified', period], (old) => {
-        if (!old) return old;
-        return old.filter((sec) => sec.symbol !== symbol);
-      });
 
       return { prev };
     },

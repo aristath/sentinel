@@ -298,6 +298,114 @@ async def test_manual_security_preference_does_not_refresh_global_clara_freshnes
 
 
 @pytest.mark.asyncio
+async def test_update_security_ignores_direct_active_field_changes():
+    from sentinel.api.routers.securities import update_security
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    db = Database(path)
+    await db.connect()
+    settings = Settings()
+    settings._db = db
+    await settings.init_defaults()
+    try:
+        await db.upsert_security("AMD.EU", name="AMD", active=1, allow_buy=1, allow_sell=1)
+        deps = MagicMock()
+        deps.db = db
+        deps.settings = settings
+
+        result = await update_security("AMD.EU", {"active": 0}, deps)
+
+        stored = await db.get_security("AMD.EU")
+        assert stored is not None
+        assert result["active"] == 1
+        assert int(stored["active"]) == 1
+    finally:
+        await db.close()
+        db.remove_from_cache()
+        for ext in ("", "-wal", "-shm"):
+            target = path + ext
+            if os.path.exists(target):
+                os.unlink(target)
+
+
+@pytest.mark.asyncio
+async def test_delete_security_with_position_disables_buys_without_selling():
+    from sentinel.api.routers.securities import delete_security
+    from sentinel.universe import BROKER_POSITION_UNIVERSE_SOURCE
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    db = Database(path)
+    await db.connect()
+    try:
+        await db.upsert_security("AMD.EU", name="AMD", active=1, allow_buy=1, allow_sell=1)
+        await db.upsert_position("AMD.EU", quantity=3, current_price=150.0, currency="EUR")
+        deps = MagicMock()
+        deps.db = db
+        deps.broker.delete_stock_list_ticker = AsyncMock(return_value=True)
+        deps.broker.sell = AsyncMock()
+
+        result = await delete_security("AMD.EU", deps, sell_position=True)
+
+        row = await db.get_security("AMD.EU")
+        position = await db.get_position("AMD.EU")
+        assert result["status"] == "ok"
+        assert result["sold_quantity"] == 0
+        assert result["retained_position"] is True
+        assert row is not None
+        assert int(row["active"]) == 1
+        assert int(row["allow_buy"]) == 0
+        assert int(row["allow_sell"]) == 1
+        assert row["universe_source"] == BROKER_POSITION_UNIVERSE_SOURCE
+        assert position is not None
+        assert position["quantity"] == 3
+        deps.broker.delete_stock_list_ticker.assert_awaited_once_with("AMD.EU")
+        deps.broker.sell.assert_not_awaited()
+    finally:
+        await db.close()
+        db.remove_from_cache()
+        for ext in ("", "-wal", "-shm"):
+            target = path + ext
+            if os.path.exists(target):
+                os.unlink(target)
+
+
+@pytest.mark.asyncio
+async def test_delete_security_does_not_change_local_state_when_favorites_mutation_fails():
+    from sentinel.api.routers.securities import delete_security
+
+    fd, path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    db = Database(path)
+    await db.connect()
+    try:
+        await db.upsert_security("AMD.EU", name="AMD", active=1, allow_buy=1, allow_sell=1)
+        deps = MagicMock()
+        deps.db = db
+        deps.broker.delete_stock_list_ticker = AsyncMock(return_value=False)
+        deps.broker.sell = AsyncMock()
+
+        with pytest.raises(HTTPException) as exc:
+            await delete_security("AMD.EU", deps)
+
+        row = await db.get_security("AMD.EU")
+        assert exc.value.status_code == 502
+        assert row is not None
+        assert int(row["active"]) == 1
+        assert int(row["allow_buy"]) == 1
+        assert int(row["allow_sell"]) == 1
+        deps.broker.sell.assert_not_awaited()
+    finally:
+        await db.close()
+        db.remove_from_cache()
+        for ext in ("", "-wal", "-shm"):
+            target = path + ext
+            if os.path.exists(target):
+                os.unlink(target)
+
+
+@pytest.mark.asyncio
 async def test_update_security_preference_rejects_missing_user_multiplier():
     from sentinel.api.routers.securities import update_security_preference
 

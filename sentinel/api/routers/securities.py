@@ -12,6 +12,7 @@ from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.planner.preferences import preference_snapshot, utc_now_iso
 from sentinel.security import Security
 from sentinel.strategy import classify_lot_size, compute_contrarian_signal
+from sentinel.universe import apply_removed_from_favorites_rule, import_security_from_broker
 
 router = APIRouter(prefix="/securities", tags=["securities"])
 prices_router = APIRouter(prefix="/prices", tags=["prices"])
@@ -79,6 +80,8 @@ async def _security_payload(symbol: str, deps: CommonDependencies) -> dict[str, 
         "user_multiplier_updated_at": sec.get("user_multiplier_updated_at"),
         "user_multiplier_source": sec.get("user_multiplier_source"),
         "user_multiplier_analysis": sec.get("user_multiplier_analysis"),
+        "universe_source": sec.get("universe_source"),
+        "universe_last_seen_at": sec.get("universe_last_seen_at"),
         "quantity": position.get("quantity", 0) if position else 0,
         "current_price": position.get("current_price") if position else None,
     }
@@ -99,8 +102,9 @@ async def add_security(
 ) -> dict[str, Any]:
     """Add a new security to the universe."""
     symbol = data.get("symbol")
-    if not symbol:
+    if not isinstance(symbol, str) or not symbol.strip():
         raise HTTPException(status_code=400, detail="Symbol is required")
+    symbol = symbol.strip()
 
     # Check if already exists
     existing = await deps.db.get_security(symbol)
@@ -115,44 +119,25 @@ async def add_security(
     if not info:
         raise HTTPException(status_code=404, detail="Security not found in broker")
 
-    # Extract relevant data
-    name = info.get("short_name", info.get("name", symbol))
-    currency = info.get("currency", info.get("curr", "EUR"))
-    market_id = str(info.get("mrkt", {}).get("mkt_id", ""))
-    min_lot = int(float(info.get("lot", 1)))
+    if not await deps.broker.add_stock_list_ticker(symbol):
+        raise HTTPException(status_code=502, detail="Failed to add security to Freedom24 Favorites")
 
-    # Save to database
-    was_reenabled = bool(existing and int(existing.get("active", 0) or 0) == 0)
-    await deps.db.upsert_security(
+    imported = await import_security_from_broker(
+        deps.db,
+        deps.broker,
         symbol,
-        name=name,
-        currency=currency,
-        market_id=market_id,
-        min_lot=min_lot,
-        active=True,
-        # If this is a previously-inactive security, restore trading flags by default.
-        # If the caller explicitly provided allow_buy/allow_sell, honor those.
-        allow_buy=data.get("allow_buy", 1 if was_reenabled else existing.get("allow_buy", 1) if existing else 1),
-        allow_sell=data.get("allow_sell", 1 if was_reenabled else existing.get("allow_sell", 1) if existing else 1),
+        info=info,
         geography=data.get("geography", ""),
         industry=data.get("industry", ""),
     )
-
-    # Save full metadata
-    await deps.db.update_security_metadata(symbol, info, market_id)
-
-    # Fetch and save 20 years of historical prices (TraderNet getHloc has no documented max range)
-    prices_data = await deps.broker.get_historical_prices_bulk([symbol], years=20)
-    prices = prices_data.get(symbol, [])
-    if prices:
-        await deps.db.save_prices(symbol, prices)
+    await _invalidate_planner_cache(deps)
 
     return {
         "status": "ok",
         "symbol": symbol,
-        "name": name,
-        "prices_count": len(prices),
-        "re_enabled": was_reenabled,
+        "name": imported.name,
+        "prices_count": imported.prices_count,
+        "re_enabled": imported.re_enabled,
     }
 
 
@@ -160,40 +145,27 @@ async def add_security(
 async def delete_security(
     symbol: str,
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
-    sell_position: bool = True,
+    sell_position: bool = False,
 ) -> dict[str, Any]:
-    """Remove a security from the active universe. Optionally sells any existing position first.
+    """Remove a security from Favorites and apply safe local universe rules.
 
-    Soft-deletes: marks the security as inactive (active=0, allow_buy=0, allow_sell=0).
-    Deletes current-state data (positions) but preserves historical prices and trades.
+    If a position exists, the security remains active with buys disabled and sells allowed.
+    If no position exists, it is soft-deleted from the active universe.
     """
+    _ = sell_position  # Kept for old clients; universe removal no longer triggers selling.
+
     # Check if exists
     existing = await deps.db.get_security(symbol)
     if not existing:
         raise HTTPException(status_code=404, detail="Security not found")
 
-    # Check for position
-    position = await deps.db.get_position(symbol)
-    quantity = position.get("quantity", 0) if position else 0
+    if not await deps.broker.delete_stock_list_ticker(symbol):
+        raise HTTPException(status_code=502, detail="Failed to remove security from Freedom24 Favorites")
 
-    # Sell position if requested and exists
-    if sell_position and quantity > 0:
-        security = Security(symbol)
-        await security.load()
-        order_id = await security.sell(quantity)
-        if not order_id:
-            raise HTTPException(status_code=400, detail="Failed to sell position")
+    result = await apply_removed_from_favorites_rule(deps.db, symbol)
+    await _invalidate_planner_cache(deps)
 
-    # Soft-delete: mark inactive and disable trading, but preserve historical data
-    await deps.db.conn.execute(
-        "UPDATE securities SET active = 0, allow_buy = 0, allow_sell = 0 WHERE symbol = ?",
-        (symbol,),
-    )
-    # Delete current-state data (not historical)
-    await deps.db.conn.execute("DELETE FROM positions WHERE symbol = ?", (symbol,))
-    await deps.db.conn.commit()
-
-    return {"status": "ok", "sold_quantity": quantity if sell_position else 0}
+    return {"status": "ok", "sold_quantity": 0, **result}
 
 
 @router.get("/aliases")
@@ -285,7 +257,6 @@ async def update_security(
         "aliases",
         "allow_buy",
         "allow_sell",
-        "active",
     ]
     updates = {k: v for k, v in data.items() if k in allowed_fields}
 

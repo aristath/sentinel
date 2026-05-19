@@ -16,7 +16,7 @@ export function DeleteSecurityModal({ opened, onClose, onDelete, security }) {
     setError(null);
 
     try {
-      await onDelete(security.symbol, hasPosition);
+      await onDelete(security.symbol, false);
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to delete security');
@@ -38,7 +38,7 @@ export function DeleteSecurityModal({ opened, onClose, onDelete, security }) {
               You have a position of {security.quantity} shares (~EUR {positionValue.toFixed(0)})
             </Text>
             <Text size="sm" mt="xs" className="delete-security-modal__position-note">
-              This position will be sold immediately before removing the security.
+              This position will stay managed, but new buys will be disabled.
             </Text>
           </Alert>
         )}
@@ -54,7 +54,7 @@ export function DeleteSecurityModal({ opened, onClose, onDelete, security }) {
             Cancel
           </Button>
           <Button color="red" onClick={handleDelete} loading={isLoading} className={`delete-security-modal__confirm-btn ${hasPosition ? 'delete-security-modal__confirm-btn--with-position' : ''}`}>
-            {hasPosition ? 'Sell & Delete' : 'Delete'}
+            Remove
           </Button>
         </Group>
       </Stack>

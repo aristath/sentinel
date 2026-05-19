@@ -55,7 +55,7 @@ export const addSecurity = (symbol, geography = [], industry = []) =>
       industry: Array.isArray(industry) ? industry.join(', ') : industry,
     }),
   });
-export const deleteSecurity = (symbol, sellPosition = true) =>
+export const deleteSecurity = (symbol, sellPosition = false) =>
   request(`/securities/${encodeURIComponent(symbol)}?sell_position=${sellPosition}`, {
     method: 'DELETE',
   });

@@ -38,6 +38,7 @@ async def deps():
         }
     )
     broker.get_historical_prices_bulk = AsyncMock(return_value={"TEST.EU": []})
+    broker.add_stock_list_ticker = AsyncMock(return_value=True)
 
     yield CommonDependencies(
         db=db,
