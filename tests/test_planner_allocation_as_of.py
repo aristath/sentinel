@@ -80,8 +80,9 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
     db.cache_set = AsyncMock()
     db.get_all_securities = AsyncMock(
         return_value=[
+            # Both rated above neutral so both participate in the ideal.
             {"symbol": "AMD", "user_multiplier": 0.9, "user_multiplier_updated_at": now_iso},
-            {"symbol": "BASE", "user_multiplier": 0.5, "user_multiplier_updated_at": now_iso},
+            {"symbol": "BASE", "user_multiplier": 0.6, "user_multiplier_updated_at": now_iso},
         ]
     )
     db.get_prices = AsyncMock(return_value=_flat_prices())
@@ -100,47 +101,94 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
     diagnostics = calculator.get_last_signal_bundle()
 
     assert allocations["AMD"] > allocations["BASE"]
-    assert allocations["AMD"] > 0.8
+    # AMD's slider (0.9) is much higher than BASE's (0.6), so AMD's Clara share
+    # dominates. With a non-trivial competitor in the pool it won't reach 100%,
+    # but it should clearly exceed 70% of the total ideal.
+    assert allocations["AMD"] > 0.7
     assert diagnostics is not None
     assert diagnostics["allocation_decomposition"]["symbols"]["AMD"]["final_target_pct"] == allocations["AMD"]
 
 
 @pytest.mark.asyncio
-async def test_low_preference_security_gets_less_than_neutral_peers():
-    """A security with a very low user_multiplier (avoid signal) should get a
-    meaningfully smaller allocation than its neutral peers — the Clara half
-    of the score is suppressed. It doesn't drop to zero because the algo
-    half still contributes its share, but the gap should be visible."""
+async def test_low_preference_security_is_excluded_from_ideal():
+    """A security at or below the neutral 0.5 slider has expressed no buy
+    interest. It should drop completely out of the ideal — even though the
+    algo's contrarian signal might rank it highly — so capital flows to the
+    actively-endorsed names."""
     now_iso = datetime.now(timezone.utc).isoformat()
     db = MagicMock()
     db.cache_get = AsyncMock(return_value=None)
     db.cache_set = AsyncMock()
     db.get_all_securities = AsyncMock(
         return_value=[
-            {
-                "symbol": f"S{i}",
-                "user_multiplier": 0.02 if i == 0 else 0.5,
-                "user_multiplier_updated_at": now_iso,
-            }
-            for i in range(6)
+            # One excluded (0.02 — strong avoid), one excluded at neutral (0.5),
+            # rest endorsed.
+            {"symbol": "AVOID", "user_multiplier": 0.02, "user_multiplier_updated_at": now_iso},
+            {"symbol": "NEUTRAL", "user_multiplier": 0.5, "user_multiplier_updated_at": now_iso},
+            {"symbol": "ENDORSED1", "user_multiplier": 0.6, "user_multiplier_updated_at": now_iso},
+            {"symbol": "ENDORSED2", "user_multiplier": 0.7, "user_multiplier_updated_at": now_iso},
+            {"symbol": "ENDORSED3", "user_multiplier": 0.8, "user_multiplier_updated_at": now_iso},
         ]
     )
     db.get_prices = AsyncMock(return_value=_flat_prices())
     db.get_uninvested_dividends = AsyncMock(return_value={})
 
-    portfolio = MagicMock()
-
     calculator = AllocationCalculator(
         db=db,
-        portfolio=portfolio,
+        portfolio=MagicMock(),
         currency=MagicMock(),
         settings=_allocation_settings(),
     )
 
     allocations = await calculator.calculate_ideal_portfolio()
 
-    # S0 should get less than any of the neutral peers.
-    for i in range(1, 6):
-        assert allocations["S0"] < allocations[f"S{i}"], f"S0 should be smaller than S{i}"
-    # And the gap should be substantial — at least 2× smaller.
-    assert allocations["S0"] * 2 < allocations["S1"]
+    # AVOID (0.02) and NEUTRAL (0.5) excluded entirely.
+    assert allocations.get("AVOID", 0.0) == 0.0
+    assert allocations.get("NEUTRAL", 0.0) == 0.0
+    # The endorsed securities split the full 100%.
+    endorsed_total = allocations["ENDORSED1"] + allocations["ENDORSED2"] + allocations["ENDORSED3"]
+    assert abs(endorsed_total - 1.0) < 1e-6
+    # Higher slider gets bigger share.
+    assert allocations["ENDORSED3"] > allocations["ENDORSED2"] > allocations["ENDORSED1"]
+
+
+@pytest.mark.asyncio
+async def test_strong_algo_signal_cannot_resurrect_excluded_security():
+    """Regression: even a security with a dominant contrarian signal — the
+    kind that previously let INTC@0.45 beat OPAP@0.55 — must stay at zero in
+    the ideal once its slider is at/below neutral. The exclusion gates BOTH
+    the Clara half AND the algo half."""
+    now_iso = datetime.now(timezone.utc).isoformat()
+    db = MagicMock()
+    db.cache_get = AsyncMock(return_value=None)
+    db.cache_set = AsyncMock()
+    db.get_all_securities = AsyncMock(
+        return_value=[
+            {"symbol": "ALGO_FAV", "user_multiplier": 0.45, "user_multiplier_updated_at": now_iso},
+            {"symbol": "USER_FAV", "user_multiplier": 0.55, "user_multiplier_updated_at": now_iso},
+        ]
+    )
+
+    def _prices_for(symbol, **_):
+        if symbol == "ALGO_FAV":
+            # Steep recent drawdown -> high core_rank/opp_score
+            base = [100.0] * 200 + [60.0] * 30 + [55.0] * 30
+            return [{"date": f"2025-{(i // 30) + 1:02d}-{(i % 30) + 1:02d}", "close": p} for i, p in enumerate(base)]
+        return _flat_prices()
+
+    db.get_prices = AsyncMock(side_effect=_prices_for)
+    db.get_uninvested_dividends = AsyncMock(return_value={})
+
+    calculator = AllocationCalculator(
+        db=db,
+        portfolio=MagicMock(),
+        currency=MagicMock(),
+        settings=_allocation_settings(),
+    )
+
+    allocations = await calculator.calculate_ideal_portfolio()
+
+    # ALGO_FAV is dialed down — even with a dominant contrarian signal it must
+    # not appear in the ideal. USER_FAV should get the full 100%.
+    assert allocations.get("ALGO_FAV", 0.0) == 0.0
+    assert abs(allocations.get("USER_FAV", 0.0) - 1.0) < 1e-6

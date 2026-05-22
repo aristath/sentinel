@@ -23,6 +23,14 @@ from sentinel.strategy import (
     recent_dd252_min,
 )
 
+# A security only participates in the ideal allocation if the user has actively
+# endorsed it — slider strictly above neutral. Anything at or below 0.5 is
+# treated as "no buy interest"; capital that would have flowed there is freed
+# up for the securities the user actually wants. Note: the rebalance engine
+# still sees these securities (so it can plan sells / maintenance on legacy
+# holdings) — this threshold only affects what the *ideal* portfolio holds.
+IDEAL_QUALIFYING_THRESHOLD = 0.5
+
 
 class AllocationCalculator:
     """Calculates ideal portfolio allocations based on scores and constraints."""
@@ -168,6 +176,15 @@ class AllocationCalculator:
             symbol_signals[symbol] = signal
             rebalance_signals[symbol] = dict(signal)
 
+            # Securities the user hasn't explicitly endorsed (slider at or below
+            # the neutral 0.5 mark) are excluded from the ideal entirely — both
+            # the Clara half AND the algo half. The user has said "no" or "no
+            # opinion"; capital flows to the securities they actually want.
+            # Signals stay populated above so the rebalance engine can still
+            # plan sells / maintenance on legacy holdings.
+            if stored_preference <= IDEAL_QUALIFYING_THRESHOLD:
+                continue
+
             baseline_weight = max(0.001, float(signal.get("core_rank", 0.0) or 0.0) + 1.0)
             baseline_raw_weights[symbol] = baseline_weight
             # `clara_raw_weights` is the security's pure-slider voice. No
@@ -201,6 +218,11 @@ class AllocationCalculator:
         opportunity_target /= total_sleeves
 
         for symbol, signal in symbol_signals.items():
+            # Skip securities the user excluded above — opportunity sleeve must
+            # also respect "no buy interest" or it'd reintroduce the very rows
+            # the threshold filters out.
+            if symbol not in baseline_raw_weights:
+                continue
             opp_score = float(signal.get("opp_score", 0.0) or 0.0)
             if opp_score < min_opp_score:
                 continue
