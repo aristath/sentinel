@@ -127,9 +127,6 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
   const isOverweight = allocationDelta < -0.5;
 
   const storedMultiplier = Math.max(0, Math.min(1, localMultiplier ?? user_multiplier ?? 0.5));
-  // The stored value IS the effective value now (decay applied to storage),
-  // so the visualization just mirrors `storedMultiplier`.
-  const effectiveMultiplier = storedMultiplier;
   const preferenceTimestamp = user_multiplier_updated_at
     ? new Date(user_multiplier_updated_at).toLocaleString()
     : null;
@@ -271,12 +268,7 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
             <Box>
               <Group justify="space-between" mb={4}>
                 <Text size="xs" c="dimmed">Clara strategic preference</Text>
-                <Group gap="xs">
-                  <Text size="xs" fw={500}>{storedMultiplier.toFixed(2)}</Text>
-                  {Math.abs(storedMultiplier - effectiveMultiplier) > 0.005 && (
-                    <Text size="xs" c="dimmed">effective {effectiveMultiplier.toFixed(2)}</Text>
-                  )}
-                </Group>
+                <Text size="xs" fw={500}>{storedMultiplier.toFixed(2)}</Text>
               </Group>
               <Slider
                 value={storedMultiplier}

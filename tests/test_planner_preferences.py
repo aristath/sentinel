@@ -75,7 +75,7 @@ def test_non_finite_preference_values_fall_back_to_neutral():
     assert preference_tilt(float("nan"), 5.0) == 1.0
 
 
-def test_low_effective_preference_gets_small_strategic_tilt():
+def test_low_preference_gets_small_strategic_tilt():
     assert preference_tilt(0.02, 5.0) < 0.1
 
 
