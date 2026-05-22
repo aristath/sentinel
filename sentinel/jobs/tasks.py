@@ -110,6 +110,11 @@ async def sync_metadata(db, broker) -> None:
 
             meta = await broker.get_security_metadata(symbol)
             if meta is not None:
+                # Always persist `instr_kind_c` — broker is the source of truth
+                # for asset-class grouping (stock vs ETF vs depositary receipt).
+                if meta.get("instr_kind_c") is not None:
+                    update_kwargs["instr_kind_c"] = meta["instr_kind_c"]
+
                 if meta.get("instr_kind_c") == ETF_INSTR_KIND_C:
                     update_kwargs["geography"] = ""
                     update_kwargs["industry"] = ""

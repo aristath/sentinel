@@ -306,6 +306,46 @@ class TestUpdateSecurityMetadata:
         assert row["geography"] == "US"
         assert row["industry"] == "Tech"
 
+    @pytest.mark.asyncio
+    async def test_writes_instr_kind_c(self, temp_db):
+        """`instr_kind_c` is a first-class column so future grouping queries
+        don't need to parse JSON. The sync job persists it from the broker."""
+        await temp_db.upsert_security("VWCE.EU", name="ETF")
+
+        await temp_db.update_security_metadata("VWCE.EU", {"lot": 1}, instr_kind_c=7)
+
+        row = await temp_db.get_security("VWCE.EU")
+        assert row["instr_kind_c"] == 7
+
+    @pytest.mark.asyncio
+    async def test_omitting_instr_kind_c_leaves_existing_value_alone(self, temp_db):
+        await temp_db.upsert_security("AAPL.US", instr_kind_c=1)
+
+        await temp_db.update_security_metadata("AAPL.US", {"lot": 1})
+
+        row = await temp_db.get_security("AAPL.US")
+        assert row["instr_kind_c"] == 1
+
+    @pytest.mark.asyncio
+    async def test_migration_backfills_instr_kind_c_from_quote_data(self, temp_db):
+        """The migration that adds `instr_kind_c` should backfill from the
+        already-cached `quote_data.kind` so the column is useful immediately
+        on a live deploy without waiting for the next metadata sync.
+        """
+
+        # Simulate a row that was synced before the column existed: it has
+        # `kind` in the cached quotes blob but NULL in the column.
+        await temp_db.upsert_security("VWCE.EU")
+        await temp_db.update_quote_data("VWCE.EU", {"kind": 7, "ltp": 100.0})
+        # Force the column back to NULL to simulate the pre-migration state.
+        await temp_db.conn.execute("UPDATE securities SET instr_kind_c = NULL WHERE symbol = ?", ("VWCE.EU",))
+        await temp_db.conn.commit()
+
+        await temp_db._migrate_schema()
+
+        row = await temp_db.get_security("VWCE.EU")
+        assert row["instr_kind_c"] == 7
+
 
 class TestPositions:
     """Tests for position operations."""

@@ -338,13 +338,19 @@ class Database(BaseDatabase):
         *,
         geography: str | None = None,
         industry: str | None = None,
+        instr_kind_c: int | None = None,
     ) -> None:
         """Persist Tradernet metadata for one security.
 
-        `geography` and `industry` are optional broker-sourced fields written
-        when the metadata sync job passes them; omitting them leaves the existing
-        column values untouched. Pass empty strings to deliberately blank them
-        (e.g. for ETFs that we want to keep out of Clara's macro buckets).
+        First-class columns (`geography`, `industry`, `instr_kind_c`, `market_id`,
+        `min_lot`) are written when the caller passes a non-None value; otherwise
+        the existing value is left untouched. Pass an empty string for the text
+        fields to deliberately blank them (e.g. ETFs whose UCITS-domicile country
+        we don't want polluting Clara's macro buckets).
+
+        The full broker payload lands in `data` verbatim — that's the durable
+        store for any field we don't yet have a column for. Promote a field to
+        a column when we start querying or grouping by it.
         """
         import json
         import time
@@ -367,6 +373,10 @@ class Database(BaseDatabase):
         if industry is not None:
             updates.append("industry = ?")
             params.append(industry)
+
+        if instr_kind_c is not None:
+            updates.append("instr_kind_c = ?")
+            params.append(int(instr_kind_c))
 
         params.append(symbol)
         await self.conn.execute(f"UPDATE securities SET {', '.join(updates)} WHERE symbol = ?", params)  # noqa: S608
@@ -777,6 +787,11 @@ class Database(BaseDatabase):
             "user_multiplier_analysis": "ALTER TABLE securities ADD COLUMN user_multiplier_analysis TEXT",
             "universe_source": "ALTER TABLE securities ADD COLUMN universe_source TEXT NOT NULL DEFAULT 'migration'",
             "universe_last_seen_at": "ALTER TABLE securities ADD COLUMN universe_last_seen_at TEXT",
+            # Tradernet instrument-kind code (1 = stock, 7 = ETF, 10 = depositary
+            # receipt, …). Persisted as a first-class column so any future query
+            # that groups or filters by asset class can do so in SQL without
+            # parsing JSON. Populated by `sync_metadata`.
+            "instr_kind_c": "ALTER TABLE securities ADD COLUMN instr_kind_c INTEGER",
         }
         for column, statement in migrations.items():
             if column not in security_columns:
@@ -794,6 +809,21 @@ class Database(BaseDatabase):
                WHERE user_multiplier_source IS NULL OR user_multiplier_source = ''""",
         )
         await self.conn.execute("DELETE FROM settings WHERE key = 'strategy_opportunity_target_max_pct'")
+
+        # One-shot backfill for the freshly-added `instr_kind_c` column. The
+        # cached quote payload already carries the kind code (`kind` field) for
+        # any security that's been quote-synced even once, so we can populate
+        # the new column immediately without waiting for sync_metadata to run.
+        # NULL rows stay NULL — the next sync covers them naturally.
+        await self.conn.execute(
+            """
+            UPDATE securities
+               SET instr_kind_c = CAST(json_extract(quote_data, '$.kind') AS INTEGER)
+             WHERE instr_kind_c IS NULL
+               AND quote_data IS NOT NULL
+               AND json_extract(quote_data, '$.kind') IS NOT NULL
+            """
+        )
         await self.conn.commit()
 
 
@@ -810,8 +840,9 @@ CREATE TABLE IF NOT EXISTS securities (
     name TEXT,
     currency TEXT DEFAULT 'EUR',
     market_id TEXT,  -- Tradernet market ID (from security_info.mrkt.mkt_id)
-    geography TEXT,
-    industry TEXT,
+    geography TEXT,  -- ISO-2 country of risk (from attributes.CntryOfRisk)
+    industry TEXT,   -- TRBC industry name (from sector_code)
+    instr_kind_c INTEGER,  -- Tradernet kind code (1=stock, 7=ETF, 10=DR, ...)
     min_lot INTEGER DEFAULT 1,
     active INTEGER DEFAULT 1,
     allow_buy INTEGER DEFAULT 1,

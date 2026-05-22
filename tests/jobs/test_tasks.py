@@ -192,6 +192,17 @@ class TestSyncMetadata:
             assert kwargs["industry"] == "Computers, Phones & Household Electronics"
 
     @pytest.mark.asyncio
+    async def test_sync_metadata_persists_instr_kind_c(self, mock_db, mock_broker):
+        """instr_kind_c is a first-class column so asset-class grouping works
+        in SQL without parsing JSON. The sync job must persist it."""
+        from sentinel.jobs.tasks import sync_metadata
+
+        await sync_metadata(mock_db, mock_broker)
+
+        for call in mock_db.update_security_metadata.await_args_list:
+            assert call.kwargs["instr_kind_c"] == 1  # from mock_broker
+
+    @pytest.mark.asyncio
     async def test_sync_metadata_blanks_geo_industry_for_etfs(self, mock_db, mock_broker):
         """ETFs (instr_kind_c == 7) get blank geography/industry so they fall out of macro buckets."""
         from sentinel.jobs.tasks import sync_metadata
