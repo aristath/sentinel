@@ -264,6 +264,49 @@ class TestSecurities:
         assert updated["user_multiplier_updated_at"] == "2026-05-17T00:00:00+00:00"
 
 
+class TestUpdateSecurityMetadata:
+    """Tests for `update_security_metadata` — broker-driven sync writes."""
+
+    @pytest.mark.asyncio
+    async def test_writes_geography_and_industry_when_provided(self, temp_db):
+        await temp_db.upsert_security("TEST.EU", name="x")
+
+        await temp_db.update_security_metadata(
+            "TEST.EU",
+            {"lot": 1, "currency": "EUR"},
+            market_id="30000000005",
+            geography="DE",
+            industry="Aerospace & Defense",
+        )
+
+        row = await temp_db.get_security("TEST.EU")
+        assert row["geography"] == "DE"
+        assert row["industry"] == "Aerospace & Defense"
+        assert row["market_id"] == "30000000005"
+
+    @pytest.mark.asyncio
+    async def test_blank_values_overwrite_to_empty(self, temp_db):
+        """Sync explicitly blanks geography/industry for ETFs and KASE rows."""
+        await temp_db.upsert_security("ETF.EU", geography="OLD", industry="OLD")
+
+        await temp_db.update_security_metadata("ETF.EU", {"lot": 1}, geography="", industry="")
+
+        row = await temp_db.get_security("ETF.EU")
+        assert row["geography"] == ""
+        assert row["industry"] == ""
+
+    @pytest.mark.asyncio
+    async def test_omitting_geography_industry_leaves_them_unchanged(self, temp_db):
+        """Backwards behavior: callers that don't pass them don't touch them."""
+        await temp_db.upsert_security("TEST.EU", geography="US", industry="Tech")
+
+        await temp_db.update_security_metadata("TEST.EU", {"lot": 1})
+
+        row = await temp_db.get_security("TEST.EU")
+        assert row["geography"] == "US"
+        assert row["industry"] == "Tech"
+
+
 class TestPositions:
     """Tests for position operations."""
 
@@ -541,49 +584,6 @@ class TestCashBalances:
         assert result["GBP"] == -2.11
 
 
-class TestAllocationTargets:
-    """Tests for allocation target operations."""
-
-    @pytest.mark.asyncio
-    async def test_get_allocation_targets_empty(self, temp_db):
-        """Empty database returns empty list."""
-        result = await temp_db.get_allocation_targets()
-        assert result == []
-
-    @pytest.mark.asyncio
-    async def test_set_and_get_allocation_target(self, temp_db):
-        """Set and get allocation target."""
-        await temp_db.set_allocation_target("geography", "Europe", 0.6)
-
-        result = await temp_db.get_allocation_targets("geography")
-        assert len(result) == 1
-        assert result[0]["type"] == "geography"
-        assert result[0]["name"] == "Europe"
-        assert result[0]["weight"] == 0.6
-
-    @pytest.mark.asyncio
-    async def test_get_allocation_targets_by_type(self, temp_db):
-        """Get allocation targets filtered by type."""
-        await temp_db.set_allocation_target("geography", "Europe", 0.6)
-        await temp_db.set_allocation_target("geography", "USA", 0.4)
-        await temp_db.set_allocation_target("industry", "Technology", 0.5)
-
-        geo_result = await temp_db.get_allocation_targets("geography")
-        ind_result = await temp_db.get_allocation_targets("industry")
-
-        assert len(geo_result) == 2
-        assert len(ind_result) == 1
-
-    @pytest.mark.asyncio
-    async def test_delete_allocation_target(self, temp_db):
-        """Delete an allocation target."""
-        await temp_db.set_allocation_target("geography", "Europe", 0.6)
-        await temp_db.delete_allocation_target("geography", "Europe")
-
-        result = await temp_db.get_allocation_targets()
-        assert len(result) == 0
-
-
 class TestSchemaInitialization:
     """Tests for schema initialization."""
 
@@ -599,7 +599,6 @@ class TestSchemaInitialization:
             "positions",
             "prices",
             "trades",
-            "allocation_targets",
             "cash_balances",
         ]
 
@@ -635,16 +634,6 @@ class TestCategories:
         assert "Technology" in result["industries"]
         assert "Asia" not in result["geographies"]
         assert "Energy" not in result["industries"]
-
-    @pytest.mark.asyncio
-    async def test_get_categories_csv_splitting(self, temp_db):
-        """get_categories() splits CSV geography/industry values into separate entries."""
-        await temp_db.upsert_security("SYM1", geography="US, Europe", industry="Technology", active=1)
-
-        result = await temp_db.get_categories()
-
-        assert "US" in result["geographies"]
-        assert "Europe" in result["geographies"]
 
 
 class TestBuildTradesWhere:

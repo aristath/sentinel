@@ -33,13 +33,7 @@ class UniverseReconciliationResult:
 
     @property
     def changed(self) -> bool:
-        return bool(
-            self.imported
-            or self.reactivated
-            or self.removed
-            or self.buy_disabled
-            or self.buy_reenabled
-        )
+        return bool(self.imported or self.reactivated or self.removed or self.buy_disabled or self.buy_reenabled)
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -123,13 +117,17 @@ async def import_security_from_broker(
     *,
     info: dict | None = None,
     fallback_info: dict | None = None,
-    geography: str | None = None,
-    industry: str | None = None,
     universe_source: str = FREEDOM24_UNIVERSE_SOURCE,
     universe_last_seen_at: str | None = None,
     fetch_prices: bool = True,
 ) -> SecurityImportResult:
-    """Add or reactivate one broker security without disturbing analysis history."""
+    """Add or reactivate one broker security without disturbing analysis history.
+
+    `geography` and `industry` are populated by the `sync_metadata` job from
+    Tradernet's `attributes.CntryOfRisk` and `sector_code`. Imports do not take
+    those values from callers — they're left to the sync job and stay blank for
+    brand-new rows until the next metadata refresh.
+    """
     symbol = symbol.strip()
     existing = await db.get_security(symbol)
 
@@ -174,14 +172,10 @@ async def import_security_from_broker(
     }
     if universe_last_seen_at is not None:
         security_data["universe_last_seen_at"] = universe_last_seen_at
-    if geography is None:
-        security_data["geography"] = (existing or {}).get("geography") or ""
-    else:
-        security_data["geography"] = geography
-    if industry is None:
-        security_data["industry"] = (existing or {}).get("industry") or ""
-    else:
-        security_data["industry"] = industry
+    # Preserve existing geography/industry on re-enable; new rows start blank
+    # and get filled by the next sync_metadata run.
+    security_data["geography"] = (existing or {}).get("geography") or ""
+    security_data["industry"] = (existing or {}).get("industry") or ""
 
     await db.upsert_security(symbol, **security_data)
     if broker_info:

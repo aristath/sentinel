@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import inspect
 import json
 import logging
@@ -64,18 +65,68 @@ async def sync_quotes(db, broker) -> None:
         logger.warning("No quotes returned from broker")
 
 
+ETF_INSTR_KIND_C = 7  # Tradernet instr_kind_c for ETF/fund units.
+# `getAllSecurities` rate-limits at roughly 30 calls/min as a burst budget,
+# but in practice sustained calls hit 429 above ~12/min. Live testing at
+# 4s/iter still produced ~6 back-offs per 63-symbol run; 6s/iter (10 calls/min)
+# stays cleanly under the threshold and produces zero rate-limit hits in
+# steady state. Total run time is ~6–8 min for ~60 active symbols, well
+# within the daily sync window.
+SYNC_METADATA_PACING_S = 6.0
+
+
 async def sync_metadata(db, broker) -> None:
-    """Sync security metadata from broker."""
+    """Refresh every active security's broker metadata, including country-of-risk
+    and TRBC industry.
+
+    Two broker calls per symbol: `get_security_info` (thin payload — market, lot,
+    currency, used by the existing UPDATE) and the new `get_security_metadata`
+    (parses `attributes.CntryOfRisk` and `sector_code` from `getAllSecurities`).
+
+    ETFs (`instr_kind_c == 7`) are intentionally blanked — Tradernet stamps them
+    with their domicile country (typically IE) and `"Equity ETFs"`, neither of
+    which reflects the actual underlying exposure. Clara's macro-bucket task
+    filters rows with empty geo+industry, so blanking keeps ETFs out of the
+    macro-analysis loop.
+
+    Resilience: for non-ETFs, empty values from the broker are treated as
+    "I don't know" and the existing DB value is left untouched. This means a
+    Tradernet shape change (e.g. renamed `CntryOfRisk`) silently degrades to
+    "no updates" rather than wiping every classification. ETF blanking is the
+    one exception — `instr_kind_c == 7` is a positive signal we trust.
+    """
     securities = await db.get_all_securities(active_only=True)
     synced = 0
 
     for sec in securities:
         symbol = sec["symbol"]
-        info = await broker.get_security_info(symbol)
-        if info:
+        try:
+            info = await broker.get_security_info(symbol)
+            if not info:
+                continue
+
             market_id = str(info.get("mrkt", {}).get("mkt_id", ""))
-            await db.update_security_metadata(symbol, info, market_id)
+            update_kwargs: dict = {}
+
+            meta = await broker.get_security_metadata(symbol)
+            if meta is not None:
+                if meta.get("instr_kind_c") == ETF_INSTR_KIND_C:
+                    update_kwargs["geography"] = ""
+                    update_kwargs["industry"] = ""
+                else:
+                    geo = meta.get("geography") or ""
+                    ind = meta.get("industry") or ""
+                    if geo:
+                        update_kwargs["geography"] = geo
+                    if ind:
+                        update_kwargs["industry"] = ind
+
+            await db.update_security_metadata(symbol, info, market_id, **update_kwargs)
             synced += 1
+        except Exception as e:
+            logger.warning(f"sync_metadata: skipping {symbol} due to error: {e}")
+        finally:
+            await asyncio.sleep(SYNC_METADATA_PACING_S)
 
     logger.info(f"Metadata sync complete: {synced} securities")
 
@@ -303,15 +354,6 @@ async def snapshot_backfill(db, currency) -> None:
 
     service = SnapshotService(db, currency)
     await service.backfill()
-
-
-async def aggregate_compute(db) -> None:
-    """Compute aggregate price series for country and industry groups."""
-    from sentinel.aggregates import AggregateComputer
-
-    computer = AggregateComputer(db)
-    result = await computer.compute_all_aggregates()
-    logger.info(f"Aggregate computation complete: {result['country']} country, {result['industry']} industry")
 
 
 # Trading Tasks

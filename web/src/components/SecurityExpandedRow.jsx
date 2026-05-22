@@ -24,10 +24,16 @@ import { IconTrash, IconAlertTriangle, IconStarFilled } from '@tabler/icons-reac
 import { SecurityChart } from './SecurityChart';
 import { catppuccin } from '../theme';
 import { formatCurrencySymbol as formatCurrency, formatPercent } from '../utils/formatting';
-import { useCategories, parseCommaSeparated } from '../hooks/useCategories';
 import { usePortfolioStructure } from '../hooks/usePortfolioStructure';
 
 const REPLACEMENTS_TO_SHOW = 5;
+
+// Aliases is stored as a comma-separated string but TagsInput wants an array.
+function parseCommaSeparated(value) {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  return value.split(',').map((v) => v.trim()).filter(Boolean);
+}
 
 /**
  * Find the replacePositions[] entry for a given symbol (case-insensitive).
@@ -65,7 +71,6 @@ function ReplacementRow({ candidate }) {
 export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [localMultiplier, setLocalMultiplier] = useState(null);
-  const { data: categories } = useCategories();
   const { data: structure } = usePortfolioStructure();
   const replacement = findReplacementEntry(structure, security?.symbol);
 
@@ -75,9 +80,6 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
   }, [security?.symbol]);
 
   if (!security) return null;
-
-  const geographyOptions = categories?.geographies || [];
-  const industryOptions = categories?.industries || [];
 
   const handleUpdate = async (field, value) => {
     setIsUpdating(true);
@@ -247,27 +249,12 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
               </Tooltip>
             </Group>
 
-            {/* Geography & Industry */}
-            <TagsInput
-              label="Geography"
-              size="xs"
-              data={geographyOptions}
-              value={parseCommaSeparated(geography)}
-              onChange={(v) => handleUpdate('geography', v)}
-              placeholder="Select or type"
-              clearable
-              disabled={isUpdating}
-            />
-            <TagsInput
-              label="Industry"
-              size="xs"
-              data={industryOptions}
-              value={parseCommaSeparated(industry)}
-              onChange={(v) => handleUpdate('industry', v)}
-              placeholder="Select or type"
-              clearable
-              disabled={isUpdating}
-            />
+            {/* Geography & Industry are broker-sourced (auto-filled on metadata sync). */}
+            <Text size="xs" c="dimmed">
+              Geography: <Text component="span" size="xs" fw={500}>{geography || '—'}</Text>
+              {'  ·  '}
+              Industry: <Text component="span" size="xs" fw={500}>{industry || '—'}</Text>
+            </Text>
 
             <TagsInput
               label="Aliases"

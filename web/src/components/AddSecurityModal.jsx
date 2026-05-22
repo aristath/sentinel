@@ -1,17 +1,10 @@
 import { useState } from 'react';
-import { Modal, TextInput, TagsInput, Stack, Button, Group, Text } from '@mantine/core';
-import { useCategories } from '../hooks/useCategories';
+import { Modal, TextInput, Stack, Button, Group, Text } from '@mantine/core';
 
 export function AddSecurityModal({ opened, onClose, onAdd }) {
   const [symbol, setSymbol] = useState('');
-  const [geography, setGeography] = useState([]);
-  const [industry, setIndustry] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-
-  const { data: categories } = useCategories();
-  const geographyOptions = categories?.geographies || [];
-  const industryOptions = categories?.industries || [];
 
   const handleSubmit = async () => {
     if (!symbol.trim()) {
@@ -23,10 +16,8 @@ export function AddSecurityModal({ opened, onClose, onAdd }) {
     setError(null);
 
     try {
-      await onAdd(symbol.trim().toUpperCase(), geography, industry);
+      await onAdd(symbol.trim().toUpperCase());
       setSymbol('');
-      setGeography([]);
-      setIndustry([]);
       onClose();
     } catch (err) {
       setError(err.message || 'Failed to add security');
@@ -37,8 +28,6 @@ export function AddSecurityModal({ opened, onClose, onAdd }) {
 
   const handleClose = () => {
     setSymbol('');
-    setGeography([]);
-    setIndustry([]);
     setError(null);
     onClose();
   };
@@ -48,37 +37,13 @@ export function AddSecurityModal({ opened, onClose, onAdd }) {
       <Stack gap="md" className="add-security-modal__content">
         <TextInput
           label="Symbol"
-          description="Tradernet symbol (e.g., AAPL.US, ASML.EU)"
+          description="Tradernet symbol (e.g., AAPL.US, ASML.EU). Geography and industry are auto-filled by the next metadata sync."
           placeholder="Enter symbol"
           value={symbol}
           onChange={(e) => setSymbol(e.target.value)}
           error={error && !symbol.trim() ? 'Symbol is required' : null}
           disabled={isLoading}
           className="add-security-modal__field add-security-modal__field--symbol"
-        />
-
-        <TagsInput
-          label="Geography"
-          description="Markets/regions (type to add new)"
-          placeholder="Select or type geography"
-          data={geographyOptions}
-          value={geography}
-          onChange={setGeography}
-          clearable
-          disabled={isLoading}
-          className="add-security-modal__field add-security-modal__field--geography"
-        />
-
-        <TagsInput
-          label="Industry"
-          description="Industry sectors (type to add new)"
-          placeholder="Select or type industry"
-          data={industryOptions}
-          value={industry}
-          onChange={setIndustry}
-          clearable
-          disabled={isLoading}
-          className="add-security-modal__field add-security-modal__field--industry"
         />
 
         {error && (

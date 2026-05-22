@@ -6,7 +6,6 @@ Usage:
     await portfolio.sync()  # Sync with broker
     value = await portfolio.total_value()
     positions = await portfolio.positions()
-    allocations = await portfolio.get_allocations()
 """
 
 from typing import Optional
@@ -18,7 +17,6 @@ from sentinel.security import Security
 from sentinel.settings import Settings
 from sentinel.universe import BROKER_POSITION_UNIVERSE_SOURCE, import_security_from_broker
 from sentinel.utils.positions import PositionCalculator
-from sentinel.utils.strings import parse_csv_field
 
 
 class Portfolio:
@@ -160,137 +158,3 @@ class Portfolio:
             await sec.load()
             result.append(sec)
         return result
-
-    # -------------------------------------------------------------------------
-    # Allocations
-    # -------------------------------------------------------------------------
-
-    async def get_allocations(self) -> dict:
-        """
-        Get current allocation percentages (all values converted to EUR).
-        Returns: {'by_security': {...}, 'by_geography': {...}, 'by_industry': {...}}
-        """
-        positions = await self._db.get_all_positions()
-        total = await self.total_value()
-
-        if total == 0:
-            return {"by_security": {}, "by_geography": {}, "by_industry": {}}
-
-        by_security = {}
-        by_geography = {}
-        by_industry = {}
-
-        # Batch-fetch all securities to avoid N+1 queries
-        all_securities = await self._db.get_all_securities(active_only=False)
-        securities_map = {s["symbol"]: s for s in all_securities}
-
-        pos_calc = PositionCalculator(currency_converter=self._currency)
-        for pos in positions:
-            symbol = pos["symbol"]
-            qty = pos.get("quantity", 0)
-            price = pos.get("current_price", 0)
-            pos_currency = pos.get("currency", "EUR")
-
-            value_eur = await pos_calc.calculate_value_eur(qty, price, pos_currency)
-            pct = value_eur / total
-
-            by_security[symbol] = pct
-
-            # Get security metadata
-            sec_data = securities_map.get(symbol)
-            if sec_data:
-                # Handle comma-separated geographies (split equally)
-                geos = parse_csv_field(sec_data.get("geography"))
-                if not geos:
-                    geos = ["Unknown"]
-                geo_weight = pct / len(geos)
-                for geo in geos:
-                    by_geography[geo] = by_geography.get(geo, 0) + geo_weight
-
-                # Handle comma-separated industries (split equally)
-                inds = parse_csv_field(sec_data.get("industry"))
-                if not inds:
-                    inds = ["Unknown"]
-                ind_weight = pct / len(inds)
-                for ind in inds:
-                    by_industry[ind] = by_industry.get(ind, 0) + ind_weight
-
-        return {
-            "by_security": by_security,
-            "by_geography": by_geography,
-            "by_industry": by_industry,
-        }
-
-    async def get_target_allocations(self) -> dict:
-        """
-        Get target allocation percentages (from weights).
-        Returns: {'geography': {...}, 'industry': {...}}
-        """
-        targets = await self._db.get_allocation_targets()
-
-        # Group by type
-        geo_weights = {}
-        ind_weights = {}
-        for t in targets:
-            if t["type"] == "geography":
-                geo_weights[t["name"]] = t["weight"]
-            elif t["type"] == "industry":
-                ind_weights[t["name"]] = t["weight"]
-
-        # Normalize to percentages
-        def normalize(weights: dict) -> dict:
-            total = sum(weights.values())
-            if total == 0:
-                return {}
-            return {k: v / total for k, v in weights.items()}
-
-        return {
-            "geography": normalize(geo_weights),
-            "industry": normalize(ind_weights),
-        }
-
-    # -------------------------------------------------------------------------
-    # Analysis
-    # -------------------------------------------------------------------------
-
-    async def deviation_from_targets(self) -> dict:
-        """
-        Calculate how much current allocation deviates from targets.
-        Positive = overweight, Negative = underweight.
-        """
-        current = await self.get_allocations()
-        targets = await self.get_target_allocations()
-
-        geo_dev = {}
-        for name, target_pct in targets["geography"].items():
-            current_pct = current["by_geography"].get(name, 0)
-            geo_dev[name] = current_pct - target_pct
-
-        ind_dev = {}
-        for name, target_pct in targets["industry"].items():
-            current_pct = current["by_industry"].get(name, 0)
-            ind_dev[name] = current_pct - target_pct
-
-        return {
-            "geography": geo_dev,
-            "industry": ind_dev,
-        }
-
-    async def needs_rebalance(self) -> bool:
-        """Check if portfolio needs rebalancing based on threshold."""
-        threshold_pct = await self._settings.get("rebalance_threshold_pct", 5)
-        try:
-            threshold = max(0.0, float(threshold_pct)) / 100.0
-        except (TypeError, ValueError):
-            threshold = 0.05
-        deviations = await self.deviation_from_targets()
-
-        for dev in deviations["geography"].values():
-            if abs(dev) > threshold:
-                return True
-
-        for dev in deviations["industry"].values():
-            if abs(dev) > threshold:
-                return True
-
-        return False

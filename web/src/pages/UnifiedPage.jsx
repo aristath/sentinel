@@ -26,7 +26,6 @@ import { SecurityTable } from '../components/SecurityTable';
 import { AddSecurityModal } from '../components/AddSecurityModal';
 import { DeleteSecurityModal } from '../components/DeleteSecurityModal';
 import { SecurityAllocationCard } from '../components/SecurityAllocationCard';
-import { AllocationRadarCard } from '../components/AllocationRadarCard';
 import { JobsCard } from '../components/JobsCard';
 import { MarketsOpenCard } from '../components/MarketsOpenCard';
 import { PortfolioPnLChart } from '../components/PortfolioPnLChart';
@@ -183,7 +182,7 @@ function UnifiedPage() {
 
 
   const addMutation = useMutation({
-    mutationFn: ({ symbol, geography, industry }) => addSecurity(symbol, geography, industry),
+    mutationFn: ({ symbol }) => addSecurity(symbol),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['unified'] });
     },
@@ -215,8 +214,8 @@ function UnifiedPage() {
     await updateMutation.mutateAsync({ symbol, data });
   };
 
-  const handleAdd = async (symbol, geography, industry) => {
-    await addMutation.mutateAsync({ symbol, geography, industry });
+  const handleAdd = async (symbol) => {
+    await addMutation.mutateAsync({ symbol });
   };
 
   const handleDeleteClick = (security) => {
@@ -321,16 +320,6 @@ function UnifiedPage() {
           <MarketsOpenCard />
           <PortfolioRatingCard />
           <SecurityAllocationCard
-            securities={securities}
-            recommendations={recommendations}
-          />
-          <AllocationRadarCard
-            type="geography"
-            securities={securities}
-            recommendations={recommendations}
-          />
-          <AllocationRadarCard
-            type="industry"
             securities={securities}
             recommendations={recommendations}
           />

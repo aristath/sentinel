@@ -38,7 +38,6 @@ PLANNER_SETTING_KEYS = {
     "min_trade_value",
     "transaction_fee_fixed",
     "transaction_fee_percent",
-    "diversification_impact_pct",
     "max_dividend_reinvestment_boost",
     "strategy_lot_standard_max_pct",
     "strategy_lot_coarse_max_pct",

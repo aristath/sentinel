@@ -97,6 +97,63 @@ async def test_add_security_reenables_inactive_security(deps: CommonDependencies
 
 
 @pytest.mark.asyncio
+async def test_add_security_ignores_client_supplied_geography_industry(deps: CommonDependencies):
+    """Geography and industry are broker-sourced now; client values are dropped silently."""
+    deps.broker.get_security_metadata = AsyncMock(
+        return_value={
+            "geography": "US",
+            "industry": "Computers, Phones & Household Electronics",
+            "instr_kind_c": 1,
+            "mkt_short_code": "FIX",
+            "name": "Test Corp",
+        }
+    )
+
+    client = _build_client(deps)
+    resp = client.post(
+        "/api/securities",
+        json={
+            "symbol": "TEST.EU",
+            "geography": "Atlantis",  # bogus value that must NOT persist
+            "industry": "Sandcastles",
+        },
+    )
+    assert resp.status_code == 200
+
+    row = await deps.db.get_security("TEST.EU")
+    assert row["geography"] != "Atlantis"
+    assert row["industry"] != "Sandcastles"
+
+
+@pytest.mark.asyncio
+async def test_put_security_drops_geography_industry_from_request(deps: CommonDependencies):
+    """PUT no longer accepts geography/industry — silently dropped from the whitelist."""
+    await deps.db.upsert_security(
+        "TEST.EU",
+        name="Test Corp",
+        geography="US",
+        industry="Software & IT Services",
+        active=1,
+    )
+
+    client = _build_client(deps)
+    resp = client.put(
+        "/api/securities/TEST.EU",
+        json={
+            "geography": "ZZ",
+            "industry": "Garbage",
+            "allow_buy": 0,  # this one IS still accepted
+        },
+    )
+    assert resp.status_code == 200
+
+    row = await deps.db.get_security("TEST.EU")
+    assert row["geography"] == "US"  # unchanged
+    assert row["industry"] == "Software & IT Services"  # unchanged
+    assert int(row["allow_buy"]) == 0  # accepted field still works
+
+
+@pytest.mark.asyncio
 async def test_add_security_errors_when_already_active(deps: CommonDependencies):
     await deps.db.upsert_security(
         "TEST.EU",

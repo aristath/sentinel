@@ -16,7 +16,6 @@ from fastapi.staticfiles import StaticFiles
 
 # API routers
 from sentinel.api.routers import (
-    allocation_router,
     backtest_router,
     backup_router,
     cache_router,
@@ -34,7 +33,6 @@ from sentinel.api.routers import (
     set_scheduler,
     settings_router,
     system_router,
-    targets_router,
     trading_actions_router,
     trading_router,
     unified_router,
@@ -192,8 +190,6 @@ app.add_middleware(
 app.include_router(settings_router, prefix="/api")
 app.include_router(led_router, prefix="/api")
 app.include_router(portfolio_router, prefix="/api")
-app.include_router(targets_router, prefix="/api")
-app.include_router(allocation_router, prefix="/api")
 app.include_router(securities_router, prefix="/api")
 app.include_router(prices_router, prefix="/api")
 app.include_router(unified_router, prefix="/api")

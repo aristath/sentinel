@@ -267,24 +267,6 @@ class Database(BaseDatabase):
     # record_trade() removed - trades are now synced from broker via upsert_trade()
 
     # -------------------------------------------------------------------------
-    # Allocation Targets (extended methods beyond BaseDatabase)
-    # -------------------------------------------------------------------------
-
-    async def set_allocation_target(self, target_type: str, name: str, weight: float) -> None:
-        """Set an allocation target weight."""
-        await self.conn.execute(
-            """INSERT OR REPLACE INTO allocation_targets (type, name, weight)
-               VALUES (?, ?, ?)""",
-            (target_type, name, weight),
-        )
-        await self.conn.commit()
-
-    async def delete_allocation_target(self, target_type: str, name: str) -> None:
-        """Delete an allocation target."""
-        await self.conn.execute("DELETE FROM allocation_targets WHERE type = ? AND name = ?", (target_type, name))
-        await self.conn.commit()
-
-    # -------------------------------------------------------------------------
     # Cache
     # -------------------------------------------------------------------------
 
@@ -348,8 +330,22 @@ class Database(BaseDatabase):
     # Security Metadata
     # -------------------------------------------------------------------------
 
-    async def update_security_metadata(self, symbol: str, data: dict, market_id: str | None = None) -> None:
-        """Update security with raw Tradernet metadata."""
+    async def update_security_metadata(
+        self,
+        symbol: str,
+        data: dict,
+        market_id: str | None = None,
+        *,
+        geography: str | None = None,
+        industry: str | None = None,
+    ) -> None:
+        """Persist Tradernet metadata for one security.
+
+        `geography` and `industry` are optional broker-sourced fields written
+        when the metadata sync job passes them; omitting them leaves the existing
+        column values untouched. Pass empty strings to deliberately blank them
+        (e.g. for ETFs that we want to keep out of Clara's macro buckets).
+        """
         import json
         import time
 
@@ -360,10 +356,17 @@ class Database(BaseDatabase):
             updates.append("market_id = ?")
             params.append(market_id)
 
-        # Extract useful fields from data
         if "lot" in data:
             updates.append("min_lot = ?")
             params.append(int(float(data["lot"])))
+
+        if geography is not None:
+            updates.append("geography = ?")
+            params.append(geography)
+
+        if industry is not None:
+            updates.append("industry = ?")
+            params.append(industry)
 
         params.append(symbol)
         await self.conn.execute(f"UPDATE securities SET {', '.join(updates)} WHERE symbol = ?", params)  # noqa: S608
@@ -374,42 +377,25 @@ class Database(BaseDatabase):
     # -------------------------------------------------------------------------
 
     async def get_categories(self, active_only: bool = False) -> dict:
-        """Get distinct geographies and industries from securities.
-
-        Values may be stored as comma-separated strings, so we split and dedupe.
-
-        Args:
-            active_only: If True, only include active securities
-
-        Returns:
-            Dict with 'geographies' and 'industries' lists
+        """Return the distinct country-of-risk and TRBC industry values currently
+        held in the securities universe — both populated by the metadata sync from
+        Tradernet's `attributes.CntryOfRisk` and `sector_code`.
         """
-        geographies = set()
-        industries = set()
-
         active_filter = " AND active = 1" if active_only else ""
 
         cursor = await self.conn.execute(
             f"SELECT DISTINCT geography FROM securities WHERE geography IS NOT NULL AND geography != ''{active_filter}"  # noqa: S608
         )
-        for row in await cursor.fetchall():
-            for val in row["geography"].split(","):
-                val = val.strip()
-                if val:
-                    geographies.add(val)
+        geographies = sorted({row["geography"].strip() for row in await cursor.fetchall() if row["geography"].strip()})
 
         cursor = await self.conn.execute(
             f"SELECT DISTINCT industry FROM securities WHERE industry IS NOT NULL AND industry != ''{active_filter}"  # noqa: S608
         )
-        for row in await cursor.fetchall():
-            for val in row["industry"].split(","):
-                val = val.strip()
-                if val:
-                    industries.add(val)
+        industries = sorted({row["industry"].strip() for row in await cursor.fetchall() if row["industry"].strip()})
 
         return {
-            "geographies": sorted(geographies),
-            "industries": sorted(industries),
+            "geographies": geographies,
+            "industries": industries,
         }
 
     # -------------------------------------------------------------------------
@@ -645,7 +631,6 @@ class Database(BaseDatabase):
                 "sync",
                 "Maintain portfolio snapshots by filling missing dates",
             ),
-            ("aggregate:compute", 1440, 1440, 1, "sync", "Compute aggregate price series"),
             ("trading:check_markets", 30, 30, 2, "trading", "Check which markets are open"),
             ("trading:execute", 30, 15, 2, "trading", "Execute pending trade recommendations"),
             ("trading:rebalance", 60, 60, 0, "trading", "Check portfolio rebalance needs"),
@@ -799,14 +784,6 @@ CREATE TABLE IF NOT EXISTS trades (
     executed_at INTEGER NOT NULL,
     raw_data TEXT NOT NULL,
     FOREIGN KEY (symbol) REFERENCES securities(symbol)
-);
-
--- Allocation targets (weights, not percentages)
-CREATE TABLE IF NOT EXISTS allocation_targets (
-    type TEXT NOT NULL CHECK(type IN ('geography', 'industry')),
-    name TEXT NOT NULL,
-    weight REAL NOT NULL DEFAULT 1.0,
-    PRIMARY KEY (type, name)
 );
 
 -- Cash balances per currency

@@ -122,13 +122,13 @@ async def add_security(
     if not await deps.broker.add_stock_list_ticker(symbol):
         raise HTTPException(status_code=502, detail="Failed to add security to Freedom24 Favorites")
 
+    # geography/industry are broker-sourced now; any client-supplied values are
+    # silently dropped here so that only the sync job decides those fields.
     imported = await import_security_from_broker(
         deps.db,
         deps.broker,
         symbol,
         info=info,
-        geography=data.get("geography", ""),
-        industry=data.get("industry", ""),
     )
     await _invalidate_planner_cache(deps)
 
@@ -250,10 +250,9 @@ async def update_security(
     if not existing:
         raise HTTPException(status_code=404, detail="Security not found")
 
-    # Only allow updating specific fields
+    # `geography` and `industry` are broker-sourced at sync time — not editable
+    # via the API. See `Broker.get_security_metadata` and `sync_metadata`.
     allowed_fields = [
-        "geography",
-        "industry",
         "aliases",
         "allow_buy",
         "allow_sell",

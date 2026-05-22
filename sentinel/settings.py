@@ -34,8 +34,6 @@ DEFAULTS = {
     "simulated_cash_eur": None,  # Override cash in research mode (None = use real)
     # Rebalancing
     "rebalance_threshold_pct": 5,  # Rebalance when 5% off target
-    # Diversification
-    "diversification_impact_pct": 10,  # Max ±10% score adjustment for diversification
     # Dividend reinvestment
     "max_dividend_reinvestment_boost": 0.15,  # Max score boost for uninvested dividends
     # API

@@ -7,7 +7,6 @@ from sentinel.api.routers.backup import router as backup_router
 from sentinel.api.routers.jobs import router as jobs_router
 from sentinel.api.routers.jobs import set_scheduler
 from sentinel.api.routers.planner import router as planner_router
-from sentinel.api.routers.portfolio import allocation_router, targets_router
 from sentinel.api.routers.portfolio import router as portfolio_router
 from sentinel.api.routers.securities import prices_router, unified_router
 from sentinel.api.routers.securities import router as securities_router
@@ -31,8 +30,6 @@ __all__ = [
     "settings_router",
     "led_router",
     "portfolio_router",
-    "allocation_router",
-    "targets_router",
     "securities_router",
     "prices_router",
     "unified_router",

@@ -39,6 +39,8 @@ Returns all securities in the universe (including inactive ones).
 
 | Field | Description |
 |---|---|
+| `geography` | ISO‑2 country‑of‑risk from Tradernet (`attributes.CntryOfRisk`). Auto‑filled by the metadata sync; blank for ETFs and for tickers Tradernet does not classify. Not editable via the API. |
+| `industry` | Refinitiv/LSEG TRBC industry name from Tradernet (`sector_code`). Auto‑filled by the metadata sync; blank for ETFs. Not editable via the API. |
 | `market_id` | Broker market identifier string |
 | `data` | Raw JSON metadata blob from broker (security details, market info) |
 | `user_multiplier` | Stored Clara strategic preference, 0 avoid, 0.5 neutral, 1 prefer |
@@ -55,14 +57,12 @@ Returns all securities in the universe (including inactive ones).
 
 Add a new security to the universe. Fetches metadata and 20 years of historical prices from the broker. If the symbol exists but is inactive, it is re-enabled instead.
 
+`geography` and `industry` are populated by the next `sync:metadata` job — they are not accepted in the request body. Any client-supplied values are silently dropped.
+
 **Request body**
 ```json
 {
-  "symbol": "AAPL.US",
-  "geography": "US",
-  "industry": "Technology",
-  "allow_buy": 1,
-  "allow_sell": 1
+  "symbol": "AAPL.US"
 }
 ```
 
@@ -151,12 +151,10 @@ Returns details for a single security including current position data.
 
 ## `PUT /api/securities/{symbol}`
 
-Update security metadata and execution controls. Only the following fields are accepted; all others are silently ignored.
+Update security metadata and execution controls. Only the following fields are accepted; all others (including legacy `geography` and `industry` values) are silently ignored.
 
 | Field | Type | Description |
 |---|---|---|
-| `geography` | string | Geography category |
-| `industry` | string | Industry category |
 | `aliases` | string | Comma-separated search aliases for companion apps |
 | `allow_buy` | int (0/1) | Whether buys are permitted |
 | `allow_sell` | int (0/1) | Whether sells are permitted |

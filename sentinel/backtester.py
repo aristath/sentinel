@@ -243,15 +243,6 @@ class BacktestDatabaseBuilder:
                 "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (row["key"], row["value"])
             )
 
-        # Copy allocation targets
-        cursor = await self.real_db.conn.execute("SELECT type, name, weight FROM allocation_targets")
-        rows = await cursor.fetchall()
-        for row in rows:
-            await self.temp_db.conn.execute(
-                "INSERT OR REPLACE INTO allocation_targets (type, name, weight) VALUES (?, ?, ?)",
-                (row["type"], row["name"], row["weight"]),
-            )
-
         await self.temp_db.conn.commit()
 
     async def _get_symbols(self) -> list[str]:

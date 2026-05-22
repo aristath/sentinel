@@ -36,11 +36,10 @@ class PortfolioService:
         """Get complete portfolio state with enriched position data.
 
         Returns:
-            dict with positions, values, cash, and allocations
+            dict with positions, values, and cash
         """
         positions = await self._portfolio.positions()
         total = await self._portfolio.total_value()
-        allocations = await self._portfolio.get_allocations()
 
         # Enrich positions with calculated values
         pos_calc = PositionCalculator(currency_converter=self._currency)
@@ -87,23 +86,6 @@ class PortfolioService:
             "portfolio_return_pct": portfolio_return_pct,
             "cash": cash,
             "total_cash_eur": total_cash_eur,
-            "allocations": allocations,
-        }
-
-    async def get_allocation_comparison(self) -> dict:
-        """Get current vs target allocations with deviations.
-
-        Returns:
-            dict with current, targets, and deviations
-        """
-        current = await self._portfolio.get_allocations()
-        targets = await self._portfolio.get_target_allocations()
-        deviations = await self._portfolio.deviation_from_targets()
-
-        return {
-            "current": current,
-            "targets": targets,
-            "deviations": deviations,
         }
 
     async def sync_portfolio(self) -> dict:

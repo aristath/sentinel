@@ -30,11 +30,7 @@ async def test_allocation_as_of_uses_historical_prices_and_skips_live_cache():
     )
     db.get_uninvested_dividends = AsyncMock(return_value={})
 
-    portfolio.get_allocations = AsyncMock(return_value={"by_geography": {}, "by_industry": {}})
-    portfolio.get_target_allocations = AsyncMock(return_value={"geography": {}, "industry": {}})
-
     settings_values = {
-        "diversification_impact_pct": 10,
         "max_dividend_reinvestment_boost": 0.15,
         "strategy_core_target_pct": 70,
         "strategy_opportunity_target_pct": 30,
@@ -59,7 +55,6 @@ def _flat_prices():
 
 def _allocation_settings(settings_values=None):
     values = {
-        "diversification_impact_pct": 0,
         "max_dividend_reinvestment_boost": 0,
         "strategy_core_target_pct": 80,
         "strategy_opportunity_target_pct": 20,
@@ -92,8 +87,6 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
     db.get_uninvested_dividends = AsyncMock(return_value={})
 
     portfolio = MagicMock()
-    portfolio.get_allocations = AsyncMock(return_value={"by_geography": {}, "by_industry": {}})
-    portfolio.get_target_allocations = AsyncMock(return_value={"geography": {}, "industry": {}})
 
     calculator = AllocationCalculator(
         db=db,
@@ -131,8 +124,6 @@ async def test_low_preference_is_not_forced_to_min_position_floor():
     db.get_uninvested_dividends = AsyncMock(return_value={})
 
     portfolio = MagicMock()
-    portfolio.get_allocations = AsyncMock(return_value={"by_geography": {}, "by_industry": {}})
-    portfolio.get_target_allocations = AsyncMock(return_value={"geography": {}, "industry": {}})
 
     calculator = AllocationCalculator(
         db=db,

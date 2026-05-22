@@ -125,21 +125,6 @@ class BaseDatabase:
         await self.conn.commit()
 
     # -------------------------------------------------------------------------
-    # Allocation Targets
-    # -------------------------------------------------------------------------
-
-    async def get_allocation_targets(self, target_type: str | None = None) -> list[dict]:
-        """Get allocation targets (geography or industry weights)."""
-        query = "SELECT * FROM allocation_targets"
-        params = []
-        if target_type:
-            query += " WHERE type = ?"
-            params.append(target_type)
-        cursor = await self.conn.execute(query, params)
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
-
-    # -------------------------------------------------------------------------
     # Trades
     # -------------------------------------------------------------------------
 

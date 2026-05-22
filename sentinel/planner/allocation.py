@@ -9,7 +9,6 @@ from datetime import datetime, timezone
 
 from sentinel.currency import Currency
 from sentinel.database import Database
-from sentinel.planner.analyzer import PortfolioAnalyzer
 from sentinel.planner.preferences import (
     apply_max_cap,
     effective_user_multiplier,
@@ -25,7 +24,6 @@ from sentinel.strategy import (
     effective_opportunity_score,
     recent_dd252_min,
 )
-from sentinel.utils.strings import parse_csv_field
 
 
 class AllocationCalculator:
@@ -61,60 +59,8 @@ class AllocationCalculator:
             return None
         return bundle
 
-    def _calculate_diversification_score(
-        self,
-        security: dict,
-        current_allocs: dict,
-        target_allocs: dict,
-    ) -> float:
-        """Calculate diversification score for a security.
-
-        Returns a value from -1 (heavily overweight categories) to +1 (heavily underweight).
-        Securities with multiple categories get averaged scores.
-
-        Args:
-            security: Security dict with geography/industry fields
-            current_allocs: Current allocations from portfolio.get_allocations()
-            target_allocs: Target allocations from portfolio.get_target_allocations()
-
-        Returns:
-            float: Diversification score clamped to [-1, +1]
-        """
-        deviations = []
-
-        # Parse comma-separated geographies
-        geos = parse_csv_field(security.get("geography"))
-
-        # Parse comma-separated industries
-        inds = parse_csv_field(security.get("industry"))
-
-        # Calculate deviation for each geography
-        for geo in geos:
-            target = target_allocs.get("geography", {}).get(geo, 0)
-            current = current_allocs.get("by_geography", {}).get(geo, 0)
-            # Positive deviation = underweight = good
-            deviation = target - current
-            deviations.append(deviation)
-
-        # Calculate deviation for each industry
-        for ind in inds:
-            target = target_allocs.get("industry", {}).get(ind, 0)
-            current = current_allocs.get("by_industry", {}).get(ind, 0)
-            deviation = target - current
-            deviations.append(deviation)
-
-        # Average all deviations
-        if not deviations:
-            return 0.0
-
-        avg_deviation = sum(deviations) / len(deviations)
-
-        # Clamp to [-1, +1]
-        return max(-1.0, min(1.0, avg_deviation))
-
     async def _load_strategy_settings(self) -> dict[str, float]:
         keys_defaults: dict[str, float] = {
-            "diversification_impact_pct": DEFAULTS["diversification_impact_pct"],
             "strategy_entry_t1_dd": DEFAULTS["strategy_entry_t1_dd"],
             "strategy_entry_t3_dd": DEFAULTS["strategy_entry_t3_dd"],
             "strategy_entry_memory_days": DEFAULTS["strategy_entry_memory_days"],
@@ -132,17 +78,10 @@ class AllocationCalculator:
         return {k: float(v if v is not None else keys_defaults[k]) for k, v in zip(keys, values, strict=False)}
 
     async def calculate_ideal_portfolio(self, as_of_date: str | None = None) -> dict[str, float]:
-        """Calculate ideal portfolio allocations using deterministic contrarian strategy.
+        """Calculate ideal portfolio allocations using the deterministic contrarian strategy.
 
-        Per-security `user_multiplier` (0..1) is used as Clara's strategic preference:
-        - 0.5 = neutral
-        - 1.0 = strongest strategic overweight preference
-        - 0.0 = strongest avoid/near-zero preference
-
-        Diversification adjustment:
-        - Securities in underweight categories get a boost
-        - Securities in overweight categories get a reduction
-        - Max impact is configurable via diversification_impact_pct setting
+        Per-security `user_multiplier` (0..1) is Clara's strategic preference:
+        0.5 neutral, 1.0 strongest overweight, 0.0 strongest avoid.
 
         Returns:
             dict: symbol -> target allocation percentage (0-1)
@@ -162,20 +101,7 @@ class AllocationCalculator:
         if not securities:
             return {}
 
-        # Get current allocations and targets for diversification
-        if as_of_date is None:
-            current_allocs = await self._portfolio.get_allocations()
-        else:
-            analyzer = PortfolioAnalyzer(db=self._db, portfolio=self._portfolio, currency=self._currency)
-            by_security = await analyzer.get_current_allocations(as_of_date=as_of_date)
-            current_allocs = {
-                "by_security": by_security,
-                "by_geography": {},
-                "by_industry": {},
-            }
-        target_allocs = await self._portfolio.get_target_allocations()
         config = await self._load_strategy_settings()
-        div_impact = config["diversification_impact_pct"] / 100.0
         entry_t1_dd = config["strategy_entry_t1_dd"]
         entry_t3_dd = config["strategy_entry_t3_dd"]
         entry_memory_days = int(config["strategy_entry_memory_days"])
@@ -240,13 +166,6 @@ class AllocationCalculator:
             signal["dd252_recent_min"] = recent_min
             signal["opp_score"] = effective_opp
             signal["memory_boosted"] = 1 if effective_opp > raw_opp else 0
-
-            # Apply diversification multiplier
-            if div_impact > 0:
-                div_score = self._calculate_diversification_score(sec, current_allocs, target_allocs)
-                div_multiplier = 1.0 + (div_score * div_impact)
-                signal["core_rank"] = float(signal.get("core_rank", 0.0)) * div_multiplier
-                signal["opp_score"] = max(0.0, min(1.0, float(signal.get("opp_score", 0.0)) * div_multiplier))
 
             symbol_signals[symbol] = signal
             rebalance_signals[symbol] = dict(signal)

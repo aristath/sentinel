@@ -6,7 +6,7 @@ Base path: `/api/portfolio`
 
 ## `GET /api/portfolio`
 
-Returns the full current portfolio state including positions, cash balances, aggregate values, and current allocations.
+Returns the full current portfolio state: positions, cash balances, and aggregate values.
 
 **Response**
 ```json
@@ -33,12 +33,7 @@ Returns the full current portfolio state including positions, cash balances, agg
     "EUR": 1200.00,
     "USD": 350.00
   },
-  "total_cash_eur": 1499.43,
-  "allocations": {
-    "by_security": { "AAPL.US": 0.048 },
-    "by_geography": { "US": 0.160, "European Union": 0.279 },
-    "by_industry": { "Technology": 0.547, "Aerospace and Defense": 0.122 }
-  }
+  "total_cash_eur": 1499.43
 }
 ```
 
@@ -61,7 +56,6 @@ Returns the full current portfolio state including positions, cash balances, agg
 | `portfolio_return_pct` | Overall return percentage from inception |
 | `cash` | Cash balances per currency |
 | `total_cash_eur` | Sum of all cash balances converted to EUR |
-| `allocations` | Current allocations broken down by security, geography, and industry (fractions, not percentages) |
 
 ---
 
@@ -73,33 +67,6 @@ Triggers a live sync of portfolio positions from the broker. Equivalent to runni
 ```json
 { "status": "ok" }
 ```
-
----
-
-## `GET /api/portfolio/allocations`
-
-Returns the full current allocation state: actual allocations, target weights, and deviations from target.
-
-**Response**
-```json
-{
-  "current": {
-    "by_security": { "AAPL.US": 0.048, "ASML.EU": 0.157 },
-    "by_geography": { "US": 0.160, "European Union": 0.279, "Asia": 0.432 },
-    "by_industry": { "Technology": 0.547, "Aerospace and Defense": 0.122 }
-  },
-  "targets": {
-    "geography": { "US": 0.15, "European Union": 0.79, "Asia": 0.85 },
-    "industry": { "Technology": 0.82, "Aerospace and Defense": 1.0 }
-  },
-  "deviations": {
-    "geography": { "US": 0.01, "European Union": -0.03 },
-    "industry": { "Technology": -0.02 }
-  }
-}
-```
-
-All values are fractions (0–1), not percentages.
 
 ---
 

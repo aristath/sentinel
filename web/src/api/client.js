@@ -46,14 +46,10 @@ export const getPortfolioStructure = (force = false) =>
 // Securities
 export const getSecurities = () => request('/securities');
 export const getSecurity = (symbol) => request(`/securities/${symbol}`);
-export const addSecurity = (symbol, geography = [], industry = []) =>
+export const addSecurity = (symbol) =>
   request('/securities', {
     method: 'POST',
-    body: JSON.stringify({
-      symbol,
-      geography: Array.isArray(geography) ? geography.join(', ') : geography,
-      industry: Array.isArray(industry) ? industry.join(', ') : industry,
-    }),
+    body: JSON.stringify({ symbol }),
   });
 export const deleteSecurity = (symbol, sellPosition = false) =>
   request(`/securities/${encodeURIComponent(symbol)}?sell_position=${sellPosition}`, {
@@ -117,16 +113,10 @@ export const getUnifiedView = (period = '1Y', asOf = null) => {
   return request(`/unified?${params.toString()}`);
 };
 
-// Update security
+// Update security. Geography and industry are broker-sourced and not editable
+// here; the backend silently drops them if a stale client tries to PUT them.
 export const updateSecurity = (symbol, data) => {
-  // Convert geography/industry arrays to comma-separated strings
   const processedData = { ...data };
-  if (Array.isArray(processedData.geography)) {
-    processedData.geography = processedData.geography.join(', ');
-  }
-  if (Array.isArray(processedData.industry)) {
-    processedData.industry = processedData.industry.join(', ');
-  }
   if (Array.isArray(processedData.aliases)) {
     processedData.aliases = processedData.aliases.join(', ');
   }
@@ -139,30 +129,6 @@ export const updateSecurityPreference = ({ symbol, user_multiplier, analysis }) 
   request('/securities/preference', {
     method: 'POST',
     body: JSON.stringify({ symbol, user_multiplier, analysis }),
-  });
-
-// Allocation
-export const getAllocation = () => request('/allocation/current');
-export const getAllocationTargets = () => request('/allocation/targets');
-export const getAvailableGeographies = () => request('/allocation/available-geographies');
-export const getAvailableIndustries = () => request('/allocation/available-industries');
-export const saveGeographyTargets = (targets) =>
-  request('/allocation/targets/geography', {
-    method: 'PUT',
-    body: JSON.stringify({ targets }),
-  });
-export const saveIndustryTargets = (targets) =>
-  request('/allocation/targets/industry', {
-    method: 'PUT',
-    body: JSON.stringify({ targets }),
-  });
-export const deleteGeographyTarget = (name) =>
-  request(`/allocation/targets/geography/${encodeURIComponent(name)}`, {
-    method: 'DELETE',
-  });
-export const deleteIndustryTarget = (name) =>
-  request(`/allocation/targets/industry/${encodeURIComponent(name)}`, {
-    method: 'DELETE',
   });
 
 // Markets
@@ -202,6 +168,3 @@ export const syncCashFlows = () => request('/cashflows/sync', { method: 'POST' }
 
 // Portfolio P&L History
 export const getPortfolioPnLHistory = () => request('/portfolio/pnl-history');
-
-// Categories
-export const getCategories = () => request('/meta/categories');

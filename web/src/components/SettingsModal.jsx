@@ -333,16 +333,6 @@ export function SettingsModal({ opened, onClose }) {
               />
 
               <NumberInput
-                label="Diversification Impact %"
-                description="Max score adjustment for diversification (0 = disabled)"
-                value={settings?.diversification_impact_pct ?? 10}
-                onChange={(value) => handleChange('diversification_impact_pct', value)}
-                min={0}
-                max={50}
-                suffix="%"
-              />
-
-              <NumberInput
                 label="Standard Lot Max %"
                 description="Max ticket size treated as standard lot class"
                 value={(settings?.strategy_lot_standard_max_pct ?? 0.08) * 100}

@@ -8,6 +8,7 @@ Usage:
     await broker.buy('AAPL.US', quantity=10)
 """
 
+import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
@@ -18,6 +19,12 @@ from sentinel.settings import Settings
 from sentinel.utils.decorators import singleton
 
 logger = logging.getLogger(__name__)
+
+# Tradernet's `getAllSecurities` rate-limits at ~30 calls/min and stays in 429
+# mode for ~60s once tripped. If we get rate-limited, back off well past the
+# window length and try once more — but do not escalate further: the daily
+# sync cycle will pick up anything still missing on the next run.
+RATE_LIMIT_BACKOFF_S = 60
 
 
 @singleton
@@ -517,6 +524,74 @@ class Broker:
         except Exception as e:
             logger.error(f"Failed to get security info for {symbol}: {e}")
             return None
+
+    async def get_security_metadata(self, symbol: str) -> Optional[dict]:
+        """Fetch country-of-risk and TRBC industry for one ticker from `getAllSecurities`.
+
+        `getSecurityInfo` returns a thin payload (market, lot, currency). The richer
+        `getAllSecurities` endpoint exposes `attributes.CntryOfRisk` (ISO-2 country
+        where the issuer's economic risk lives — distinct from the listing venue or
+        registration country, which Tradernet leaves as `"0"`) and `sector_code`
+        (Refinitiv/LSEG TRBC industry name as a free-text string).
+
+        Returns the normalized fields the sync job needs, or `None` when the broker
+        is offline, the ticker is unknown, or the call fails. On HTTP 429 we sleep
+        once and retry; if the second attempt is also rate-limited we give up and
+        rely on the next sync cycle.
+        """
+        if not self._api:
+            return None
+
+        payload = {
+            "take": 1,
+            "skip": 0,
+            "filter": {"filters": [{"field": "ticker", "operator": "eq", "value": symbol}]},
+        }
+        response = None
+        for attempt in (1, 2):
+            try:
+                response = self._api.authorized_request("getAllSecurities", payload)
+                break
+            except Exception as e:
+                rate_limited = "429" in str(e)
+                if rate_limited and attempt == 1:
+                    logger.warning(
+                        f"Rate-limited fetching metadata for {symbol}; backing off {RATE_LIMIT_BACKOFF_S}s",
+                    )
+                    await asyncio.sleep(RATE_LIMIT_BACKOFF_S)
+                    continue
+                logger.error(f"Failed to get security metadata for {symbol}: {e}")
+                return None
+
+        if response is None:
+            return None
+
+        rows = (response or {}).get("securities") or []
+        if not rows:
+            return None
+
+        row = rows[0]
+        attrs = row.get("attributes")
+        # The SDK parses attributes to a dict; the raw HTTP call returns a JSON
+        # string. Anything else (None, list, ...) is treated as missing — we
+        # never want a malformed shape from upstream to crash the sync loop.
+        if isinstance(attrs, str):
+            try:
+                attrs = json.loads(attrs)
+            except (json.JSONDecodeError, TypeError):
+                attrs = {}
+        if not isinstance(attrs, dict):
+            attrs = {}
+
+        return {
+            # `or ""` collapses None and Tradernet's "0" / 0 "unclassified"
+            # sentinel to a blank string — the same signal we use for ETFs.
+            "geography": str(attrs.get("CntryOfRisk") or ""),
+            "industry": str(row.get("sector_code") or ""),
+            "instr_kind_c": row.get("instr_kind_c"),
+            "mkt_short_code": row.get("mkt_short_code"),
+            "name": row.get("name"),
+        }
 
     async def get_market_status(self, market: str = "*") -> Optional[dict]:
         """Get market status from Tradernet.

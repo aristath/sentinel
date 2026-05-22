@@ -55,6 +55,15 @@ def mock_broker():
             "lot": 1,
         }
     )
+    broker.get_security_metadata = AsyncMock(
+        return_value={
+            "geography": "US",
+            "industry": "Computers, Phones & Household Electronics",
+            "instr_kind_c": 1,
+            "mkt_short_code": "FIX",
+            "name": "Mock Inc.",
+        }
+    )
     broker.get_market_status = AsyncMock(return_value={"m": [{"i": 1, "n2": "NASDAQ", "s": "OPEN"}]})
     return broker
 
@@ -148,6 +157,15 @@ class TestSyncQuotes:
 class TestSyncMetadata:
     """Tests for sync_metadata task."""
 
+    @pytest.fixture(autouse=True)
+    def _skip_pacing_sleep(self):
+        """Patch the per-iteration sleep so test runs aren't slow.
+
+        The pacing-specific test re-patches it to assert call counts.
+        """
+        with patch("sentinel.jobs.tasks.asyncio.sleep", new_callable=AsyncMock):
+            yield
+
     @pytest.mark.asyncio
     async def test_sync_metadata_fetches_per_security(self, mock_db, mock_broker):
         """Verify metadata is fetched for each security."""
@@ -157,7 +175,155 @@ class TestSyncMetadata:
 
         # Should fetch info for each security (3 securities in mock_db)
         assert mock_broker.get_security_info.await_count == 3
+        assert mock_broker.get_security_metadata.await_count == 3
         assert mock_db.update_security_metadata.await_count == 3
+
+    @pytest.mark.asyncio
+    async def test_sync_metadata_passes_geography_and_industry(self, mock_db, mock_broker):
+        """sync_metadata forwards geography/industry from broker to DB."""
+        from sentinel.jobs.tasks import sync_metadata
+
+        await sync_metadata(mock_db, mock_broker)
+
+        # Every DB update should include the broker-provided geo/industry
+        for call in mock_db.update_security_metadata.await_args_list:
+            kwargs = call.kwargs
+            assert kwargs["geography"] == "US"
+            assert kwargs["industry"] == "Computers, Phones & Household Electronics"
+
+    @pytest.mark.asyncio
+    async def test_sync_metadata_blanks_geo_industry_for_etfs(self, mock_db, mock_broker):
+        """ETFs (instr_kind_c == 7) get blank geography/industry so they fall out of macro buckets."""
+        from sentinel.jobs.tasks import sync_metadata
+
+        mock_broker.get_security_metadata = AsyncMock(
+            return_value={
+                "geography": "IE",
+                "industry": "Equity ETFs",
+                "instr_kind_c": 7,
+                "mkt_short_code": "EU",
+                "name": "Vanguard FTSE All-World UCITS ETF",
+            }
+        )
+
+        await sync_metadata(mock_db, mock_broker)
+
+        for call in mock_db.update_security_metadata.await_args_list:
+            assert call.kwargs["geography"] == ""
+            assert call.kwargs["industry"] == ""
+
+    @pytest.mark.asyncio
+    async def test_sync_metadata_skips_geo_industry_when_broker_returns_none(self, mock_db, mock_broker):
+        """If get_security_metadata returns None (ticker missing at broker), don't touch geo/industry."""
+        from sentinel.jobs.tasks import sync_metadata
+
+        mock_broker.get_security_metadata = AsyncMock(return_value=None)
+
+        await sync_metadata(mock_db, mock_broker)
+
+        for call in mock_db.update_security_metadata.await_args_list:
+            assert "geography" not in call.kwargs
+            assert "industry" not in call.kwargs
+
+    @pytest.mark.asyncio
+    async def test_sync_metadata_paces_calls_to_avoid_rate_limit(self, mock_db, mock_broker):
+        """`getAllSecurities` is rate-limited — the sync loop must sleep between
+        iterations at the configured pace to avoid a 429 mid-sync."""
+        from sentinel.jobs import tasks
+
+        # Re-patch sleep here so we can inspect the call args.
+        with patch("sentinel.jobs.tasks.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            await tasks.sync_metadata(mock_db, mock_broker)
+
+            # One sleep per processed security (3 in the mock), each at the
+            # configured pace.
+            assert mock_sleep.await_count == 3
+            for call in mock_sleep.await_args_list:
+                assert call.args[0] == tasks.SYNC_METADATA_PACING_S
+
+    @pytest.mark.asyncio
+    async def test_sync_metadata_continues_when_one_ticker_fails(self, mock_db, mock_broker):
+        """A single broker error must not abort the whole sync — other tickers still update."""
+        from sentinel.jobs.tasks import sync_metadata
+
+        # First ticker raises mid-iteration; second and third succeed normally.
+        mock_broker.get_security_info = AsyncMock(
+            side_effect=[
+                RuntimeError("transient network error"),
+                {"mrkt": {"mkt_id": 1}, "lot": 1},
+                {"mrkt": {"mkt_id": 1}, "lot": 1},
+            ]
+        )
+
+        await sync_metadata(mock_db, mock_broker)
+
+        # First ticker raised before update; two remaining updates ran.
+        assert mock_db.update_security_metadata.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_blank_geography_from_broker_does_not_overwrite_existing(self, mock_db, mock_broker):
+        """If Tradernet ever renames `CntryOfRisk`, all non-ETF rows would return blank.
+        We must NOT blank existing DB values in that case — better stale than wiped."""
+        from sentinel.jobs.tasks import sync_metadata
+
+        mock_broker.get_security_metadata = AsyncMock(
+            return_value={
+                "geography": "",  # simulates the API-rename case
+                "industry": "Software & IT Services",
+                "instr_kind_c": 1,  # NOT an ETF
+                "mkt_short_code": "FIX",
+                "name": "Some Stock",
+            }
+        )
+
+        await sync_metadata(mock_db, mock_broker)
+
+        for call in mock_db.update_security_metadata.await_args_list:
+            assert "geography" not in call.kwargs  # preserved
+            assert call.kwargs["industry"] == "Software & IT Services"  # still written
+
+    @pytest.mark.asyncio
+    async def test_blank_industry_from_broker_does_not_overwrite_existing(self, mock_db, mock_broker):
+        """Same protection for the `sector_code` field being renamed/missing."""
+        from sentinel.jobs.tasks import sync_metadata
+
+        mock_broker.get_security_metadata = AsyncMock(
+            return_value={
+                "geography": "US",
+                "industry": "",  # simulates the API-rename case
+                "instr_kind_c": 1,
+                "mkt_short_code": "FIX",
+                "name": "Some Stock",
+            }
+        )
+
+        await sync_metadata(mock_db, mock_broker)
+
+        for call in mock_db.update_security_metadata.await_args_list:
+            assert call.kwargs["geography"] == "US"
+            assert "industry" not in call.kwargs
+
+    @pytest.mark.asyncio
+    async def test_etf_blanking_still_overrides_existing_values(self, mock_db, mock_broker):
+        """Empty values from Tradernet are preserved, BUT ETFs (positive instr_kind_c==7
+        signal) are still explicitly blanked — that signal is the authority."""
+        from sentinel.jobs.tasks import sync_metadata
+
+        mock_broker.get_security_metadata = AsyncMock(
+            return_value={
+                "geography": "IE",
+                "industry": "Equity ETFs",
+                "instr_kind_c": 7,
+                "mkt_short_code": "EU",
+                "name": "Vanguard FTSE All-World UCITS ETF",
+            }
+        )
+
+        await sync_metadata(mock_db, mock_broker)
+
+        for call in mock_db.update_security_metadata.await_args_list:
+            assert call.kwargs["geography"] == ""
+            assert call.kwargs["industry"] == ""
 
 
 class TestSyncExchangeRates:
