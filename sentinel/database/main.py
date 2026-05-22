@@ -399,6 +399,86 @@ class Database(BaseDatabase):
         }
 
     # -------------------------------------------------------------------------
+    # Benchmarks (market indices — stored separately from securities)
+    # -------------------------------------------------------------------------
+
+    async def get_benchmarks(self) -> list[dict]:
+        """List all benchmark indices, sorted by symbol."""
+        cursor = await self.conn.execute("SELECT * FROM benchmarks ORDER BY symbol ASC")
+        rows = await cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    async def upsert_benchmark(
+        self,
+        symbol: str,
+        *,
+        name: str,
+        mkt_short_code: str | None = None,
+        instr_kind_c: int | None = None,
+        currency: str | None = None,
+    ) -> None:
+        """Insert or refresh one benchmark's metadata. `created_at` is preserved
+        across updates so we can tell when an index first entered the table."""
+        import time
+
+        now = int(time.time())
+        await self.conn.execute(
+            """
+            INSERT INTO benchmarks (symbol, name, mkt_short_code, instr_kind_c, currency, last_synced, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(symbol) DO UPDATE SET
+                name = excluded.name,
+                mkt_short_code = excluded.mkt_short_code,
+                instr_kind_c = excluded.instr_kind_c,
+                currency = excluded.currency,
+                last_synced = excluded.last_synced
+            """,
+            (symbol, name, mkt_short_code, instr_kind_c, currency, now, now),
+        )
+        await self.conn.commit()
+
+    async def save_benchmark_prices(self, symbol: str, prices: list[dict]) -> None:
+        """Bulk-upsert daily close prices for one benchmark.
+
+        Raises if `symbol` is not registered in `benchmarks` — orphan prices
+        are a sign of a logic error upstream, not silently-accepted data.
+        """
+        # Verify the benchmark exists. The FK on `benchmark_prices` would also
+        # reject orphans but the error message is clearer this way.
+        cursor = await self.conn.execute("SELECT 1 FROM benchmarks WHERE symbol = ?", (symbol,))
+        if (await cursor.fetchone()) is None:
+            raise ValueError(f"Cannot save prices for unregistered benchmark: {symbol}")
+
+        rows = [(symbol, p["date"], float(p["close"])) for p in prices if p.get("date") and p.get("close") is not None]
+        if not rows:
+            return
+        await self.conn.executemany(
+            "INSERT OR REPLACE INTO benchmark_prices (symbol, date, close) VALUES (?, ?, ?)",
+            rows,
+        )
+        await self.conn.commit()
+
+    async def get_benchmark_prices(self, symbol: str, days: int | None = None) -> list[dict]:
+        """Return benchmark close prices, newest first. `days` caps to the last
+        N calendar days from today (matching `get_prices`' behavior)."""
+        if days is not None:
+            from datetime import date as date_type
+            from datetime import timedelta
+
+            cutoff = (date_type.today() - timedelta(days=days)).isoformat()
+            cursor = await self.conn.execute(
+                "SELECT date, close FROM benchmark_prices WHERE symbol = ? AND date >= ? ORDER BY date DESC",
+                (symbol, cutoff),
+            )
+        else:
+            cursor = await self.conn.execute(
+                "SELECT date, close FROM benchmark_prices WHERE symbol = ? ORDER BY date DESC",
+                (symbol,),
+            )
+        rows = await cursor.fetchall()
+        return [{"date": row["date"], "close": row["close"]} for row in rows]
+
+    # -------------------------------------------------------------------------
     # Job History
     # -------------------------------------------------------------------------
 
@@ -623,6 +703,7 @@ class Database(BaseDatabase):
             ("sync:trades", 60, 60, 0, "sync", "Sync trade history from broker"),
             ("sync:cashflows", 1440, 1440, 0, "sync", "Sync cash flows from broker"),
             ("sync:dividends", 1440, 1440, 0, "sync", "Sync dividends from broker"),
+            ("sync:benchmarks", 1440, 1440, 0, "sync", "Refresh benchmark indices roster + prices"),
             (
                 "snapshot:backfill",
                 1440,
@@ -769,6 +850,28 @@ CREATE TABLE IF NOT EXISTS prices (
     close REAL NOT NULL,
     volume INTEGER,
     PRIMARY KEY (symbol, date)
+);
+
+-- Benchmark indices — kept in their own tables to avoid the contamination
+-- problems that came from mixing them into `securities` historically. Each
+-- row is a market index (S&P 500, DAX, HSI, …) discovered via the Tradernet
+-- `instr_type_c == 5` filter. Never tradable, never appears in the universe.
+CREATE TABLE IF NOT EXISTS benchmarks (
+    symbol TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    mkt_short_code TEXT,
+    instr_kind_c INTEGER,
+    currency TEXT,
+    last_synced INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS benchmark_prices (
+    symbol TEXT NOT NULL,
+    date TEXT NOT NULL,
+    close REAL NOT NULL,
+    PRIMARY KEY (symbol, date),
+    FOREIGN KEY (symbol) REFERENCES benchmarks(symbol) ON DELETE CASCADE
 );
 
 -- Trade history (synced from broker)

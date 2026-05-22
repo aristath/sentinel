@@ -326,6 +326,102 @@ class TestSyncMetadata:
             assert call.kwargs["industry"] == ""
 
 
+class TestSyncBenchmarks:
+    """Verify `sync:benchmarks` refreshes the index roster from Tradernet
+    AND syncs daily prices. Both must happen in one job — benchmarks are
+    useless without prices."""
+
+    @pytest.fixture(autouse=True)
+    def _skip_pacing_sleep(self):
+        with patch("sentinel.jobs.tasks.asyncio.sleep", new_callable=AsyncMock):
+            yield
+
+    @pytest.fixture
+    def mock_broker_indices(self, mock_broker):
+        mock_broker.get_all_indices = AsyncMock(
+            return_value=[
+                {
+                    "symbol": "SP500.IDX",
+                    "name": "S&P 500",
+                    "mkt_short_code": "FIX",
+                    "instr_kind_c": 1,
+                    "currency": "USD",
+                },
+                {"symbol": "DAX.IDX", "name": "DAX", "mkt_short_code": "EU", "instr_kind_c": 1, "currency": "EUR"},
+            ]
+        )
+        mock_broker.get_historical_prices_bulk = AsyncMock(
+            return_value={
+                "SP500.IDX": [{"date": "2025-01-02", "close": 4720.0}],
+                "DAX.IDX": [{"date": "2025-01-02", "close": 19800.0}],
+            }
+        )
+        return mock_broker
+
+    @pytest.fixture
+    def mock_db_benchmarks(self, mock_db):
+        mock_db.upsert_benchmark = AsyncMock()
+        mock_db.save_benchmark_prices = AsyncMock()
+        mock_db.get_benchmarks = AsyncMock(
+            return_value=[
+                {"symbol": "SP500.IDX"},
+                {"symbol": "DAX.IDX"},
+            ]
+        )
+        return mock_db
+
+    @pytest.mark.asyncio
+    async def test_upserts_each_index_returned_from_broker(self, mock_db_benchmarks, mock_broker_indices):
+        from sentinel.jobs.tasks import sync_benchmarks
+
+        await sync_benchmarks(mock_db_benchmarks, mock_broker_indices)
+
+        assert mock_db_benchmarks.upsert_benchmark.await_count == 2
+        symbols = {call.args[0] for call in mock_db_benchmarks.upsert_benchmark.await_args_list}
+        assert symbols == {"SP500.IDX", "DAX.IDX"}
+
+    @pytest.mark.asyncio
+    async def test_saves_prices_for_each_benchmark(self, mock_db_benchmarks, mock_broker_indices):
+        from sentinel.jobs.tasks import sync_benchmarks
+
+        await sync_benchmarks(mock_db_benchmarks, mock_broker_indices)
+
+        assert mock_db_benchmarks.save_benchmark_prices.await_count == 2
+        saved_symbols = {call.args[0] for call in mock_db_benchmarks.save_benchmark_prices.await_args_list}
+        assert saved_symbols == {"SP500.IDX", "DAX.IDX"}
+
+    @pytest.mark.asyncio
+    async def test_broker_offline_skips_metadata_refresh_but_syncs_known_prices(
+        self, mock_db_benchmarks, mock_broker_indices
+    ):
+        """If the roster fetch fails, fall back to syncing prices for whatever
+        benchmarks we already have in the DB — partial progress is still useful."""
+        from sentinel.jobs.tasks import sync_benchmarks
+
+        mock_broker_indices.get_all_indices = AsyncMock(return_value=None)
+
+        await sync_benchmarks(mock_db_benchmarks, mock_broker_indices)
+
+        mock_db_benchmarks.upsert_benchmark.assert_not_awaited()
+        # Existing roster (2 entries) still gets price-synced.
+        assert mock_db_benchmarks.save_benchmark_prices.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_no_benchmarks_at_all_is_a_no_op(self, mock_db, mock_broker):
+        from sentinel.jobs.tasks import sync_benchmarks
+
+        mock_broker.get_all_indices = AsyncMock(return_value=[])
+        mock_db.get_benchmarks = AsyncMock(return_value=[])
+        mock_db.upsert_benchmark = AsyncMock()
+        mock_db.save_benchmark_prices = AsyncMock()
+        mock_broker.get_historical_prices_bulk = AsyncMock(return_value={})
+
+        await sync_benchmarks(mock_db, mock_broker)
+
+        mock_db.upsert_benchmark.assert_not_awaited()
+        mock_db.save_benchmark_prices.assert_not_awaited()
+
+
 class TestSyncExchangeRates:
     """Tests for sync_exchange_rates task."""
 

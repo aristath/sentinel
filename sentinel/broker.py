@@ -593,6 +593,77 @@ class Broker:
             "name": row.get("name"),
         }
 
+    async def get_all_indices(self) -> Optional[list[dict]]:
+        """Return Tradernet's full universe of market indices.
+
+        Calls `getAllSecurities` filtered to `instr_type_c == 5` (Tradernet's
+        "Indices" type) and paginates until the reported `total` is exhausted.
+        Returns a list of normalized dicts with `symbol`, `name`,
+        `mkt_short_code`, `instr_kind_c`, `currency` — the fields the
+        `benchmarks` table stores.
+
+        Returns `None` if the broker is offline or the call fails outright.
+        Per-page 429s are recovered with the same one-shot back-off used by
+        `get_security_metadata`.
+        """
+        if not self._api:
+            return None
+
+        results: list[dict] = []
+        skip = 0
+        page_size = 50
+        seen_total: int | None = None
+
+        while True:
+            payload = {
+                "take": page_size,
+                "skip": skip,
+                "filter": {"filters": [{"field": "instr_type_c", "operator": "eq", "value": 5}]},
+            }
+            response = None
+            for attempt in (1, 2):
+                try:
+                    response = self._api.authorized_request("getAllSecurities", payload)
+                    break
+                except Exception as e:
+                    rate_limited = "429" in str(e)
+                    if rate_limited and attempt == 1:
+                        logger.warning(
+                            f"Rate-limited fetching indices page (skip={skip}); backing off {RATE_LIMIT_BACKOFF_S}s",
+                        )
+                        await asyncio.sleep(RATE_LIMIT_BACKOFF_S)
+                        continue
+                    logger.error(f"Failed to fetch indices page (skip={skip}): {e}")
+                    return None
+
+            if not isinstance(response, dict):
+                return None
+
+            rows = response.get("securities") or []
+            for row in rows:
+                ticker = row.get("ticker")
+                if not ticker:
+                    continue
+                results.append(
+                    {
+                        "symbol": ticker,
+                        "name": row.get("name") or row.get("latname") or ticker,
+                        "mkt_short_code": row.get("mkt_short_code"),
+                        "instr_kind_c": row.get("instr_kind_c"),
+                        "currency": row.get("face_curr_c"),
+                    }
+                )
+
+            if seen_total is None:
+                seen_total = int(response.get("total") or 0)
+
+            skip += len(rows)
+            # Stop when this page returned nothing OR we've drained the total.
+            if not rows or skip >= seen_total:
+                break
+
+        return results
+
     async def get_market_status(self, market: str = "*") -> Optional[dict]:
         """Get market status from Tradernet.
 

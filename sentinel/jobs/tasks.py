@@ -131,6 +131,48 @@ async def sync_metadata(db, broker) -> None:
     logger.info(f"Metadata sync complete: {synced} securities")
 
 
+async def sync_benchmarks(db, broker) -> None:
+    """Refresh the benchmark-indices roster from Tradernet and sync their prices.
+
+    Pulls the full set of indices via `broker.get_all_indices()` (paginated
+    `getAllSecurities` filtered to `instr_type_c == 5`), upserts each one into
+    the `benchmarks` table, then fetches recent daily closes for every known
+    benchmark via the existing bulk-prices helper.
+
+    Broker offline / 429-on-roster degrades gracefully: we still try to sync
+    prices for whatever's already in the table. Better stale than dark.
+    """
+    indices = await broker.get_all_indices()
+    if indices:
+        for idx in indices:
+            await db.upsert_benchmark(
+                idx["symbol"],
+                name=idx.get("name") or idx["symbol"],
+                mkt_short_code=idx.get("mkt_short_code"),
+                instr_kind_c=idx.get("instr_kind_c"),
+                currency=idx.get("currency"),
+            )
+        logger.info(f"Benchmark roster refreshed: {len(indices)} indices")
+    else:
+        logger.warning("Benchmark roster fetch failed; price sync continues for existing rows")
+
+    known = await db.get_benchmarks()
+    if not known:
+        logger.info("No benchmarks to price-sync")
+        return
+
+    symbols = [b["symbol"] for b in known]
+    prices_by_symbol = await broker.get_historical_prices_bulk(symbols, years=5)
+    saved = 0
+    for symbol in symbols:
+        prices = prices_by_symbol.get(symbol) or []
+        if not prices:
+            continue
+        await db.save_benchmark_prices(symbol, prices)
+        saved += 1
+    logger.info(f"Benchmark prices synced: {saved}/{len(symbols)}")
+
+
 async def sync_exchange_rates() -> None:
     """Sync exchange rates."""
     from sentinel.currency import Currency

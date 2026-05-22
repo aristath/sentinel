@@ -221,3 +221,122 @@ class TestGetSecurityMetadata:
         assert result is None
         assert broker._api.authorized_request.call_count == 1
         mock_sleep.assert_not_awaited()
+
+
+class TestGetAllIndices:
+    """Verify Broker.get_all_indices pulls the full universe of market indices
+    from Tradernet (instr_type_c == 5), paginated until exhausted."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_not_connected(self):
+        instance = Broker()
+        instance._api = None
+        assert await instance.get_all_indices() is None
+
+    @pytest.mark.asyncio
+    async def test_paginates_until_exhausted(self, broker):
+        """Tradernet returns a `total` count plus a page of `securities`. We
+        keep asking for more pages until we've seen `total` rows."""
+        broker._api.authorized_request.side_effect = [
+            {
+                "total": 3,
+                "securities": [
+                    {
+                        "ticker": "SP500.IDX",
+                        "name": "S&P 500",
+                        "mkt_short_code": "FIX",
+                        "instr_kind_c": 1,
+                        "face_curr_c": "USD",
+                    },
+                    {
+                        "ticker": "DAX.IDX",
+                        "name": "DAX",
+                        "mkt_short_code": "EU",
+                        "instr_kind_c": 1,
+                        "face_curr_c": "EUR",
+                    },
+                ],
+            },
+            {
+                "total": 3,
+                "securities": [
+                    {
+                        "ticker": "HSI.IDX",
+                        "name": "Hang Seng",
+                        "mkt_short_code": "HKEX",
+                        "instr_kind_c": 1,
+                        "face_curr_c": "HKD",
+                    },
+                ],
+            },
+        ]
+
+        with patch("sentinel.broker.asyncio.sleep", new_callable=AsyncMock):
+            result = await broker.get_all_indices()
+
+        assert result is not None
+        assert len(result) == 3
+        assert [r["symbol"] for r in result] == ["SP500.IDX", "DAX.IDX", "HSI.IDX"]
+        assert result[0]["name"] == "S&P 500"
+        assert result[0]["mkt_short_code"] == "FIX"
+        assert result[0]["instr_kind_c"] == 1
+        assert result[0]["currency"] == "USD"
+
+    @pytest.mark.asyncio
+    async def test_filters_by_instr_type_5(self, broker):
+        """The API filter must specify `instr_type_c == 5`; otherwise we'd be
+        pulling stocks/bonds/everything which would blow up the table."""
+        broker._api.authorized_request.return_value = {"total": 0, "securities": []}
+
+        await broker.get_all_indices()
+
+        cmd, payload = broker._api.authorized_request.call_args.args
+        assert cmd == "getAllSecurities"
+        filters = payload["filter"]["filters"]
+        assert {"field": "instr_type_c", "operator": "eq", "value": 5} in filters
+
+    @pytest.mark.asyncio
+    async def test_empty_universe_returns_empty_list(self, broker):
+        broker._api.authorized_request.return_value = {"total": 0, "securities": []}
+
+        result = await broker.get_all_indices()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_api_error_returns_none(self, broker, caplog):
+        broker._api.authorized_request.side_effect = RuntimeError("network down")
+
+        result = await broker.get_all_indices()
+
+        assert result is None
+        assert any("indices" in rec.message.lower() for rec in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_429_triggers_backoff_and_retry(self, broker):
+        """Same rate-limit handling as `get_security_metadata`: on 429 sleep
+        and retry the page once before giving up on the whole call."""
+        from requests.exceptions import HTTPError
+
+        broker._api.authorized_request.side_effect = [
+            HTTPError("429 Client Error"),
+            {
+                "total": 1,
+                "securities": [
+                    {
+                        "ticker": "SP500.IDX",
+                        "name": "S&P",
+                        "mkt_short_code": "FIX",
+                        "instr_kind_c": 1,
+                        "face_curr_c": "USD",
+                    }
+                ],
+            },
+        ]
+
+        with patch("sentinel.broker.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            result = await broker.get_all_indices()
+
+        assert result is not None
+        assert len(result) == 1
+        mock_sleep.assert_awaited()

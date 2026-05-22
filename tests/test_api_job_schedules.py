@@ -39,7 +39,7 @@ async def test_get_job_schedules_returns_all(db):
     """GET /api/jobs/schedules should return all schedules."""
     schedules = await db.get_job_schedules()
 
-    assert len(schedules) == 15
+    assert len(schedules) == 16
 
     # Check structure (no longer has enabled, dependencies, is_parameterized fields)
     schedule = schedules[0]
