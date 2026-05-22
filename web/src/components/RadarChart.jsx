@@ -33,7 +33,33 @@ import { catppuccin } from '../theme';
  * @param {number|null} props.maxValue - Maximum value for scaling (auto-calculated if null)
  * @returns {JSX.Element} Radar chart SVG component
  */
-export function RadarChart({ labels = [], targetData = [], currentData = [], postPlanData = [], maxValue = null }) {
+// A series is "present" only if it has data we should render. In the default
+// (non-negative) scale that means at least one non-zero value — an all-zero
+// array is just a stub the caller passed to satisfy the prop. In bipolar mode
+// (minValue < 0), an all-zero series is *meaningful* — it means "perfectly
+// balanced on every axis" — so we render it (as a circle on the balance ring).
+const hasSeriesData = (data, bipolar) =>
+  Array.isArray(data) && data.length > 0 && (bipolar ? true : data.some((v) => v > 0));
+
+export function RadarChart({
+  labels = [],
+  targetData = [],
+  currentData = [],
+  postPlanData = [],
+  maxValue = null,
+  // `minValue` defines the value at the radar's center. Default 0 keeps the
+  // traditional radar (radius = magnitude). Set to a negative number to put
+  // the chart in bipolar mode where the *middle ring* (radius 0.5) represents
+  // the geometric center of the value range — typically 0 for "no deviation".
+  minValue = 0,
+  // When set, the grid circle closest to this value gets a distinctive stroke
+  // — used to highlight the "balanced / on-target" reference ring in bipolar
+  // deviation charts. Pass `null` to disable.
+  balanceValue = null,
+  targetLabel = 'Target',
+  currentLabel = 'Current',
+  postPlanLabel = 'Post-Plan',
+}) {
   const svgRef = useRef(null);
 
   // Render SVG chart when data changes
@@ -46,21 +72,39 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
       return;
     }
 
-    // Validate data length matches
-    if (targetData.length !== labels.length || currentData.length !== labels.length) {
+    // Validate length of any non-empty series. An empty array means "not
+    // provided" and is the caller's way of opting out of that polyline; we
+    // only flag a real shape mismatch.
+    const lengthMismatch = [targetData, currentData, postPlanData].some(
+      (arr) => arr.length > 0 && arr.length !== labels.length,
+    );
+    if (lengthMismatch) {
       console.warn('RadarChart: Data length mismatch');
       return;
     }
 
-    // Calculate max value if not provided
-    const allValues = [...targetData, ...currentData, ...postPlanData];
-    let maxVal = maxValue;
-    if (!maxVal || maxVal <= 0) {
-      maxVal = allValues.length > 0 ? Math.max(...allValues) : 100;
+    // Resolve the value range. In default mode (minValue=0) we auto-detect the
+    // max from data and round up to the nearest 25 for clean tick labels (the
+    // historic behavior). In bipolar mode the caller has already chosen a
+    // symmetric scale based on actual data, so we honor it verbatim — no
+    // rounding, no auto-detection from data.
+    const bipolar = minValue < 0;
+    let rangeMin = minValue;
+    let rangeMax = maxValue;
+    if (!bipolar) {
+      const allValues = [...targetData, ...currentData, ...postPlanData];
+      let maxVal = rangeMax;
+      if (!maxVal || maxVal <= 0) {
+        maxVal = allValues.length > 0 ? Math.max(...allValues) : 100;
+      }
+      rangeMax = Math.ceil(maxVal / 25) * 25;
     }
-
-    // Round to nearest step of 25 for clean tick marks
-    const roundedMax = Math.ceil(maxVal / 25) * 25;
+    const valueSpan = rangeMax - rangeMin;
+    // Map a raw data value to a [0..1] normalized radius position.
+    const toRadiusFraction = (v) => {
+      if (valueSpan <= 0) return 0;
+      return Math.max(0, Math.min(1, (v - rangeMin) / valueSpan));
+    };
 
     // Chart dimensions and constants
     const centerX = 250;
@@ -93,19 +137,25 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
     const legendGroup = document.createElementNS(svgNS, 'g');
     legendGroup.setAttribute('class', 'radar-chart__legend');
 
-    // Draw grid circles (5 levels: 0%, 25%, 50%, 75%, 100%)
-    // These provide visual reference for allocation percentages
+    // Draw 5 concentric grid circles. The circle nearest the `balanceValue`
+    // (if any) gets a thicker stroke and the subtext color so it reads as the
+    // "this is the on-target reference" line.
+    const balanceFraction = balanceValue !== null ? toRadiusFraction(balanceValue) : null;
     for (let i = 0; i <= 4; i++) {
       const level = i / 4;
-      const circleRadius = radius * level;
+      const isBalanceRing =
+        balanceFraction !== null && Math.abs(level - balanceFraction) < 1e-6;
       const circle = document.createElementNS(svgNS, 'circle');
       circle.setAttribute('cx', centerX);
       circle.setAttribute('cy', centerY);
-      circle.setAttribute('r', circleRadius);
+      circle.setAttribute('r', radius * level);
       circle.setAttribute('fill', 'none');
-      circle.setAttribute('stroke', catppuccin.surface0);
-      circle.setAttribute('stroke-width', '1');
-      circle.setAttribute('class', 'radar-chart__grid-circle');
+      circle.setAttribute('stroke', isBalanceRing ? catppuccin.overlay2 : catppuccin.surface0);
+      circle.setAttribute('stroke-width', isBalanceRing ? '1.6' : '1');
+      circle.setAttribute(
+        'class',
+        isBalanceRing ? 'radar-chart__grid-circle radar-chart__grid-circle--balance' : 'radar-chart__grid-circle',
+      );
       gridGroup.appendChild(circle);
     }
 
@@ -160,8 +210,11 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
       tick.setAttribute('class', 'radar-chart__tick');
       tickGroup.appendChild(tick);
 
-      // Tick label (percentage value)
-      const tickValue = Math.round(roundedMax * level);
+      // Tick label — interpolate between rangeMin and rangeMax. In bipolar
+      // mode we show signed values (`-40`, `0`, `+40`) so the direction of
+      // each radial position is unambiguous.
+      const rawValue = rangeMin + valueSpan * level;
+      const tickValue = Math.round(rawValue);
       const label = document.createElementNS(svgNS, 'text');
       label.setAttribute('x', tickX);
       label.setAttribute('y', tickY - tickLabelOffset);
@@ -170,21 +223,25 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
       label.setAttribute('font-size', '9');
       label.setAttribute('font-family', 'JetBrains Mono, Fira Code, IBM Plex Mono, monospace');
       label.setAttribute('class', 'radar-chart__tick-label');
-      label.textContent = tickValue.toString();
+      label.textContent = bipolar && tickValue > 0 ? `+${tickValue}` : tickValue.toString();
       tickGroup.appendChild(label);
     });
 
-    // Calculate data point coordinates for target, current, and post-plan allocations
-    // Values are normalized to 0-1 range based on roundedMax
+    // Calculate data-point coordinates for each series. Values map through
+    // `toRadiusFraction` so they respect both the bipolar shift and the
+    // clamping at the chart's outer ring.
+    const showTarget = hasSeriesData(targetData, bipolar);
+    const showCurrent = hasSeriesData(currentData, bipolar);
+    const showPostPlan = hasSeriesData(postPlanData, bipolar);
+
     const targetPoints = [];
     const currentPoints = [];
     const postPlanPoints = [];
 
     coordinates.forEach((coord, i) => {
-      // Normalize values to 0-1 range (clamped)
-      const targetValue = Math.max(0, Math.min(targetData[i] / roundedMax, 1));
-      const currentValue = Math.max(0, Math.min(currentData[i] / roundedMax, 1));
-      const postPlanValue = postPlanData[i] !== undefined ? Math.max(0, Math.min(postPlanData[i] / roundedMax, 1)) : 0;
+      const targetValue = toRadiusFraction(targetData[i] ?? 0);
+      const currentValue = toRadiusFraction(currentData[i] ?? 0);
+      const postPlanValue = postPlanData[i] !== undefined ? toRadiusFraction(postPlanData[i]) : 0;
 
       // Calculate radius for each point based on normalized value
       const targetRadius = radius * targetValue;
@@ -210,7 +267,7 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
 
     // Draw Current dataset (filled polygon + solid polyline)
     // Green color indicates current allocation
-    if (currentPoints.length > 0) {
+    if (showCurrent && currentPoints.length > 0) {
       // Filled polygon for area visualization
       const currentPolygon = document.createElementNS(svgNS, 'polygon');
       const currentPolygonPoints = currentPoints.map(p => `${p.x},${p.y}`).join(' ');
@@ -247,7 +304,7 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
 
     // Draw Target dataset (dashed polyline)
     // Blue dashed line indicates target allocation
-    if (targetPoints.length > 0) {
+    if (showTarget && targetPoints.length > 0) {
       const targetPolyline = document.createElementNS(svgNS, 'polyline');
       const targetPolylinePoints = [...targetPoints, targetPoints[0]].map(p => `${p.x},${p.y}`).join(' ');  // Close polygon
       targetPolyline.setAttribute('points', targetPolylinePoints);
@@ -274,7 +331,7 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
 
     // Draw Post-Plan dataset (dashed polyline)
     // Yellow dashed line indicates post-plan allocation
-    if (postPlanPoints.length > 0 && postPlanData.length > 0) {
+    if (showPostPlan && postPlanPoints.length > 0) {
       const postPlanPolyline = document.createElementNS(svgNS, 'polyline');
       const postPlanPolylinePoints = [...postPlanPoints, postPlanPoints[0]].map(p => `${p.x},${p.y}`).join(' ');  // Close polygon
       postPlanPolyline.setAttribute('points', postPlanPolylinePoints);
@@ -299,102 +356,81 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
       });
     }
 
-    // Draw point labels (geography/industry names) outside chart area
-    // Positioned along each axis, offset from the endpoint
+    // Draw axis labels (geography/industry names) outside the chart area.
+    // Long names are truncated with an ellipsis so they don't overflow the
+    // card; the full name lives in a `<title>` child element for hover.
+    // 18 chars fits most TRBC industry names (e.g. "Aerospace & Defense"
+    // = 19 chars, just over the line — still readable when ellipsized).
     const labelOffset = 20;
+    const maxLabelChars = 18;
     coordinates.forEach((coord, i) => {
       const labelX = coord.x + labelOffset * Math.cos(coord.angle);
       const labelY = coord.y + labelOffset * Math.sin(coord.angle);
+      const fullText = labels[i] ?? '';
+      const displayText =
+        fullText.length > maxLabelChars ? `${fullText.slice(0, maxLabelChars - 1)}…` : fullText;
 
       const label = document.createElementNS(svgNS, 'text');
       label.setAttribute('x', labelX);
       label.setAttribute('y', labelY);
-      // Text anchor based on position (left/right/middle)
       label.setAttribute('text-anchor', coord.x > centerX ? 'start' : coord.x < centerX ? 'end' : 'middle');
       label.setAttribute('dominant-baseline', 'middle');
       label.setAttribute('fill', catppuccin.text);
       label.setAttribute('font-size', '10');
       label.setAttribute('font-family', 'JetBrains Mono, Fira Code, IBM Plex Mono, monospace');
       label.setAttribute('class', 'radar-chart__point-label');
-      label.textContent = labels[i];
+      label.appendChild(document.createTextNode(displayText));
+      // Native tooltip on hover — only worth attaching when we actually
+      // truncated, so the unchanged labels don't get a redundant overlay.
+      if (displayText !== fullText) {
+        const title = document.createElementNS(svgNS, 'title');
+        title.textContent = fullText;
+        label.appendChild(title);
+      }
       labelGroup.appendChild(label);
     });
 
-    // Draw legend at bottom of chart
-    // Shows Target (dashed blue), Current (solid green), and Post-Plan (dashed yellow) line styles
+    // Legend at bottom of chart — only entries with actual data are drawn.
+    // Items are centered as a group so a one-line legend doesn't sit lopsided.
     const legendY = 480;
-    const legendX = centerX;
+    const legendItems = [];
+    if (showTarget) legendItems.push({ label: targetLabel, color: catppuccin.blue, dashed: true });
+    if (showCurrent) legendItems.push({ label: currentLabel, color: catppuccin.green, dashed: false });
+    if (showPostPlan) legendItems.push({ label: postPlanLabel, color: catppuccin.yellow, dashed: true });
 
-    // Target legend item (dashed blue line)
-    const targetLegendLine = document.createElementNS(svgNS, 'line');
-    targetLegendLine.setAttribute('x1', legendX - 115);
-    targetLegendLine.setAttribute('y1', legendY);
-    targetLegendLine.setAttribute('x2', legendX - 95);
-    targetLegendLine.setAttribute('y2', legendY);
-    targetLegendLine.setAttribute('stroke', catppuccin.blue);
-    targetLegendLine.setAttribute('stroke-opacity', '0.8');
-    targetLegendLine.setAttribute('stroke-width', '2');
-    targetLegendLine.setAttribute('stroke-dasharray', '5,5');  // Dashed
-    targetLegendLine.setAttribute('class', 'radar-chart__legend-line radar-chart__legend-line--target');
-    legendGroup.appendChild(targetLegendLine);
+    const swatchWidth = 20;
+    const swatchTextGap = 5;
+    const itemGap = 18;
+    const charWidth = 6; // approximate per-character width at 10px monospace
 
-    const targetLegendText = document.createElementNS(svgNS, 'text');
-    targetLegendText.setAttribute('x', legendX - 90);
-    targetLegendText.setAttribute('y', legendY);
-    targetLegendText.setAttribute('dominant-baseline', 'middle');
-    targetLegendText.setAttribute('fill', catppuccin.subtext0);
-    targetLegendText.setAttribute('font-size', '10');
-    targetLegendText.setAttribute('font-family', 'JetBrains Mono, Fira Code, IBM Plex Mono, monospace');
-    targetLegendText.setAttribute('class', 'radar-chart__legend-text radar-chart__legend-text--target');
-    targetLegendText.textContent = 'Target';
-    legendGroup.appendChild(targetLegendText);
+    const widths = legendItems.map((it) => swatchWidth + swatchTextGap + it.label.length * charWidth);
+    const totalWidth = widths.reduce((a, w) => a + w, 0) + Math.max(0, legendItems.length - 1) * itemGap;
+    let cursorX = centerX - totalWidth / 2;
 
-    // Current legend item (solid green line)
-    const currentLegendLine = document.createElementNS(svgNS, 'line');
-    currentLegendLine.setAttribute('x1', legendX - 40);
-    currentLegendLine.setAttribute('y1', legendY);
-    currentLegendLine.setAttribute('x2', legendX - 20);
-    currentLegendLine.setAttribute('y2', legendY);
-    currentLegendLine.setAttribute('stroke', catppuccin.green);
-    currentLegendLine.setAttribute('stroke-opacity', '0.8');
-    currentLegendLine.setAttribute('stroke-width', '2');
-    currentLegendLine.setAttribute('class', 'radar-chart__legend-line radar-chart__legend-line--current');
-    legendGroup.appendChild(currentLegendLine);
+    legendItems.forEach((item, idx) => {
+      const line = document.createElementNS(svgNS, 'line');
+      line.setAttribute('x1', cursorX);
+      line.setAttribute('y1', legendY);
+      line.setAttribute('x2', cursorX + swatchWidth);
+      line.setAttribute('y2', legendY);
+      line.setAttribute('stroke', item.color);
+      line.setAttribute('stroke-opacity', '0.8');
+      line.setAttribute('stroke-width', '2');
+      if (item.dashed) line.setAttribute('stroke-dasharray', '5,5');
+      legendGroup.appendChild(line);
 
-    const currentLegendText = document.createElementNS(svgNS, 'text');
-    currentLegendText.setAttribute('x', legendX - 15);
-    currentLegendText.setAttribute('y', legendY);
-    currentLegendText.setAttribute('dominant-baseline', 'middle');
-    currentLegendText.setAttribute('fill', catppuccin.subtext0);
-    currentLegendText.setAttribute('font-size', '10');
-    currentLegendText.setAttribute('font-family', 'JetBrains Mono, Fira Code, IBM Plex Mono, monospace');
-    currentLegendText.setAttribute('class', 'radar-chart__legend-text radar-chart__legend-text--current');
-    currentLegendText.textContent = 'Current';
-    legendGroup.appendChild(currentLegendText);
+      const text = document.createElementNS(svgNS, 'text');
+      text.setAttribute('x', cursorX + swatchWidth + swatchTextGap);
+      text.setAttribute('y', legendY);
+      text.setAttribute('dominant-baseline', 'middle');
+      text.setAttribute('fill', catppuccin.subtext0);
+      text.setAttribute('font-size', '10');
+      text.setAttribute('font-family', 'JetBrains Mono, Fira Code, IBM Plex Mono, monospace');
+      text.textContent = item.label;
+      legendGroup.appendChild(text);
 
-    // Post-Plan legend item (dashed yellow line)
-    const postPlanLegendLine = document.createElementNS(svgNS, 'line');
-    postPlanLegendLine.setAttribute('x1', legendX + 40);
-    postPlanLegendLine.setAttribute('y1', legendY);
-    postPlanLegendLine.setAttribute('x2', legendX + 60);
-    postPlanLegendLine.setAttribute('y2', legendY);
-    postPlanLegendLine.setAttribute('stroke', catppuccin.yellow);
-    postPlanLegendLine.setAttribute('stroke-opacity', '0.8');
-    postPlanLegendLine.setAttribute('stroke-width', '2');
-    postPlanLegendLine.setAttribute('stroke-dasharray', '5,5');  // Dashed
-    postPlanLegendLine.setAttribute('class', 'radar-chart__legend-line radar-chart__legend-line--postplan');
-    legendGroup.appendChild(postPlanLegendLine);
-
-    const postPlanLegendText = document.createElementNS(svgNS, 'text');
-    postPlanLegendText.setAttribute('x', legendX + 65);
-    postPlanLegendText.setAttribute('y', legendY);
-    postPlanLegendText.setAttribute('dominant-baseline', 'middle');
-    postPlanLegendText.setAttribute('fill', catppuccin.subtext0);
-    postPlanLegendText.setAttribute('font-size', '10');
-    postPlanLegendText.setAttribute('font-family', 'JetBrains Mono, Fira Code, IBM Plex Mono, monospace');
-    postPlanLegendText.setAttribute('class', 'radar-chart__legend-text radar-chart__legend-text--postplan');
-    postPlanLegendText.textContent = 'Post-Plan';
-    legendGroup.appendChild(postPlanLegendText);
+      cursorX += widths[idx] + itemGap;
+    });
 
     // Append all groups to SVG in render order (background to foreground)
     svgRef.current.appendChild(gridGroup);      // Grid circles (background)
@@ -403,7 +439,7 @@ export function RadarChart({ labels = [], targetData = [], currentData = [], pos
     svgRef.current.appendChild(dataGroup);      // Data polygons and lines
     svgRef.current.appendChild(labelGroup);      // Point labels
     svgRef.current.appendChild(legendGroup);    // Legend (foreground)
-  }, [labels, targetData, currentData, postPlanData, maxValue]);
+  }, [labels, targetData, currentData, postPlanData, maxValue, minValue, balanceValue, targetLabel, currentLabel, postPlanLabel]);
 
   return (
     <div className="radar-chart" style={{ position: 'relative', width: '100%', aspectRatio: '1' }}>

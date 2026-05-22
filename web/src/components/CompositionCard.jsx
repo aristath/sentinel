@@ -1,23 +1,22 @@
 /**
- * Composition Card
+ * Composition Card — portfolio breakdowns as horizontal stacked bars.
  *
- * Stacked horizontal-bar breakdowns sourced from the freedom24 PRAAMS
- * analysis (/api/portfolio/structure). Four panels:
+ * Five panels, each a 100%-wide segmented bar plus a small legend:
+ *   - Country (ISO-2)
+ *   - Continent (rolled up from country)
+ *   - Industry (TRBC)
+ *   - Currency (instrument trading currency)
+ *   - Asset class (stock / ETF / depositary receipt)
  *
- *   - Asset class       (e.g. Equity 100%)
- *   - Sector / Industry (e.g. Industrials 56%, Technology 40%, Energy 4%)
- *   - Region / Country  (e.g. Asia & Oceania 61%, Europe 24%, North America 15%)
- *   - Currency          (e.g. HKD 56%, EUR 36%, USD 7%)
- *
- * Each bar is a single 100%-wide segmented strip with proportional slices
- * plus a small legend below. The card collapses to nothing if the
- * structure endpoint is unavailable.
+ * Data: /api/portfolio/composition. Computed server-side from current
+ * positions + the new broker-sourced geography/industry fields. The card
+ * collapses to nothing while the endpoint is unavailable.
  */
 import { Card, Group, Stack, Text } from '@mantine/core';
 import { catppuccin } from '../theme';
-import { usePortfolioStructure } from '../hooks/usePortfolioStructure';
+import { usePortfolioComposition } from '../hooks/usePortfolioComposition';
+import { CompositionRadar } from './CompositionRadar';
 
-// Reusable palette — picks ordered for visual contrast on the dark theme.
 const PALETTE = [
   catppuccin.blue,
   catppuccin.green,
@@ -27,12 +26,17 @@ const PALETTE = [
   catppuccin.pink,
   catppuccin.red,
   catppuccin.lavender,
+  catppuccin.sapphire || catppuccin.blue,
+  catppuccin.flamingo || catppuccin.pink,
 ];
 
-function StackedBar({ items }) {
-  // `items` is an array of {label, value} with values that sum to ~100.
-  // Filter zero-value slices to avoid invisible-but-counted segments.
-  const visible = (items || []).filter((it) => (it.value || 0) > 0);
+function formatPct(pct) {
+  const v = pct * 100;
+  return v >= 10 ? v.toFixed(0) : v.toFixed(1);
+}
+
+function StackedBar({ buckets }) {
+  const visible = (buckets || []).filter((b) => (b.pct || 0) > 0);
   if (visible.length === 0) {
     return (
       <Text size="xs" c="dimmed" fs="italic">
@@ -52,20 +56,20 @@ function StackedBar({ items }) {
           background: 'var(--mantine-color-dark-5)',
         }}
       >
-        {visible.map((it, i) => (
+        {visible.map((b, i) => (
           <div
-            key={it.label + i}
-            title={`${it.label}: ${it.value}%`}
+            key={b.name + i}
+            title={`${b.name}: ${formatPct(b.pct)}%`}
             style={{
-              width: `${it.value}%`,
+              width: `${b.pct * 100}%`,
               background: PALETTE[i % PALETTE.length],
             }}
           />
         ))}
       </div>
       <Group gap="md" wrap="wrap">
-        {visible.map((it, i) => (
-          <Group key={it.label + i} gap={4} wrap="nowrap">
+        {visible.map((b, i) => (
+          <Group key={b.name + i} gap={4} wrap="nowrap">
             <div
               style={{
                 width: 8,
@@ -76,7 +80,7 @@ function StackedBar({ items }) {
               }}
             />
             <Text size="xs" c="dimmed">
-              {it.label} {it.value}%
+              {b.name} {formatPct(b.pct)}%
             </Text>
           </Group>
         ))}
@@ -85,44 +89,56 @@ function StackedBar({ items }) {
   );
 }
 
-function Section({ title, items }) {
+function Section({ title, buckets }) {
   return (
     <Stack gap={4}>
       <Text size="xs" fw={600} tt="uppercase" c="dimmed">
         {title}
       </Text>
-      <StackedBar items={items} />
+      <StackedBar buckets={buckets} />
+    </Stack>
+  );
+}
+
+function RadarSection({ title, current, ideal, postPlan }) {
+  return (
+    <Stack gap={4}>
+      <Text size="xs" fw={600} tt="uppercase" c="dimmed">
+        {title}
+      </Text>
+      <CompositionRadar current={current} ideal={ideal} postPlan={postPlan} />
     </Stack>
   );
 }
 
 export function CompositionCard() {
-  const { data, isLoading, isError } = usePortfolioStructure();
-  if (isLoading || isError || !data) return null;
-  const initial = data.portfolioAnalysis?.initial || {};
+  const { data, isLoading, isError } = usePortfolioComposition();
+  if (isLoading || isError || !data?.composition) return null;
+  const c = data.composition;
+  const ideal = data.composition_ideal || {};
+  const postPlan = data.composition_post_plan || {};
 
   return (
     <Card p="sm" withBorder>
-      <Stack gap="sm">
+      <Stack gap="md">
         <Text size="xs" c="dimmed" fw={600} tt="uppercase">
           Composition
         </Text>
-        <Section title="Asset class" items={initial.assetClasses} />
-        <Section
-          title="Sector"
-          items={(initial.sectorIndustry?.graph || []).map((s) => ({
-            label: s.label,
-            value: s.value,
-          }))}
+        <RadarSection
+          title="Country of risk"
+          current={c.by_country}
+          ideal={ideal.by_country}
+          postPlan={postPlan.by_country}
         />
-        <Section
-          title="Region"
-          items={(initial.regionCountry?.graph || []).map((r) => ({
-            label: r.label,
-            value: r.value,
-          }))}
+        <RadarSection
+          title="Industry"
+          current={c.by_industry}
+          ideal={ideal.by_industry}
+          postPlan={postPlan.by_industry}
         />
-        <Section title="Currency" items={initial.currency} />
+        <Section title="Continent" buckets={c.by_continent} />
+        <Section title="Currency" buckets={c.by_currency} />
+        <Section title="Asset class" buckets={c.by_asset_class} />
       </Stack>
     </Card>
   );
