@@ -134,7 +134,6 @@ Returns details for a single security including current position data.
   "industry": "Technology",
   "aliases": "Apple, MacBook, Apple Silicon",
   "user_multiplier": 0.5,
-  "effective_user_multiplier": 0.5,
   "user_multiplier_age_weeks": 0.0,
   "user_multiplier_updated_at": "2026-05-17T12:00:00+00:00",
   "user_multiplier_source": "clara",
@@ -167,7 +166,6 @@ Update security metadata and execution controls. Only the following fields are a
 {
   "symbol": "AAPL.US",
   "user_multiplier": 0.6,
-  "effective_user_multiplier": 0.6,
   "user_multiplier_source": "manual",
   "user_multiplier_analysis": "Manual preference override from Sentinel UI."
 }

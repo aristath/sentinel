@@ -44,8 +44,9 @@ Manually trigger a job by type. Runs immediately, regardless of schedule.
 | `sync:trades` | Sync trade history |
 | `sync:cashflows` | Sync cash flow history |
 | `sync:dividends` | Sync dividend records |
+| `sync:benchmarks` | Refresh the benchmark-indices roster from Tradernet and price-sync every known benchmark. Auto-discovers any new index Tradernet exposes. |
+| `decay:user_multipliers` | Daily walk over `securities`: any row whose slider is ≥ 7 days old gets one step closer to neutral via `value = 0.5 + (value − 0.5) × 0.9`. Touching the slider resets the timer. |
 | `snapshot:backfill` | Reconstruct missing portfolio snapshots |
-| `aggregate:compute` | Recompute country/industry aggregate price series |
 | `trading:check_markets` | Check market open status |
 | `trading:execute` | Execute pending trade recommendations |
 | `trading:rebalance` | Generate new trade recommendations via Planner |

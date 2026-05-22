@@ -12,9 +12,7 @@ Interactive docs are available at `/docs` (Swagger UI) and `/redoc` (ReDoc) when
 |---|---|---|
 | [Settings](settings.md) | `/api/settings` | Application configuration |
 | [LED Display](led.md) | `/api/led` | Hardware LED controller and bridge health |
-| [Portfolio](portfolio.md) | `/api/portfolio` | Portfolio state, sync, CAGR, P&L history |
-| [Allocation Targets](allocation-targets.md) | `/api/allocation-targets` | Geography and industry target weights |
-| [Allocation](allocation.md) | `/api/allocation` | Current vs target allocation data |
+| [Portfolio](portfolio.md) | `/api/portfolio` | Portfolio state, sync, CAGR, P&L history, composition |
 | [Securities](securities.md) | `/api/securities` | Security universe management and price history |
 | [Prices](prices.md) | `/api/prices` | Bulk price sync |
 | [Unified View](unified.md) | `/api/unified` | Merged per-security dashboard data |

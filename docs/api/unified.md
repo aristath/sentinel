@@ -27,7 +27,6 @@ Returns a single merged view of all active securities, combining position data, 
     "allow_buy": 1,
     "allow_sell": 1,
     "user_multiplier": 0.5,
-    "effective_user_multiplier": 0.5,
     "user_multiplier_age_weeks": 0.0,
     "user_multiplier_source": "clara",
     "user_multiplier_analysis": "Long-term strategic fit remains neutral.",
@@ -52,7 +51,6 @@ Returns a single merged view of all active securities, combining position data, 
     "clara_target_pct": 3.40,
     "opportunity_target_pct": 0.00,
     "final_target_pct": 4.50,
-    "clara_freshness": 1.0,
 
     "contrarian_score": 0.61,
     "opp_score": 0.63,
@@ -87,9 +85,8 @@ Returns a single merged view of all active securities, combining position data, 
 
 | Field | Description |
 |---|---|
-| `user_multiplier` | Stored Clara strategic preference, 0 avoid, 0.5 neutral, 1 prefer |
-| `effective_user_multiplier` | Preference after temporal fade toward neutral |
-| `user_multiplier_age_weeks` | Age of the per-security preference timestamp |
+| `user_multiplier` | Stored strategic preference, 0 avoid, 0.5 neutral, 1 prefer. The weekly `decay:user_multipliers` job nudges this value back toward 0.5 over ~52 weeks of no touch. |
+| `user_multiplier_age_weeks` | Age of the per-security preference timestamp (resets when the slider is touched OR the decay job runs) |
 | `user_multiplier_source` | Preference source, usually `clara`, `manual`, or `migration` |
 | `user_multiplier_analysis` | Human-readable rationale for the stored preference |
 | `aliases` | Alternative names/tickers for companion apps |
@@ -110,12 +107,11 @@ Returns a single merged view of all active securities, combining position data, 
 | `current_allocation` | Current position as % of total portfolio |
 | `post_plan_allocation` | Allocation after applying all recommendations |
 | `ideal_allocation` | Target allocation from the Planner |
-| `allocation_sleeve` | Primary sleeve for the target, `core` or `opportunity` |
-| `baseline_target_pct` | Baseline deterministic core target contribution |
-| `clara_target_pct` | Clara strategic preference target contribution |
-| `opportunity_target_pct` | Tactical contrarian opportunity target contribution |
-| `final_target_pct` | Final target after normalization and position caps |
-| `clara_freshness` | Global Clara freshness coefficient after temporal fade |
+| `allocation_sleeve` | Primary algo half driver for the target, `core` (baseline rank) or `opportunity` (contrarian signal) |
+| `baseline_target_pct` | Algo half — baseline-rank contribution to the final target |
+| `clara_target_pct` | User-multiplier half — slider-driven contribution to the final target |
+| `opportunity_target_pct` | Algo half — tactical opportunity contribution to the final target |
+| `final_target_pct` | Final target after normalization and position caps. Equals `clara_target_pct + baseline_target_pct + opportunity_target_pct`. |
 
 **Contrarian signals**
 

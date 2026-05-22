@@ -78,6 +78,78 @@ Clara's task contract (`GET /api/securities` returning `{symbol, name, geography
     ```
     Expect roughly 25–50 buckets (was probably <15 with the coarse manual labels). ETFs and unclassified Kazakh rows will be absent.
 
+---
+
+# Second batch — composition + benchmarks + planner blend refactor
+
+This second section covers the 6 commits that landed after the geography/industry migration (range `36808f7e..HEAD`).
+
+## Summary of what changed (second batch)
+
+- **Benchmarks** (`benchmarks` + `benchmark_prices` tables) — new market-indices store, fully separate from `securities`/`prices`. Populated by the new `sync:benchmarks` job (daily). Auto-discovers any new `.IDX` entry Tradernet exposes.
+- **`instr_kind_c`** is now a first-class column on `securities`. The migration auto-backfills it from `quote_data.kind` so existing rows light up immediately. Persisted on every `sync:metadata` run going forward.
+- **Composition module** + `GET /api/portfolio/composition` endpoint — local replacement for the (now-broken) Freedom24 PRAAMS surface. Returns country/continent/industry/currency/asset-class breakdowns + risk-return metrics + benchmarks beta table.
+- **Planner blend refactor** — `calculate_ideal_portfolio` now produces one unified score per security: `0.8 × clara_share + 0.2 × algo_share`. The "Clara sleeve / baseline sleeve" sleeve-split is gone; the global `clara_preferences_updated_at` setting and the read-time `effective_user_multiplier` fade are gone. Replaced by a daily `decay:user_multipliers` job that physically nudges each row's stored slider toward 0.5 by `value = 0.5 + (value − 0.5) × 0.9` after 7 days of no human touch.
+- **Web UI** — composition card now renders bipolar deviation-from-ideal radars (country + industry, current vs post-plan), risk/return card switched from radar to a stack of deviation bars, SecurityAllocationCard gained an ideal-marker + sort/show toggles.
+
+Clara's task contract is unchanged (`GET /api/securities` still returns `user_multiplier`, `geography`, `industry`). The deleted `effective_user_multiplier` field was internal-only — Clara doesn't consume it.
+
+## Steps to deploy (second batch)
+
+1. **Snapshot the live DB**:
+   ```bash
+   ssh aristath@192.168.1.229
+   cp ~/sentinel/data/sentinel.db ~/sentinel/data/backups/sentinel-before-composition-migration-$(date +%Y%m%d-%H%M%S).db
+   ```
+
+2. **Stop the service**:
+   ```bash
+   sudo systemctl stop sentinel.service
+   ```
+
+3. **Pull and install**:
+   ```bash
+   cd ~/sentinel && git pull && uv sync
+   ```
+
+4. **Drop now-obsolete settings** (the planner no longer reads them; leaving them in is harmless but noisy):
+   ```bash
+   sqlite3 ~/sentinel/data/sentinel.db "DELETE FROM settings WHERE key IN ('clara_preference_weekly_fade', 'clara_preferences_updated_at');"
+   ```
+
+5. **Start the service**:
+   ```bash
+   sudo systemctl start sentinel.service
+   ```
+   On startup the schema migration auto-runs and creates `benchmarks` + `benchmark_prices` tables, adds the `instr_kind_c` column, and backfills it from `quote_data.kind`.
+
+6. **Trigger the benchmarks sync once manually** (the daily job will also fire on its schedule, but the initial roster + 5-year price history takes ~5 min and is nicer to do hands-on):
+   ```bash
+   curl -X POST http://localhost:8000/api/jobs/sync:benchmarks/run
+   ```
+   Expect ~51 indices to land and roughly half to get prices (Tradernet has price history for most US/EU indices; some FORTS and TABADUL entries may be price-less).
+
+7. **Spot-check the new tables and column**:
+   ```bash
+   sqlite3 ~/sentinel/data/sentinel.db "SELECT COUNT(*) FROM benchmarks; SELECT COUNT(*) FROM benchmark_prices; SELECT instr_kind_c, COUNT(*) FROM securities WHERE active=1 GROUP BY instr_kind_c;"
+   ```
+   Expect ~50 benchmarks, some thousands of benchmark prices, and `instr_kind_c` distribution roughly 1=stocks, 7=ETFs, 10=DRs.
+
+8. **Verify the new composition endpoint**:
+   ```bash
+   curl -s http://localhost:8000/api/portfolio/composition | jq '.metrics, .composition.by_country, (.benchmarks | length)'
+   ```
+
+9. **No Clara task edits required.** The `~/.clara/tasks/*.md` files consume `user_multiplier` (still present) and `geography`/`industry` (still present). The internal-only `effective_user_multiplier` and `clara_freshness` fields don't appear in any Clara contract.
+
+## Rollback (second batch)
+
+Same shape as the first batch — restore the snapshot from step 1, `git checkout` the previous SHA, `uv sync`, restart. The new `benchmarks` + `benchmark_prices` tables are independent of any other state and can be left in place after rollback (they're just unused storage).
+
+---
+
+# First batch rollback (still applies)
+
 ## Rollback
 
 If something goes wrong before step 10:

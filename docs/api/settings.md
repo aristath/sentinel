@@ -49,9 +49,10 @@ Returns all application settings, merging stored values with defaults. Runtime s
   "strategy_max_funding_sells_per_cycle": 2,
   "strategy_max_funding_turnover_pct": 0.12,
   "strategy_funding_conviction_bias": 1.0,
-  "clara_preference_weekly_fade": 0.9,
   "clara_preference_strength": 5.0,
-  "clara_preferences_updated_at": "2026-05-17T12:00:00+00:00",
+  "user_multiplier_blend_pct": 80.0,
+  "user_multiplier_decay_factor": 0.9,
+  "user_multiplier_decay_interval_days": 7,
   "led_display_enabled": true,
   "led_brightness": 200,
   "r2_account_id": "",
@@ -112,8 +113,8 @@ Set a single setting value.
 Atomically update the strategy-tuning settings shown in the Strategy tab. All keys must be present; partial updates are rejected.
 
 **Required keys**
-- `strategy_core_target_pct` — Core sleeve target (0–100). Must sum to 100 with opportunity target.
-- `strategy_opportunity_target_pct` — Opportunity sleeve target (0–100).
+- `strategy_core_target_pct` — Within the deterministic-algo half of the per-security score (the 20% that doesn't come from the slider), this is the share that flows through the baseline contrarian rank (0–100). Must sum to 100 with `strategy_opportunity_target_pct`.
+- `strategy_opportunity_target_pct` — The remainder of the algo half, applied via the opportunity-score-driven contribution (0–100).
 - `strategy_min_opp_score` — Minimum score to classify a security as opportunity (0–1).
 - `strategy_core_floor_pct` — Core floor fraction (0–1).
 - `strategy_entry_t1_dd`, `strategy_entry_t2_dd`, `strategy_entry_t3_dd` — Drawdown tranche thresholds (-0.9–0).
