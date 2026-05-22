@@ -1,9 +1,8 @@
 """Portfolio API routes."""
 
-import bisect
 import logging
 from datetime import date as date_type
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -58,14 +57,21 @@ async def sync_portfolio() -> dict[str, str]:
     return await service.sync_portfolio()
 
 
-def _ts_to_iso(ts: int) -> str:
-    """Convert unix timestamp to YYYY-MM-DD string."""
-    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+@router.get("/composition")
+async def get_portfolio_composition(
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict[str, Any]:
+    """Portfolio composition + risk/return metrics for the sidebar widgets.
 
+    Surfaces: composition breakdowns (% of EUR value by country, continent,
+    industry, currency, asset class), portfolio-level metrics (1Y/5Y return,
+    volatility, max drawdown, Sharpe, beta vs VWCE.EU, HHI concentration),
+    and the six radar axes derived from those metrics. See
+    `sentinel.portfolio_composition` for the math.
+    """
+    from sentinel.portfolio_composition import build_composition
 
-def _midnight_utc_ts(iso_date: str) -> int:
-    """Convert YYYY-MM-DD to midnight UTC unix timestamp."""
-    return int(datetime.strptime(iso_date, "%Y-%m-%d").replace(tzinfo=timezone.utc).timestamp())
+    return await build_composition(deps.db, deps.currency, deps.settings)
 
 
 @router.get("/cagr")
@@ -116,8 +122,11 @@ async def get_portfolio_pnl_history(
     Get portfolio P&L history for charting (hardcoded 1Y).
 
     Snapshots store only positions + cash. All derived metrics
-    (total_value, net_deposits, returns) are computed at query time.
+    (total_value, net_deposits, returns) are computed at query time via
+    the shared helpers in `sentinel.portfolio_composition`.
     """
+    from sentinel.portfolio_composition import build_daily_pnl
+
     days = 365
 
     # Get daily snapshots (need extra 365 days for 1-year rolling window).
@@ -127,52 +136,21 @@ async def get_portfolio_pnl_history(
     if not snapshots:
         return {"snapshots": [], "summary": None}
 
-    # --- Compute net deposits from cash_flows ---
+    # Cumulative net-deposits lookup keyed by ISO date. Card deposits +
+    # withdrawals (card_payout) only — that's what funds the account.
     cash_flows = await deps.db.get_cash_flows()
     cf_sorted = sorted(
         [cf for cf in cash_flows if cf["type_id"] in ("card", "card_payout")],
         key=lambda cf: cf["date"],
     )
-
-    cumulative_deposits: dict[str, float] = {}
-    running_nd = 0.0
+    deposits_by_date: dict[str, float] = {}
+    running = 0.0
     for cf in cf_sorted:
         amount_eur = await deps.currency.to_eur_for_date(cf["amount"], cf["currency"], cf["date"])
-        running_nd += amount_eur
-        cumulative_deposits[cf["date"]] = running_nd
+        running += amount_eur
+        deposits_by_date[cf["date"]] = running
 
-    nd_dates = sorted(cumulative_deposits.keys())
-    nd_values = [cumulative_deposits[d] for d in nd_dates]
-
-    def _get_net_deposits_as_of(iso_date: str) -> float:
-        idx = bisect.bisect_right(nd_dates, iso_date) - 1
-        return nd_values[idx] if idx >= 0 else 0.0
-
-    # --- Build daily data from snapshots ---
-    daily = []
-    for snap in snapshots:
-        date_ts = snap["date"]
-        data = snap["data"]
-        iso_date = _ts_to_iso(date_ts)
-
-        positions = data.get("positions", {})
-        cash_eur = data.get("cash_eur", 0.0) or 0.0
-        positions_value = sum(p.get("value_eur", 0) for p in positions.values())
-        total_value = positions_value + cash_eur
-
-        net_deposits = _get_net_deposits_as_of(iso_date)
-        pnl_eur = total_value - net_deposits
-        pnl_pct = (pnl_eur / net_deposits * 100) if net_deposits > 0 else 0.0
-
-        daily.append(
-            {
-                "date": iso_date,
-                "total_value_eur": round(total_value, 2),
-                "net_deposits_eur": round(net_deposits, 2),
-                "pnl_eur": round(pnl_eur, 2),
-                "pnl_pct": round(pnl_pct, 2),
-            }
-        )
+    daily = build_daily_pnl(snapshots, deposits_by_date)
 
     # --- Build output with rolling TWR ---
     start_date = (date_type.today() - timedelta(days=days)).isoformat()
