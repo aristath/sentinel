@@ -30,9 +30,10 @@ STRATEGY_KEYS = {
 }
 PLANNER_SETTING_KEYS = {
     *STRATEGY_KEYS,
-    "clara_preference_weekly_fade",
     "clara_preference_strength",
-    "clara_preferences_updated_at",
+    "user_multiplier_blend_pct",
+    "user_multiplier_decay_factor",
+    "user_multiplier_decay_interval_days",
     "max_position_pct",
     "min_position_pct",
     "min_trade_value",

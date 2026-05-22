@@ -103,9 +103,10 @@ class TestSettingsDefaults:
             "strategy_max_funding_sells_per_cycle",
             "strategy_max_funding_turnover_pct",
             "strategy_funding_conviction_bias",
-            "clara_preference_weekly_fade",
             "clara_preference_strength",
-            "clara_preferences_updated_at",
+            "user_multiplier_blend_pct",
+            "user_multiplier_decay_factor",
+            "user_multiplier_decay_interval_days",
         ]
         for key in strategy_keys:
             assert key in DEFAULTS, f"Missing strategy default: {key}"

@@ -1,4 +1,14 @@
-"""Clara strategic preference helpers."""
+"""Clara strategic preference helpers.
+
+The `user_multiplier` (range 0..1, with 0.5 = neutral) is the user's
+strategic conviction signal for a security. Historically, this was faded
+toward neutral at read time by computing an "effective" value from a
+freshness coefficient. That design is gone — the stored value now BECOMES
+the effective value and gracefully decays back to 0.5 via a scheduled
+weekly job (`decay:user_multipliers`).
+
+The atomic decay step is `decayed_user_multiplier`, defined below.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +19,11 @@ from typing import Any
 SECONDS_PER_WEEK = 7 * 24 * 60 * 60
 NEUTRAL_USER_MULTIPLIER = 0.5
 STRATEGIC_BUY_PRESSURE_THRESHOLD = 0.55
+
+# Default per-week fade factor. One decay step at this rate leaves 90% of the
+# deviation from neutral; 52 successive steps leave (0.9 ** 52) ≈ 0.0042 of
+# the original — effectively neutral after a year of no human touch.
+DEFAULT_DECAY_FADE_FACTOR = 0.9
 
 
 def normalize_user_multiplier(value: Any) -> float:
@@ -64,35 +79,35 @@ def age_weeks(updated_at: object, *, now: datetime | None = None) -> float:
     return max(0.0, delta_seconds / SECONDS_PER_WEEK)
 
 
-def freshness_from_timestamp(updated_at: object, weekly_fade: float, *, now: datetime | None = None) -> float:
-    """Return freshness coefficient where 1.0 is fresh and 0.0 is stale."""
-    if parse_utc_datetime(updated_at) is None:
-        return 0.0
+def decayed_user_multiplier(value: object, fade_factor: float = DEFAULT_DECAY_FADE_FACTOR) -> float:
+    """One step of fade for a stored `user_multiplier`.
+
+    `new = 0.5 + (value - 0.5) * fade_factor`
+
+    The factor is clamped to [0, 1]:
+    - `1.0` → identity (no fade).
+    - `0.0` → snap to neutral in one step.
+    - Default `0.9` → leaves 90% of the deviation each step; 52 successive
+      steps leave (0.9 ** 52) ≈ 0.4% of the original — what the weekly job
+      uses so a year of untouched ratings converges to neutral.
+
+    The job applies this once per row per ~7 days; touching the slider via the
+    `/securities/preference` endpoint resets the stored value (and the
+    `user_multiplier_updated_at` clock that gates the next decay).
+    """
+    normalized_value = normalize_user_multiplier(value)
     try:
-        parsed_fade = float(weekly_fade)
+        factor = float(fade_factor)
     except (TypeError, ValueError, OverflowError):
-        parsed_fade = 0.0
-    if not math.isfinite(parsed_fade):
-        parsed_fade = 0.0
-    fade = max(0.0, min(1.0, parsed_fade))
-    return fade ** age_weeks(updated_at, now=now)
-
-
-def effective_user_multiplier(
-    value: object,
-    updated_at: object,
-    weekly_fade: float,
-    *,
-    now: datetime | None = None,
-) -> float:
-    """Return user multiplier after fading toward neutral."""
-    stored = normalize_user_multiplier(value)
-    freshness = freshness_from_timestamp(updated_at, weekly_fade, now=now)
-    return NEUTRAL_USER_MULTIPLIER + ((stored - NEUTRAL_USER_MULTIPLIER) * freshness)
+        factor = 0.0
+    if not math.isfinite(factor):
+        factor = 0.0
+    factor = max(0.0, min(1.0, factor))
+    return NEUTRAL_USER_MULTIPLIER + (normalized_value - NEUTRAL_USER_MULTIPLIER) * factor
 
 
 def preference_tilt(effective_multiplier: float, strength: float) -> float:
-    """Turn an effective user multiplier into a strategic allocation tilt."""
+    """Turn a stored user multiplier into a strategic allocation tilt."""
     try:
         parsed_strength = float(strength)
     except (TypeError, ValueError, OverflowError):
@@ -104,7 +119,7 @@ def preference_tilt(effective_multiplier: float, strength: float) -> float:
 
 
 def has_strategic_buy_pressure(effective_multiplier: object) -> bool:
-    """Return whether a faded preference is meaningfully above neutral."""
+    """Return whether a stored preference is meaningfully above neutral."""
     return normalize_user_multiplier(effective_multiplier) >= STRATEGIC_BUY_PRESSURE_THRESHOLD
 
 
@@ -165,19 +180,16 @@ def apply_max_cap(weights: dict[str, float], max_position: float) -> dict[str, f
     return {symbol: weight for symbol, weight in capped.items() if weight > 0}
 
 
-def preference_snapshot(
-    security: dict[str, Any],
-    *,
-    weekly_fade: float,
-    now: datetime | None = None,
-) -> dict[str, float]:
-    """Return stored/effective preference details for one security."""
+def preference_snapshot(security: dict[str, Any], *, now: datetime | None = None) -> dict[str, float]:
+    """Return preference info for one security.
+
+    The "effective" value is now identical to the stored value (no read-time
+    fade), but we still surface `user_multiplier_age_weeks` so the UI can show
+    when the slider was last touched.
+    """
     stored = normalize_user_multiplier(security.get("user_multiplier", NEUTRAL_USER_MULTIPLIER))
-    updated_at = security.get("user_multiplier_updated_at")
-    weeks = age_weeks(updated_at, now=now)
-    effective = effective_user_multiplier(stored, updated_at, weekly_fade, now=now)
+    weeks = age_weeks(security.get("user_multiplier_updated_at"), now=now)
     return {
         "user_multiplier": stored,
-        "effective_user_multiplier": effective,
         "user_multiplier_age_weeks": weeks,
     }

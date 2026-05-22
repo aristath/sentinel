@@ -352,7 +352,7 @@ class TestContrarianSizing:
                     "freefall_block": 0,
                     "sleeve": "core",
                     "clara_target_pct": 0.20,
-                    "effective_user_multiplier": 0.9,
+                    "user_multiplier": 0.9,
                 }
             },
             precomputed_sleeves={"AMD": "core"},
@@ -432,7 +432,7 @@ class TestContrarianSizing:
                     "freefall_block": 0,
                     "sleeve": "core",
                     "clara_target_pct": 0.20,
-                    "effective_user_multiplier": 0.5,
+                    "user_multiplier": 0.5,
                 }
             },
             precomputed_sleeves={"BASE": "core"},

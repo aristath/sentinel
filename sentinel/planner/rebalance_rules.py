@@ -104,12 +104,12 @@ def generate_buy_reason(
     cap = float(signal.get("capitulation_score", 0.0))
     turn = int(signal.get("cycle_turn", 0))
     clara_target = float(signal.get("clara_target_pct", 0.0) or 0.0) * 100
-    effective_preference = float(signal.get("effective_user_multiplier", 0.5) or 0.5)
+    user_multiplier = float(signal.get("user_multiplier", 0.5) or 0.5)
 
-    if clara_target > 0 and has_strategic_buy_pressure(effective_preference):
+    if clara_target > 0 and has_strategic_buy_pressure(user_multiplier):
         return (
             f"Strategic preference buy: underweight by {underweight:.1f}%, "
-            f"Clara target={clara_target:.1f}%, effective preference={effective_preference:.2f}, "
+            f"Clara target={clara_target:.1f}%, user multiplier={user_multiplier:.2f}, "
             f"lot={lot_class}"
         )
 

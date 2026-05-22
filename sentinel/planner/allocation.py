@@ -11,8 +11,6 @@ from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.planner.preferences import (
     apply_max_cap,
-    effective_user_multiplier,
-    freshness_from_timestamp,
     normalize_user_multiplier,
     normalize_weights,
     preference_tilt,
@@ -70,8 +68,10 @@ class AllocationCalculator:
             "strategy_opportunity_target_pct": DEFAULTS["strategy_opportunity_target_pct"],
             "strategy_min_opp_score": DEFAULTS["strategy_min_opp_score"],
             "max_position_pct": DEFAULTS["max_position_pct"],
-            "clara_preference_weekly_fade": DEFAULTS["clara_preference_weekly_fade"],
             "clara_preference_strength": DEFAULTS["clara_preference_strength"],
+            "user_multiplier_blend_pct": DEFAULTS["user_multiplier_blend_pct"],
+            "user_multiplier_decay_factor": DEFAULTS["user_multiplier_decay_factor"],
+            "user_multiplier_decay_interval_days": DEFAULTS["user_multiplier_decay_interval_days"],
         }
         keys = list(keys_defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, keys_defaults[k]) for k in keys])
@@ -106,8 +106,14 @@ class AllocationCalculator:
         entry_t3_dd = config["strategy_entry_t3_dd"]
         entry_memory_days = int(config["strategy_entry_memory_days"])
         memory_max_boost = config["strategy_memory_max_boost"]
-        weekly_fade = config["clara_preference_weekly_fade"]
         preference_strength = config["clara_preference_strength"]
+
+        # `user_multiplier_blend_pct` is the share of a security's score that
+        # comes from its stored slider value; the remainder comes from the
+        # deterministic contrarian algos. Defaults to 80/20.
+        blend_pct = float(config.get("user_multiplier_blend_pct", 80.0)) / 100.0
+        blend_pct = max(0.0, min(1.0, blend_pct))
+        algo_pct = 1.0 - blend_pct
 
         symbol_signals: dict[str, dict[str, float | int]] = {}
         rebalance_signals: dict[str, dict[str, float | int]] = {}
@@ -116,9 +122,6 @@ class AllocationCalculator:
         opportunity_raw_weights: dict[str, float] = {}
         preference_details: dict[str, dict[str, float]] = {}
         symbols = [sec["symbol"] for sec in securities]
-        as_of_now: datetime | None = None
-        if as_of_date is not None:
-            as_of_now = datetime.strptime(as_of_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
         prices_by_symbol: dict[str, list[dict]] | None = None
         get_prices_multi = getattr(self._db, "get_prices_for_symbols", None)
         if callable(get_prices_multi):
@@ -136,16 +139,11 @@ class AllocationCalculator:
             prices_by_symbol = {symbol: prices for symbol, prices in zip(symbols, all_prices, strict=False)}
         for sec in securities:
             symbol = sec["symbol"]
+            # Stored slider value is the truth — the weekly decay job has
+            # already faded historical ratings; no read-time correction here.
             stored_preference = normalize_user_multiplier(sec.get("user_multiplier", 0.5))
-            effective_preference = effective_user_multiplier(
-                stored_preference,
-                sec.get("user_multiplier_updated_at"),
-                weekly_fade,
-                now=as_of_now,
-            )
             preference_details[symbol] = {
                 "user_multiplier": stored_preference,
-                "effective_user_multiplier": effective_preference,
             }
 
             raw = prices_by_symbol.get(symbol, [])
@@ -172,7 +170,9 @@ class AllocationCalculator:
 
             baseline_weight = max(0.001, float(signal.get("core_rank", 0.0) or 0.0) + 1.0)
             baseline_raw_weights[symbol] = baseline_weight
-            clara_raw_weights[symbol] = baseline_weight * preference_tilt(effective_preference, preference_strength)
+            # `clara_raw_weights` is the security's pure-slider voice. No
+            # contrarian-rank multiplication — that lives in the algo half.
+            clara_raw_weights[symbol] = preference_tilt(stored_preference, preference_strength)
 
         # Apply dividend reinvestment boost
         max_div_boost = config["max_dividend_reinvestment_boost"]
@@ -186,6 +186,8 @@ class AllocationCalculator:
                         boosted = float(symbol_signals[symbol].get("opp_score", 0.0)) + share * max_div_boost
                         symbol_signals[symbol]["opp_score"] = max(0.0, min(1.0, boosted))
 
+        # Algo sleeve has its own internal core/opp split (default 80/20).
+        # That whole split is one half of the final blend; Clara is the other.
         core_target = config["strategy_core_target_pct"] / 100.0
         opportunity_target = config["strategy_opportunity_target_pct"] / 100.0
         min_opp_score = config["strategy_min_opp_score"]
@@ -209,39 +211,38 @@ class AllocationCalculator:
         clara_weights = normalize_weights(clara_raw_weights)
         opportunity_weights = normalize_weights(opportunity_raw_weights)
 
-        global_updated_at = await self._settings.get("clara_preferences_updated_at")
-        if global_updated_at is None:
-            preference_updates = [
-                str(sec["user_multiplier_updated_at"]) for sec in securities if sec.get("user_multiplier_updated_at")
-            ]
-            global_updated_at = max(preference_updates, default=None)
-        clara_freshness = freshness_from_timestamp(global_updated_at, weekly_fade, now=as_of_now)
-        clara_sleeve = core_target * clara_freshness
-        baseline_sleeve = core_target * (1.0 - clara_freshness)
-        tactical_sleeve = opportunity_target if opportunity_weights else 0.0
+        # If no security qualified for the opportunity pool, fold its share
+        # back into baseline so the algo half still sums to 1.0.
+        if opportunity_weights:
+            algo_core_target = core_target
+            algo_opp_target = opportunity_target
+        else:
+            algo_core_target = 1.0
+            algo_opp_target = 0.0
 
         allocations: dict[str, float] = {}
         decomposition: dict[str, dict[str, float | str]] = {}
         sleeves: dict[str, str] = {}
         for symbol in symbols:
-            clara_component = clara_sleeve * clara_weights.get(symbol, 0.0)
-            baseline_component = baseline_sleeve * baseline_weights.get(symbol, 0.0)
-            opportunity_component = tactical_sleeve * opportunity_weights.get(symbol, 0.0)
-            final_weight = clara_component + baseline_component + opportunity_component
+            # Clara half: 80% of final score, fully driven by stored slider.
+            clara_component = blend_pct * clara_weights.get(symbol, 0.0)
+            # Algo half: 20% of final score, contrarian core + opportunity.
+            algo_core_share = algo_core_target * baseline_weights.get(symbol, 0.0)
+            algo_opp_share = algo_opp_target * opportunity_weights.get(symbol, 0.0)
+            algo_component = algo_pct * (algo_core_share + algo_opp_share)
+            final_weight = clara_component + algo_component
             if final_weight <= 0:
                 continue
             allocations[symbol] = final_weight
-            sleeve = "opportunity" if opportunity_component > 0 else "core"
+            sleeve = "opportunity" if algo_opp_share > 0 else "core"
             sleeves[symbol] = sleeve
             detail = preference_details.get(symbol, {})
             decomposition[symbol] = {
-                "baseline_target_pct": baseline_component,
+                "baseline_target_pct": algo_pct * algo_core_share,
                 "clara_target_pct": clara_component,
-                "opportunity_target_pct": opportunity_component,
+                "opportunity_target_pct": algo_pct * algo_opp_share,
                 "final_target_pct": final_weight,
                 "allocation_sleeve": sleeve,
-                "clara_freshness": clara_freshness,
-                "effective_user_multiplier": detail.get("effective_user_multiplier", 0.5),
                 "user_multiplier": detail.get("user_multiplier", 0.5),
             }
 
@@ -249,13 +250,11 @@ class AllocationCalculator:
         for symbol, detail in decomposition.items():
             signal_update = {
                 "sleeve": str(detail["allocation_sleeve"]),
-                "effective_user_multiplier": float(detail["effective_user_multiplier"]),
                 "user_multiplier": float(detail["user_multiplier"]),
                 "baseline_target_pct": float(detail["baseline_target_pct"]),
                 "clara_target_pct": float(detail["clara_target_pct"]),
                 "opportunity_target_pct": float(detail["opportunity_target_pct"]),
                 "final_target_pct": float(detail["final_target_pct"]),
-                "clara_freshness": float(detail["clara_freshness"]),
             }
             rebalance_signals.setdefault(symbol, {}).update(signal_update)
             symbol_signals.setdefault(symbol, {}).update(signal_update)
@@ -288,10 +287,10 @@ class AllocationCalculator:
 
         allocation_decomposition = {
             "global": {
-                "clara_freshness": clara_freshness,
-                "clara_strategic_sleeve": clara_sleeve,
-                "sentinel_baseline_sleeve": baseline_sleeve,
-                "tactical_opportunity_sleeve": tactical_sleeve,
+                "user_multiplier_blend_pct": blend_pct,
+                "algo_blend_pct": algo_pct,
+                "algo_core_target": algo_core_target,
+                "algo_opportunity_target": algo_opp_target,
             },
             "symbols": decomposition,
         }

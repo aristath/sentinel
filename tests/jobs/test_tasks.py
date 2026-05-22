@@ -337,6 +337,96 @@ class TestSyncMetadata:
             assert call.kwargs["industry"] == ""
 
 
+class TestDecayUserMultipliers:
+    """The scheduled job that fades stored user_multipliers toward neutral.
+
+    Replaces the read-time fade machinery — once a row's slider is older than
+    `decay_interval_days`, one decay step is applied to the stored value and
+    the timestamp moves forward.
+    """
+
+    @pytest.fixture
+    def db_with_rows(self, mock_db):
+        from datetime import datetime, timedelta, timezone
+
+        now = datetime.now(timezone.utc)
+        old_iso = (now - timedelta(days=10)).isoformat()
+        fresh_iso = (now - timedelta(days=3)).isoformat()
+        # Simulate a small mixed roster: one due for decay, one too fresh,
+        # one already at neutral, one off-the-charts old.
+        rows = [
+            {"symbol": "OLD.US", "user_multiplier": 0.7, "user_multiplier_updated_at": old_iso},
+            {"symbol": "FRESH.US", "user_multiplier": 0.9, "user_multiplier_updated_at": fresh_iso},
+            {"symbol": "NEUTRAL.US", "user_multiplier": 0.5, "user_multiplier_updated_at": old_iso},
+            {"symbol": "NULL_TS.US", "user_multiplier": 0.8, "user_multiplier_updated_at": None},
+        ]
+        mock_db.get_all_securities = AsyncMock(return_value=rows)
+        mock_db.set_user_multiplier = AsyncMock()
+        return mock_db
+
+    @pytest.fixture
+    def mock_settings(self, mock_settings_factory=None):
+        settings = AsyncMock()
+        defaults = {
+            "user_multiplier_decay_factor": 0.9,
+            "user_multiplier_decay_interval_days": 7,
+        }
+        settings.get = AsyncMock(side_effect=lambda key, default=None: defaults.get(key, default))
+        return settings
+
+    @pytest.mark.asyncio
+    async def test_old_rows_get_one_decay_step(self, db_with_rows, mock_settings):
+        from sentinel.jobs.tasks import decay_user_multipliers
+
+        await decay_user_multipliers(db_with_rows, mock_settings)
+
+        # OLD.US (0.7, 10 days old) -> 0.5 + 0.2 * 0.9 = 0.68
+        called_for = {c.args[0]: c.args[1] for c in db_with_rows.set_user_multiplier.await_args_list}
+        assert "OLD.US" in called_for
+        assert abs(called_for["OLD.US"] - 0.68) < 1e-9
+
+    @pytest.mark.asyncio
+    async def test_fresh_rows_are_skipped(self, db_with_rows, mock_settings):
+        from sentinel.jobs.tasks import decay_user_multipliers
+
+        await decay_user_multipliers(db_with_rows, mock_settings)
+
+        called_symbols = {c.args[0] for c in db_with_rows.set_user_multiplier.await_args_list}
+        assert "FRESH.US" not in called_symbols
+
+    @pytest.mark.asyncio
+    async def test_neutral_rows_are_skipped(self, db_with_rows, mock_settings):
+        """A value already at 0.5 has nothing left to fade — no write needed."""
+        from sentinel.jobs.tasks import decay_user_multipliers
+
+        await decay_user_multipliers(db_with_rows, mock_settings)
+
+        called_symbols = {c.args[0] for c in db_with_rows.set_user_multiplier.await_args_list}
+        assert "NEUTRAL.US" not in called_symbols
+
+    @pytest.mark.asyncio
+    async def test_rows_with_no_timestamp_are_skipped(self, db_with_rows, mock_settings):
+        """If we can't tell how long ago the value was set, leave it alone —
+        better than randomly decaying a value the user set 30 seconds ago."""
+        from sentinel.jobs.tasks import decay_user_multipliers
+
+        await decay_user_multipliers(db_with_rows, mock_settings)
+
+        called_symbols = {c.args[0] for c in db_with_rows.set_user_multiplier.await_args_list}
+        assert "NULL_TS.US" not in called_symbols
+
+    @pytest.mark.asyncio
+    async def test_logs_count_of_decayed_rows(self, db_with_rows, mock_settings, caplog):
+        import logging
+
+        from sentinel.jobs.tasks import decay_user_multipliers
+
+        caplog.set_level(logging.INFO)
+        await decay_user_multipliers(db_with_rows, mock_settings)
+
+        assert any("decayed" in r.message.lower() for r in caplog.records)
+
+
 class TestSyncBenchmarks:
     """Verify `sync:benchmarks` refreshes the index roster from Tradernet
     AND syncs daily prices. Both must happen in one job — benchmarks are

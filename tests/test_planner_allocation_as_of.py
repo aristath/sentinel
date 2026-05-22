@@ -60,9 +60,10 @@ def _allocation_settings(settings_values=None):
         "strategy_opportunity_target_pct": 20,
         "strategy_min_opp_score": 0.55,
         "max_position_pct": 100,
-        "clara_preference_weekly_fade": 0.90,
         "clara_preference_strength": 5.0,
-        "clara_preferences_updated_at": datetime(2026, 5, 17, tzinfo=timezone.utc).isoformat(),
+        "user_multiplier_blend_pct": 80.0,
+        "user_multiplier_decay_factor": 0.90,
+        "user_multiplier_decay_interval_days": 7,
     }
     if settings_values:
         values.update(settings_values)
@@ -92,7 +93,7 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
         db=db,
         portfolio=portfolio,
         currency=MagicMock(),
-        settings=_allocation_settings({"clara_preferences_updated_at": now_iso}),
+        settings=_allocation_settings(),
     )
 
     allocations = await calculator.calculate_ideal_portfolio()
@@ -105,7 +106,11 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
 
 
 @pytest.mark.asyncio
-async def test_low_preference_is_not_forced_to_min_position_floor():
+async def test_low_preference_security_gets_less_than_neutral_peers():
+    """A security with a very low user_multiplier (avoid signal) should get a
+    meaningfully smaller allocation than its neutral peers — the Clara half
+    of the score is suppressed. It doesn't drop to zero because the algo
+    half still contributes its share, but the gap should be visible."""
     now_iso = datetime.now(timezone.utc).isoformat()
     db = MagicMock()
     db.cache_get = AsyncMock(return_value=None)
@@ -129,9 +134,13 @@ async def test_low_preference_is_not_forced_to_min_position_floor():
         db=db,
         portfolio=portfolio,
         currency=MagicMock(),
-        settings=_allocation_settings({"clara_preferences_updated_at": now_iso}),
+        settings=_allocation_settings(),
     )
 
     allocations = await calculator.calculate_ideal_portfolio()
 
-    assert allocations["S0"] < 0.02
+    # S0 should get less than any of the neutral peers.
+    for i in range(1, 6):
+        assert allocations["S0"] < allocations[f"S{i}"], f"S0 should be smaller than S{i}"
+    # And the gap should be substantial — at least 2× smaller.
+    assert allocations["S0"] * 2 < allocations["S1"]

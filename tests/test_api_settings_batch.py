@@ -78,7 +78,8 @@ async def test_set_setting_rejects_removed_strategy_knobs(deps):
         ("strategy_max_funding_sells_per_cycle", 3),
         ("strategy_max_funding_turnover_pct", 0.18),
         ("strategy_funding_conviction_bias", 1.2),
-        ("clara_preferences_updated_at", "2026-05-17T00:00:00+00:00"),
+        ("user_multiplier_blend_pct", 75.0),
+        ("user_multiplier_decay_factor", 0.85),
     ],
 )
 async def test_set_setting_invalidates_planner_cache_for_recommendation_settings(deps, key, value):

@@ -387,9 +387,7 @@ class RebalanceEngine:
             current=current,
             total_value=total_value,
             symbol_convictions={
-                symbol: self._normalize_conviction(
-                    symbol_signals.get(symbol, {}).get("effective_user_multiplier", sec.get("user_multiplier", 0.5))
-                )
+                symbol: self._normalize_conviction(sec.get("user_multiplier", 0.5))
                 for symbol, sec in securities_map.items()
             },
             preloaded_positions=all_positions,
@@ -623,8 +621,8 @@ class RebalanceEngine:
             # minimum contrarian quality to avoid pure drift-driven churn.
             if sleeve == "core" and current_alloc <= 1e-6 and lot_class == "standard":
                 clara_target = float(signal.get("clara_target_pct", 0.0) or 0.0)
-                effective_preference = float(signal.get("effective_user_multiplier", 0.5) or 0.5)
-                if clara_target <= 1e-9 or not has_strategic_buy_pressure(effective_preference):
+                user_multiplier = float(signal.get("user_multiplier", 0.5) or 0.5)
+                if clara_target <= 1e-9 or not has_strategic_buy_pressure(user_multiplier):
                     core_new_min_score = settings_ctx["strategy_core_new_min_score"]
                     core_new_min_dip = settings_ctx["strategy_core_new_min_dip_score"]
                     dip_score = float(signal.get("dip_score", 0.0) or 0.0)
@@ -790,11 +788,10 @@ class RebalanceEngine:
             ticket_pct=ticket_pct,
             core_floor_active=core_floor_active,
             memory_entry=memory_entry,
-            effective_user_multiplier=float(signal.get("effective_user_multiplier", 0.5) or 0.5),
+            user_multiplier=float(signal.get("user_multiplier", 0.5) or 0.5),
             clara_target_pct=float(signal.get("clara_target_pct", 0.0) or 0.0),
             baseline_target_pct=float(signal.get("baseline_target_pct", 0.0) or 0.0),
             opportunity_target_pct=float(signal.get("opportunity_target_pct", 0.0) or 0.0),
-            clara_freshness=float(signal.get("clara_freshness", 0.0) or 0.0),
         )
 
     async def _check_cooloff_violation(

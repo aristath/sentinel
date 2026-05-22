@@ -190,10 +190,10 @@ async def test_get_unified_view_as_of_uses_as_of_allocation_diagnostics_not_live
         "sleeves": {"AAPL": "core"},
         "allocation_decomposition": {
             "global": {
-                "clara_freshness": 0.12,
-                "clara_strategic_sleeve": 0.08,
-                "sentinel_baseline_sleeve": 0.72,
-                "tactical_opportunity_sleeve": 0.20,
+                "user_multiplier_blend_pct": 0.80,
+                "algo_blend_pct": 0.20,
+                "algo_core_target": 0.80,
+                "algo_opportunity_target": 0.20,
             },
             "symbols": {
                 "AAPL": {
@@ -212,7 +212,6 @@ async def test_get_unified_view_as_of_uses_as_of_allocation_diagnostics_not_live
 
     mock_deps.db.cache_get.assert_not_awaited()
     assert result[0]["sleeve"] == "core"
-    assert result[0]["clara_freshness"] == 0.12
     assert result[0]["baseline_target_pct"] == 20.0
     assert result[0]["final_target_pct"] == 42.0
 
@@ -252,42 +251,7 @@ async def test_update_security_preference_persists_analysis_and_invalidates_plan
         assert result["user_multiplier_analysis"] == "Too fossil-heavy for the long-term portfolio."
         assert stored["user_multiplier"] == 0.02
         assert stored["user_multiplier_source"] == "clara"
-        assert await settings.get("clara_preferences_updated_at") is not None
         assert await db.cache_get("planner:ideal_portfolio") is None
-    finally:
-        await db.close()
-        db.remove_from_cache()
-        for ext in ("", "-wal", "-shm"):
-            target = path + ext
-            if os.path.exists(target):
-                os.unlink(target)
-
-
-@pytest.mark.asyncio
-async def test_manual_security_preference_does_not_refresh_global_clara_freshness():
-    from sentinel.api.routers.securities import update_security
-
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    db = Database(path)
-    await db.connect()
-    settings = Settings()
-    settings._db = db
-    await settings.init_defaults()
-    try:
-        await db.upsert_security("AMD.EU", name="AMD", user_multiplier=0.5)
-        await settings.set("clara_preferences_updated_at", "2026-01-01T00:00:00+00:00")
-        deps = MagicMock()
-        deps.db = db
-        deps.settings = settings
-
-        result = await update_security("AMD.EU", {"user_multiplier": 0.9}, deps)
-
-        stored = await db.get_security("AMD.EU")
-        assert stored is not None
-        assert result["user_multiplier"] == 0.9
-        assert stored["user_multiplier_source"] == "manual"
-        assert await settings.get("clara_preferences_updated_at") == "2026-01-01T00:00:00+00:00"
     finally:
         await db.close()
         db.remove_from_cache()

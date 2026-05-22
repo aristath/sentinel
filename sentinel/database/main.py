@@ -386,6 +386,39 @@ class Database(BaseDatabase):
     # Categories
     # -------------------------------------------------------------------------
 
+    async def set_user_multiplier(
+        self,
+        symbol: str,
+        value: float,
+        *,
+        source: str | None = None,
+    ) -> None:
+        """Write a new `user_multiplier` for one security.
+
+        Always updates `user_multiplier_updated_at` to "now" — that timestamp
+        is what the weekly decay job uses to gate further fades. If `source`
+        is provided, it's persisted too (callers pass 'clara', 'manual', or
+        'decay' to keep the audit trail honest).
+        """
+        from datetime import datetime, timezone
+
+        now_iso = datetime.now(timezone.utc).isoformat()
+        if source is None:
+            await self.conn.execute(
+                "UPDATE securities SET user_multiplier = ?, user_multiplier_updated_at = ? WHERE symbol = ?",
+                (float(value), now_iso, symbol),
+            )
+        else:
+            await self.conn.execute(
+                """UPDATE securities
+                      SET user_multiplier = ?,
+                          user_multiplier_updated_at = ?,
+                          user_multiplier_source = ?
+                    WHERE symbol = ?""",
+                (float(value), now_iso, source, symbol),
+            )
+        await self.conn.commit()
+
     async def get_categories(self, active_only: bool = False) -> dict:
         """Return the distinct country-of-risk and TRBC industry values currently
         held in the securities universe — both populated by the metadata sync from
@@ -714,6 +747,8 @@ class Database(BaseDatabase):
             ("sync:cashflows", 1440, 1440, 0, "sync", "Sync cash flows from broker"),
             ("sync:dividends", 1440, 1440, 0, "sync", "Sync dividends from broker"),
             ("sync:benchmarks", 1440, 1440, 0, "sync", "Refresh benchmark indices roster + prices"),
+            # Runs daily, but only touches rows whose slider is >= 7 days old.
+            ("decay:user_multipliers", 1440, 1440, 0, "sync", "Step stored user_multiplier values toward neutral"),
             (
                 "snapshot:backfill",
                 1440,

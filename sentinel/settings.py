@@ -68,10 +68,16 @@ DEFAULTS = {
     "strategy_max_funding_sells_per_cycle": 2,
     "strategy_max_funding_turnover_pct": 0.12,
     "strategy_funding_conviction_bias": 1.0,
-    # Clara strategic preferences
-    "clara_preference_weekly_fade": 0.90,
+    # User-conviction blend. The stored `user_multiplier` slider value
+    # contributes `user_multiplier_blend_pct` percent of each security's score
+    # (the rest comes from the deterministic algos). The value decays toward
+    # neutral (0.5) by `user_multiplier_decay_factor` every
+    # `user_multiplier_decay_interval_days` days via a scheduled job, so an
+    # untouched rating gracefully fades out over ~52 weeks at defaults.
     "clara_preference_strength": 5.0,
-    "clara_preferences_updated_at": None,
+    "user_multiplier_blend_pct": 80.0,
+    "user_multiplier_decay_factor": 0.90,
+    "user_multiplier_decay_interval_days": 7,
     # LED Display (Arduino UNO Q orbital visualization)
     "led_display_enabled": False,  # Disabled by default for dev environments
     "led_brightness": 200,  # Global LED brightness 0-255

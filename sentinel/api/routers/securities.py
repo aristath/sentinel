@@ -61,8 +61,7 @@ async def _security_payload(symbol: str, deps: CommonDependencies) -> dict[str, 
     if not sec:
         raise HTTPException(status_code=404, detail="Security not found")
     position = await deps.db.get_position(symbol)
-    weekly_fade = await deps.settings.get("clara_preference_weekly_fade", 0.9)
-    pref = preference_snapshot(sec, weekly_fade=float(weekly_fade if weekly_fade is not None else 0.9))
+    pref = preference_snapshot(sec)
     return {
         "symbol": sec.get("symbol"),
         "name": sec.get("name"),
@@ -75,7 +74,6 @@ async def _security_payload(symbol: str, deps: CommonDependencies) -> dict[str, 
         "allow_buy": sec.get("allow_buy", 1),
         "allow_sell": sec.get("allow_sell", 1),
         "user_multiplier": pref["user_multiplier"],
-        "effective_user_multiplier": pref["effective_user_multiplier"],
         "user_multiplier_age_weeks": pref["user_multiplier_age_weeks"],
         "user_multiplier_updated_at": sec.get("user_multiplier_updated_at"),
         "user_multiplier_source": sec.get("user_multiplier_source"),
@@ -225,7 +223,6 @@ async def update_security_preference(
             user_multiplier_analysis=analysis,
         )
 
-    await deps.settings.set("clara_preferences_updated_at", now)
     await _invalidate_planner_cache(deps)
     return await _security_payload(symbol, deps)
 
@@ -421,14 +418,12 @@ async def get_unified_view(
     lot_coarse_raw = await deps.settings.get("strategy_lot_coarse_max_pct", 0.30)
     core_floor_raw = await deps.settings.get("strategy_core_floor_pct", 0.05)
     min_opp_raw = await deps.settings.get("strategy_min_opp_score", 0.55)
-    weekly_fade_raw = await deps.settings.get("clara_preference_weekly_fade", 0.9)
     fee_fixed = float(2.0 if fee_fixed_raw is None else fee_fixed_raw)
     fee_pct = float(0.2 if fee_pct_raw is None else fee_pct_raw) / 100.0
     lot_standard_max_pct = float(0.08 if lot_standard_raw is None else lot_standard_raw)
     lot_coarse_max_pct = float(0.30 if lot_coarse_raw is None else lot_coarse_raw)
     core_floor_pct = float(0.05 if core_floor_raw is None else core_floor_raw)
     min_opp_score = float(0.55 if min_opp_raw is None else min_opp_raw)
-    weekly_fade = float(0.9 if weekly_fade_raw is None else weekly_fade_raw)
     sleeves_map = {}
     allocation_decomposition = {}
     global_decomposition = {}
@@ -538,7 +533,7 @@ async def get_unified_view(
             standard_max_pct=lot_standard_max_pct,
             coarse_max_pct=lot_coarse_max_pct,
         )
-        preference = preference_snapshot(sec, weekly_fade=weekly_fade)
+        preference = preference_snapshot(sec)
         decomposition = allocation_decomposition.get(symbol, {})
         sleeve = sleeves_map.get(symbol)
         if sleeve is None:
@@ -575,7 +570,6 @@ async def get_unified_view(
                 "allow_buy": sec.get("allow_buy", 1),
                 "allow_sell": sec.get("allow_sell", 1),
                 "user_multiplier": preference["user_multiplier"],
-                "effective_user_multiplier": preference["effective_user_multiplier"],
                 "user_multiplier_age_weeks": preference["user_multiplier_age_weeks"],
                 "user_multiplier_updated_at": sec.get("user_multiplier_updated_at"),
                 "user_multiplier_source": sec.get("user_multiplier_source"),
@@ -609,7 +603,6 @@ async def get_unified_view(
                 "lot_class": lot_profile["lot_class"],
                 "sleeve": sleeve,
                 "core_floor_active": core_floor_active,
-                "clara_freshness": global_decomposition.get("clara_freshness"),
                 "allocation_sleeves": global_decomposition or None,
                 "baseline_target_pct": float(decomposition.get("baseline_target_pct", 0.0) or 0.0) * 100,
                 "clara_target_pct": float(decomposition.get("clara_target_pct", 0.0) or 0.0) * 100,

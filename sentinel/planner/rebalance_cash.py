@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 from sentinel.strategy import compute_contrarian_signal
 
 from .models import TradeRecommendation
-from .preferences import effective_user_multiplier
+from .preferences import normalize_user_multiplier
 from .rebalance_rules import calculate_transaction_cost
 
 if TYPE_CHECKING:
@@ -76,7 +76,6 @@ async def apply_cash_constraint(
         conviction_by_symbol: dict[str, float] = {}
         get_securities = getattr(engine._db, "get_all_securities", None)
         if callable(get_securities):
-            weekly_fade = float(await _setting(engine, "clara_preference_weekly_fade", 0.9))
             maybe_all = get_securities(active_only=False)
             if inspect.isawaitable(maybe_all):
                 all_securities = await maybe_all
@@ -89,13 +88,7 @@ async def apply_cash_constraint(
                     0.0,
                     min(
                         1.0,
-                        float(
-                            effective_user_multiplier(
-                                s.get("user_multiplier", 0.5),
-                                s.get("user_multiplier_updated_at"),
-                                weekly_fade,
-                            )
-                        ),
+                        float(normalize_user_multiplier(s.get("user_multiplier", 0.5))),
                     ),
                 )
                 for s in all_securities
@@ -411,7 +404,6 @@ async def generate_deficit_sells(
 
     position_data = []
     conviction_bias = float(await _setting(engine, "strategy_funding_conviction_bias", 1.0))
-    weekly_fade = float(await _setting(engine, "clara_preference_weekly_fade", 0.9))
     for pos in positions:
         symbol = pos["symbol"]
         qty = pos.get("quantity", 0)
@@ -452,22 +444,9 @@ async def generate_deficit_sells(
 
         local_value = qty * price
         eur_value = await engine._currency.to_eur(local_value, currency)
-        if sec.get("effective_user_multiplier") is not None:
-            conviction = max(0.0, min(1.0, float(sec.get("effective_user_multiplier", 0.5) or 0.5)))
-        else:
-            conviction = max(
-                0.0,
-                min(
-                    1.0,
-                    float(
-                        effective_user_multiplier(
-                            sec.get("user_multiplier", 0.5),
-                            sec.get("user_multiplier_updated_at"),
-                            weekly_fade,
-                        )
-                    ),
-                ),
-            )
+        # The stored slider value IS the conviction now — the weekly decay
+        # job has already faded historical ratings, no read-time correction.
+        conviction = max(0.0, min(1.0, float(normalize_user_multiplier(sec.get("user_multiplier", 0.5)))))
 
         curr_alloc = float((current or {}).get(symbol, 0.0))
         tgt_alloc = float((ideal or {}).get(symbol, 0.0))

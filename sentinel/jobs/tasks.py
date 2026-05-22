@@ -178,6 +178,73 @@ async def sync_benchmarks(db, broker) -> None:
     logger.info(f"Benchmark prices synced: {saved}/{len(symbols)}")
 
 
+async def decay_user_multipliers(db, settings=None) -> None:
+    """Step the stored `user_multiplier` of every old-enough security one tick
+    toward neutral (0.5).
+
+    Reads its knobs from settings (`user_multiplier_decay_factor`,
+    `user_multiplier_decay_interval_days`) and applies one decay step to every
+    security whose slider value is older than the interval AND not already at
+    neutral. Touching the slider via the preference endpoint resets the
+    timestamp; this job won't re-touch a fresh row until it ages out again.
+
+    Replaces the historic read-time fade — by physically updating the stored
+    value, every downstream consumer (planner, UI, exports) sees the same
+    "this is what the user effectively believes today" number without having
+    to apply any correction.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from sentinel.planner.preferences import (
+        DEFAULT_DECAY_FADE_FACTOR,
+        NEUTRAL_USER_MULTIPLIER,
+        decayed_user_multiplier,
+        normalize_user_multiplier,
+        parse_utc_datetime,
+    )
+
+    if settings is None:
+        from sentinel.settings import Settings
+
+        settings = Settings()
+
+    factor_raw = await settings.get("user_multiplier_decay_factor", DEFAULT_DECAY_FADE_FACTOR)
+    interval_raw = await settings.get("user_multiplier_decay_interval_days", 7)
+    try:
+        fade_factor = float(factor_raw if factor_raw is not None else DEFAULT_DECAY_FADE_FACTOR)
+    except (TypeError, ValueError):
+        fade_factor = DEFAULT_DECAY_FADE_FACTOR
+    try:
+        interval_days = float(interval_raw if interval_raw is not None else 7)
+    except (TypeError, ValueError):
+        interval_days = 7.0
+
+    securities = await db.get_all_securities(active_only=False)
+    now = datetime.now(timezone.utc)
+    cutoff = now - timedelta(days=interval_days)
+
+    decayed = 0
+    for sec in securities:
+        updated_at = parse_utc_datetime(sec.get("user_multiplier_updated_at"))
+        if updated_at is None:
+            # No timestamp → no idea how old this is. Safer to leave alone
+            # than to randomly decay a freshly-set value.
+            continue
+        if updated_at > cutoff:
+            continue
+
+        current = normalize_user_multiplier(sec.get("user_multiplier", NEUTRAL_USER_MULTIPLIER))
+        if abs(current - NEUTRAL_USER_MULTIPLIER) < 1e-9:
+            # Already neutral — nothing to fade, no write needed.
+            continue
+
+        new_value = decayed_user_multiplier(current, fade_factor)
+        await db.set_user_multiplier(sec["symbol"], new_value, source="decay")
+        decayed += 1
+
+    logger.info(f"User-multiplier decay: {decayed}/{len(securities)} rows decayed one step")
+
+
 async def sync_exchange_rates() -> None:
     """Sync exchange rates."""
     from sentinel.currency import Currency

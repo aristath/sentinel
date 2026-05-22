@@ -66,13 +66,12 @@ async def get_recommendations(
                 "priority": r.priority,
                 "reason": r.reason,
                 "sleeve": r.sleeve,
-                "effective_user_multiplier": r.effective_user_multiplier,
+                "user_multiplier": r.user_multiplier,
                 "clara_target_pct": (r.clara_target_pct * 100) if r.clara_target_pct is not None else None,
                 "baseline_target_pct": (r.baseline_target_pct * 100) if r.baseline_target_pct is not None else None,
                 "opportunity_target_pct": (
                     r.opportunity_target_pct * 100 if r.opportunity_target_pct is not None else None
                 ),
-                "clara_freshness": r.clara_freshness,
             }
             for r in recommendations
         ],
