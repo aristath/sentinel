@@ -5,7 +5,7 @@
  * expandable rows for detailed information and settings.
  * All columns are sortable.
  */
-import { useState, useMemo } from 'react';
+import { Fragment, useState, useMemo } from 'react';
 import {
   Table,
   Text,
@@ -252,7 +252,10 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
             const isOverIdeal = idealDelta < -0.5;
 
             return (
-              <>
+              // Fragment carries the React `key` for the row pair. The two
+              // inner Tr's keys are redundant once the fragment has one, but
+              // we leave them in for legibility.
+              <Fragment key={symbol}>
                 <Table.Tr
                   key={symbol}
                   onClick={() => toggleExpanded(symbol)}
@@ -382,7 +385,7 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
                     </Table.Td>
                   </Table.Tr>
                 )}
-              </>
+              </Fragment>
             );
           })}
         </Table.Tbody>

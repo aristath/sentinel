@@ -20,6 +20,7 @@
 }
 
 .allocation-bar {
+  position: relative;
   display: flex;
   width: 100%;
   height: 16px;
@@ -41,4 +42,37 @@
 
 .allocation-bar__segment--red {
   background-color: var(--mantine-color-red-6);
+}
+
+.allocation-bar__ideal {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background-color: var(--mantine-color-blue-5);
+  transform: translateX(-1px);
+}
+
+.allocation-legend {
+  padding-top: 4px;
+}
+
+.allocation-legend__swatch {
+  display: inline-block;
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.allocation-legend__swatch--gray  { background-color: var(--mantine-color-gray-6); }
+.allocation-legend__swatch--green { background-color: var(--mantine-color-green-6); }
+.allocation-legend__swatch--red   { background-color: var(--mantine-color-red-6); }
+
+/* The ideal marker in the bar is a thin vertical line, so its legend swatch
+   matches that shape rather than the segments' filled blocks. */
+.allocation-legend__swatch--ideal {
+  width: 2px;
+  height: 12px;
+  background-color: var(--mantine-color-blue-5);
 }

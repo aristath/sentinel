@@ -322,6 +322,7 @@ function UnifiedPage() {
           <SecurityAllocationCard
             securities={securities}
             recommendations={recommendations}
+            totalValueEur={portfolio?.total_value_eur || 0}
           />
           <CompositionCard />
           <ForwardReturnCard />
