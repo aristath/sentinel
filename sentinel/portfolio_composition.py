@@ -703,84 +703,51 @@ def radar_axes(metrics: dict[str, float]) -> dict[str, float]:
 
 # Each named basket is a list of index symbols whose daily returns are averaged
 # into one synthetic "home market" return series. Baskets with one member are
-# just that index. The ALL basket is derived at runtime (union of every member).
+# just that index. Dataless members (e.g. MSCIEF, which Tradernet lists but
+# never prices) are simply skipped when the basket is built, so listing them
+# here is harmless and auto-activates if Tradernet ever starts pricing them.
 BENCHMARK_GROUPS: dict[str, list[str]] = {
+    # --- National baskets: used when a country has its own index ---
     "US": ["SP500.IDX", "NASDAQ.IDX", "DJI30.IDX", "RUT.IDX"],
-    "EU": ["DAX.IDX", "FCHI.IDX", "FTMIB.IDX", "IBEX.IDX", "OMXS30.IDX"],  # continental — NO UK
-    "UK": ["FTSE.IDX"],
+    "UK": ["FTSE.IDX"],  # UK stands alone — not part of the continental EU basket
     "CN": ["HSI.IDX"],  # HK-listed Chinese names
-    "EM": ["MSCIEF.IDX"],
-    "RU": ["MICEXINDEXCF", "RTSI"],
-    "KZ": ["KASE.IDX"],
-    "UA": ["UX.UX.UA"],
-    # Single-country baskets (used when the country has its own index)
     "DE": ["DAX.IDX"],
     "FR": ["FCHI.IDX"],
     "IT": ["FTMIB.IDX"],
     "ES": ["IBEX.IDX"],
     "SE": ["OMXS30.IDX"],
+    "RU": ["MICEXINDEXCF", "RTSI"],
+    "KZ": ["KASE.IDX"],
+    "UA": ["UX.UX.UA"],
+    # --- Regional baskets: continent-level fallback when there's no national
+    # index for the country. ---
+    "EUROPE": ["DAX.IDX", "FCHI.IDX", "FTMIB.IDX", "IBEX.IDX", "OMXS30.IDX"],  # continental, NO UK
+    "ASIA": ["HSI.IDX", "MSCIEF.IDX"],  # Hang Seng (+ MSCI EM once priced)
 }
 
-# ISO-2 country of risk -> basket name. Anything not listed falls through to the
-# "ALL" basket (average of every equity index) — the honest "we don't know where
-# this belongs" answer.
-COUNTRY_BENCHMARK_GROUP: dict[str, str] = {
-    # Own-index countries: measured against just their own market
+# Countries with their own dedicated index — measured against just that market.
+COUNTRY_OWN_BASKET: dict[str, str] = {
     "US": "US",
+    "GB": "UK",  # UK is not EU — stands alone (Brexit)
+    "CN": "CN",
+    "HK": "CN",
     "DE": "DE",
     "FR": "FR",
     "IT": "IT",
     "ES": "ES",
     "SE": "SE",
-    "GB": "UK",  # UK is not EU — stands alone
-    "CN": "CN",
-    "HK": "CN",
     "RU": "RU",
     "KZ": "KZ",
     "UA": "UA",
-    # Continental-EU / EEA members without a dedicated index -> EU basket
-    "GR": "EU",
-    "NL": "EU",
-    "AT": "EU",
-    "BE": "EU",
-    "PT": "EU",
-    "FI": "EU",
-    "IE": "EU",
-    "LU": "EU",
-    "DK": "EU",
-    "PL": "EU",
-    "CZ": "EU",
-    "HU": "EU",
-    "NO": "EU",
-    "CH": "EU",
-    "RO": "EU",
-    "SK": "EU",
-    "SI": "EU",
-    "BG": "EU",
-    "HR": "EU",
-    "EE": "EU",
-    "LV": "EU",
-    "LT": "EU",
-    "IS": "EU",
-    # Known emerging markets without a dedicated index -> MSCI EM
-    "TW": "EM",
-    "KR": "EM",
-    "IN": "EM",
-    "BR": "EM",
-    "ZA": "EM",
-    "MX": "EM",
-    "ID": "EM",
-    "TH": "EM",
-    "MY": "EM",
-    "PH": "EM",
-    "TR": "EM",
-    "CL": "EM",
-    "CO": "EM",
-    "PE": "EM",
-    "EG": "EM",
-    "AE": "EM",
-    "SA": "EM",
-    "QA": "EM",
+}
+
+# Continent (from CONTINENT_BY_COUNTRY) -> regional basket, for countries
+# without their own index. Continents with no usable regional index (South
+# America, Africa, Oceania, Antarctica) fall through to the ALL basket.
+CONTINENT_REGION_BASKET: dict[str, str] = {
+    "Europe": "EUROPE",
+    "Asia": "ASIA",
+    "North America": "US",  # only US indices available on this continent
 }
 
 
@@ -793,10 +760,20 @@ def all_equity_index_symbols() -> list[str]:
 
 
 def resolve_benchmark_group(country: str | None) -> str:
-    """Map an ISO-2 country of risk to a benchmark basket name."""
+    """Resolve an ISO-2 country of risk to a benchmark basket name.
+
+    Hierarchy (most specific first):
+      1. The country's own national index (DE→DAX, US→US basket, …)
+      2. Its continent's regional basket (TW→ASIA, GR/NL→EUROPE, …)
+      3. "ALL" — the global average, when we genuinely can't place it
+    """
     if not country or not country.strip():
         return "ALL"
-    return COUNTRY_BENCHMARK_GROUP.get(country.strip().upper(), "ALL")
+    code = country.strip().upper()
+    if code in COUNTRY_OWN_BASKET:
+        return COUNTRY_OWN_BASKET[code]
+    continent = continent_for(code)
+    return CONTINENT_REGION_BASKET.get(continent, "ALL")
 
 
 def basket_symbols(group: str) -> list[str]:
@@ -864,8 +841,11 @@ async def home_market_metrics(db, positions_eur: dict[str, float], securities_ma
     aggregated value-weighted. Returns 0s + empty groups when there's no data.
     """
     # Resolve each held security to a basket, collecting the symbols we need.
+    # Always include the ALL basket's symbols too — it's the fallback when a
+    # security's resolved basket turns out to have no usable price data (e.g.
+    # MSCIEF, which Tradernet lists but never prices).
     sec_group: dict[str, str] = {}
-    needed_symbols: set[str] = set()
+    needed_symbols: set[str] = set(all_equity_index_symbols())
     for symbol, value in positions_eur.items():
         if value <= 0:
             continue
@@ -885,9 +865,10 @@ async def home_market_metrics(db, positions_eur: dict[str, float], securities_ma
             bench_prices[sym] = rows
 
     # Build each basket's daily-return series + its trailing-1Y return once.
+    # "ALL" is always built so it can serve as the fallback basket.
     basket_returns: dict[str, dict[str, float]] = {}
     basket_1y: dict[str, float] = {}
-    for group in set(sec_group.values()):
+    for group in set(sec_group.values()) | {"ALL"}:
         syms = [s for s in basket_symbols(group) if s in bench_prices]
         br = basket_daily_returns(syms, bench_prices)
         basket_returns[group] = br
@@ -906,6 +887,12 @@ async def home_market_metrics(db, positions_eur: dict[str, float], securities_ma
             continue
         group = sec_group[symbol]
         br = basket_returns.get(group) or {}
+        if not br:
+            # Resolved basket has no priced indices (e.g. EM→MSCIEF, which
+            # Tradernet never prices). Fall back to the global ALL basket so
+            # the holding still gets benchmarked instead of silently dropped.
+            group = "ALL"
+            br = basket_returns.get("ALL") or {}
         if not br:
             continue
         sec_rows = await db.get_prices(symbol, days=365 * 5)

@@ -47,18 +47,27 @@ class TestBenchmarkGroupResolution:
     def test_uk_stands_alone_not_eu(self):
         assert resolve_benchmark_group("GB") == "UK"
 
-    def test_continental_eu_without_own_index_falls_to_eu(self):
-        assert resolve_benchmark_group("GR") == "EU"  # Greece — no Athens index
-        assert resolve_benchmark_group("NL") == "EU"  # Netherlands — no AEX
-        assert resolve_benchmark_group("AT") == "EU"
+    def test_continental_eu_without_own_index_falls_to_europe_region(self):
+        assert resolve_benchmark_group("GR") == "EUROPE"  # Greece — no Athens index
+        assert resolve_benchmark_group("NL") == "EUROPE"  # Netherlands — no AEX
+        assert resolve_benchmark_group("AT") == "EUROPE"
+        assert resolve_benchmark_group("CH") == "EUROPE"  # Switzerland (continent, not EU member)
 
     def test_china_maps_to_hang_seng_basket(self):
         assert resolve_benchmark_group("CN") == "CN"
         assert resolve_benchmark_group("HK") == "CN"
 
-    def test_emerging_without_own_index(self):
-        assert resolve_benchmark_group("TW") == "EM"  # Taiwan
-        assert resolve_benchmark_group("KR") == "EM"
+    def test_asian_country_without_own_index_falls_to_asia_region(self):
+        assert resolve_benchmark_group("TW") == "ASIA"  # Taiwan — no TAIEX
+        assert resolve_benchmark_group("KR") == "ASIA"  # Korea
+        assert resolve_benchmark_group("JP") == "ASIA"  # Japan
+        assert resolve_benchmark_group("IN") == "ASIA"  # India
+
+    def test_continent_without_a_regional_index_falls_to_all(self):
+        # South America, Africa, Oceania have no usable regional index.
+        assert resolve_benchmark_group("BR") == "ALL"  # Brazil
+        assert resolve_benchmark_group("ZA") == "ALL"  # South Africa
+        assert resolve_benchmark_group("AU") == "ALL"  # Australia
 
     def test_unknown_or_blank_falls_to_all(self):
         assert resolve_benchmark_group("ZZ") == "ALL"
@@ -67,6 +76,7 @@ class TestBenchmarkGroupResolution:
 
     def test_case_insensitive(self):
         assert resolve_benchmark_group("de") == "DE"
+        assert resolve_benchmark_group("tw") == "ASIA"
 
     def test_us_basket_has_multiple_indices(self):
         syms = basket_symbols("US")
@@ -74,10 +84,14 @@ class TestBenchmarkGroupResolution:
         assert "NASDAQ.IDX" in syms
         assert len(syms) >= 3
 
-    def test_eu_basket_excludes_uk(self):
-        syms = basket_symbols("EU")
+    def test_europe_region_excludes_uk(self):
+        syms = basket_symbols("EUROPE")
         assert "FTSE.IDX" not in syms  # UK is not in the continental basket
         assert "DAX.IDX" in syms
+
+    def test_asia_region_includes_hang_seng(self):
+        syms = basket_symbols("ASIA")
+        assert "HSI.IDX" in syms
 
     def test_all_basket_is_union_of_every_group(self):
         all_syms = basket_symbols("ALL")
