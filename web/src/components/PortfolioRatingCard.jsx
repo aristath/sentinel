@@ -9,7 +9,8 @@
  * Source: `/api/portfolio/composition`. Card collapses to nothing while the
  * endpoint is unavailable.
  */
-import { Card, Stack, Text } from '@mantine/core';
+import { Card, Group, Stack, Text } from '@mantine/core';
+import { catppuccin } from '../theme';
 import { usePortfolioComposition } from '../hooks/usePortfolioComposition';
 import { DeviationBar } from './DeviationBar';
 
@@ -27,8 +28,9 @@ export function PortfolioRatingCard() {
   const { data, isLoading, isError } = usePortfolioComposition();
   if (isLoading || isError || !data?.metrics) return null;
   const m = data.metrics;
-  const benchmarks = data.benchmarks || [];
-  const primary = benchmarks.find((b) => b.symbol === m.primary_benchmark_symbol) || benchmarks[0];
+  const homeMarkets = data.home_markets || [];
+  const hasHome = homeMarkets.length > 0 && (m.home_coverage_pct || 0) > 0;
+  const coverageHint = `covers ${pct(m.home_coverage_pct, 0)} of holdings`;
 
   // Each row is one metric. Ranges and reference points are intentionally
   // hard-coded — they're stable financial-literacy anchors, not user knobs.
@@ -113,26 +115,26 @@ export function PortfolioRatingCard() {
     },
   ];
 
-  if (primary) {
+  if (hasHome) {
     rows.push(
       {
-        label: 'Tracks the market?',
-        subLabel: `Beta vs ${primary.symbol} — 1.0 mirrors the market`,
-        value: primary.beta,
-        formatted: num(primary.beta),
+        label: 'Tracks home markets?',
+        subLabel: `Beta vs each holding's own market index, value-weighted (${coverageHint})`,
+        value: m.beta_vs_home,
+        formatted: num(m.beta_vs_home),
         min: -1,
         max: 2,
         reference: 1.0,
         minLabel: '-1',
         maxLabel: '+2',
-        referenceLabel: 'market',
+        referenceLabel: 'in step',
         goodDirection: 'neutral',
       },
       {
-        label: 'Beating the market?',
-        subLabel: `Alpha vs ${primary.symbol} — outperformance over last year`,
-        value: m.alpha_1y,
-        formatted: pct(m.alpha_1y),
+        label: 'Beating home markets?',
+        subLabel: `Alpha — value-weighted outperformance vs each holding's home index (${coverageHint})`,
+        value: m.alpha_1y_vs_home,
+        formatted: pct(m.alpha_1y_vs_home),
         min: -0.2,
         max: 0.2,
         reference: 0,
@@ -157,10 +159,28 @@ export function PortfolioRatingCard() {
           ))}
         </Stack>
 
-        {!primary ? (
+        {!hasHome ? (
           <Text size="xs" c="dimmed" fs="italic">
-            Benchmarks not yet synced — market-comparison rows will populate on next sync cycle.
+            Benchmarks not yet synced — home-market comparison will populate on next sync cycle.
           </Text>
+        ) : null}
+
+        {hasHome ? (
+          <Stack gap={2}>
+            <Text size="xs" c="dimmed" fw={600} tt="uppercase">
+              vs home markets
+            </Text>
+            {homeMarkets.map((g) => (
+              <Group key={g.group} justify="space-between" gap="xs" wrap="nowrap">
+                <Text size="xs" c="dimmed">
+                  {g.group} ({pct(g.weight_pct, 0)})
+                </Text>
+                <Text size="xs" style={{ color: g.alpha_1y >= 0 ? catppuccin.green : catppuccin.red }}>
+                  {pct(g.alpha_1y)} α · β {num(g.beta)}
+                </Text>
+              </Group>
+            ))}
+          </Stack>
         ) : null}
       </Stack>
     </Card>

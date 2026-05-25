@@ -662,7 +662,8 @@ def radar_axes(metrics: dict[str, float]) -> dict[str, float]:
     Return-side axes (higher = good directly):
         return_1y    -- 1Y total return, mapped from [-50%, +50%] -> [0, 1]
         sharpe       -- Sharpe ratio, mapped from [-1, +3] -> [0, 1]
-        alpha        -- (return_1y - benchmark_return_1y), [-30%, +30%] -> [0, 1]
+        alpha        -- value-weighted excess return vs each holding's own
+                        home market, [-30%, +30%] -> [0, 1]
 
     Resilience-side axes (low risk -> high score):
         low_volatility       -- annual vol, mapped from [40%, 0%] -> [0, 1]
@@ -671,7 +672,7 @@ def radar_axes(metrics: dict[str, float]) -> dict[str, float]:
     """
     ret_1y = metrics.get("return_1y", 0.0)
     sharpe = metrics.get("sharpe", 0.0)
-    bench_1y = metrics.get("benchmark_return_1y", 0.0)
+    alpha_home = metrics.get("alpha_1y_vs_home", 0.0)
     vol = metrics.get("volatility", 0.0)
     dd = metrics.get("max_drawdown", 0.0)
     hhi = metrics.get("hhi", 0.0)
@@ -679,7 +680,7 @@ def radar_axes(metrics: dict[str, float]) -> dict[str, float]:
     return {
         "return_1y": _clamp((ret_1y + 0.5) / 1.0),
         "sharpe": _clamp((sharpe + 1.0) / 4.0),
-        "alpha": _clamp(((ret_1y - bench_1y) + 0.3) / 0.6),
+        "alpha": _clamp((alpha_home + 0.3) / 0.6),
         "low_volatility": _clamp((0.4 - vol) / 0.4),
         "low_drawdown": _clamp((0.5 - dd) / 0.5),
         "low_concentration": _clamp((0.5 - hhi) / 0.45),
@@ -691,110 +692,264 @@ def radar_axes(metrics: dict[str, float]) -> dict[str, float]:
 # ---------------------------------------------------------------------------
 
 
-def _correlation(a: list[float], b: list[float]) -> float:
-    """Pearson correlation of two equal-length series. 0 if degenerate."""
-    n = min(len(a), len(b))
-    if n < 2:
-        return 0.0
-    a = a[-n:]
-    b = b[-n:]
-    a_mean = sum(a) / n
-    b_mean = sum(b) / n
-    num = sum((a[i] - a_mean) * (b[i] - b_mean) for i in range(n))
-    var_a = sum((a[i] - a_mean) ** 2 for i in range(n))
-    var_b = sum((b[i] - b_mean) ** 2 for i in range(n))
-    if var_a == 0 or var_b == 0:
-        return 0.0
-    return num / math.sqrt(var_a * var_b)
+# ---------------------------------------------------------------------------
+# Home-market benchmarking
+#
+# Each holding is measured against the market it actually belongs to, then the
+# results are value-weighted into a single portfolio figure. A single global
+# index (let alone one auto-picked by correlation) is meaningless for a
+# globally-diversified, deliberately-non-US-centric portfolio.
+# ---------------------------------------------------------------------------
+
+# Each named basket is a list of index symbols whose daily returns are averaged
+# into one synthetic "home market" return series. Baskets with one member are
+# just that index. The ALL basket is derived at runtime (union of every member).
+BENCHMARK_GROUPS: dict[str, list[str]] = {
+    "US": ["SP500.IDX", "NASDAQ.IDX", "DJI30.IDX", "RUT.IDX"],
+    "EU": ["DAX.IDX", "FCHI.IDX", "FTMIB.IDX", "IBEX.IDX", "OMXS30.IDX"],  # continental — NO UK
+    "UK": ["FTSE.IDX"],
+    "CN": ["HSI.IDX"],  # HK-listed Chinese names
+    "EM": ["MSCIEF.IDX"],
+    "RU": ["MICEXINDEXCF", "RTSI"],
+    "KZ": ["KASE.IDX"],
+    "UA": ["UX.UX.UA"],
+    # Single-country baskets (used when the country has its own index)
+    "DE": ["DAX.IDX"],
+    "FR": ["FCHI.IDX"],
+    "IT": ["FTMIB.IDX"],
+    "ES": ["IBEX.IDX"],
+    "SE": ["OMXS30.IDX"],
+}
+
+# ISO-2 country of risk -> basket name. Anything not listed falls through to the
+# "ALL" basket (average of every equity index) — the honest "we don't know where
+# this belongs" answer.
+COUNTRY_BENCHMARK_GROUP: dict[str, str] = {
+    # Own-index countries: measured against just their own market
+    "US": "US",
+    "DE": "DE",
+    "FR": "FR",
+    "IT": "IT",
+    "ES": "ES",
+    "SE": "SE",
+    "GB": "UK",  # UK is not EU — stands alone
+    "CN": "CN",
+    "HK": "CN",
+    "RU": "RU",
+    "KZ": "KZ",
+    "UA": "UA",
+    # Continental-EU / EEA members without a dedicated index -> EU basket
+    "GR": "EU",
+    "NL": "EU",
+    "AT": "EU",
+    "BE": "EU",
+    "PT": "EU",
+    "FI": "EU",
+    "IE": "EU",
+    "LU": "EU",
+    "DK": "EU",
+    "PL": "EU",
+    "CZ": "EU",
+    "HU": "EU",
+    "NO": "EU",
+    "CH": "EU",
+    "RO": "EU",
+    "SK": "EU",
+    "SI": "EU",
+    "BG": "EU",
+    "HR": "EU",
+    "EE": "EU",
+    "LV": "EU",
+    "LT": "EU",
+    "IS": "EU",
+    # Known emerging markets without a dedicated index -> MSCI EM
+    "TW": "EM",
+    "KR": "EM",
+    "IN": "EM",
+    "BR": "EM",
+    "ZA": "EM",
+    "MX": "EM",
+    "ID": "EM",
+    "TH": "EM",
+    "MY": "EM",
+    "PH": "EM",
+    "TR": "EM",
+    "CL": "EM",
+    "CO": "EM",
+    "PE": "EM",
+    "EG": "EM",
+    "AE": "EM",
+    "SA": "EM",
+    "QA": "EM",
+}
 
 
-def _benchmark_stats(
-    portfolio_returns: list[float],
-    portfolio_series: list[tuple[str, float]],
-    benchmark_prices: list[dict],
-) -> dict | None:
-    """Align a benchmark's daily closes to the portfolio's date axis and
-    compute beta, correlation, and 1y return. Returns None if there aren't
-    enough overlapping samples for a meaningful regression.
+def all_equity_index_symbols() -> list[str]:
+    """Every index symbol referenced by a named basket (the ALL basket)."""
+    syms: set[str] = set()
+    for members in BENCHMARK_GROUPS.values():
+        syms.update(members)
+    return sorted(syms)
 
-    `benchmark_prices` is the rows from `db.get_benchmark_prices` (newest
-    first). The portfolio series is chronological (oldest first).
+
+def resolve_benchmark_group(country: str | None) -> str:
+    """Map an ISO-2 country of risk to a benchmark basket name."""
+    if not country or not country.strip():
+        return "ALL"
+    return COUNTRY_BENCHMARK_GROUP.get(country.strip().upper(), "ALL")
+
+
+def basket_symbols(group: str) -> list[str]:
+    """Index symbols that make up a basket. ALL = union of all baskets."""
+    if group == "ALL":
+        return all_equity_index_symbols()
+    return BENCHMARK_GROUPS.get(group, [])
+
+
+def _returns_by_date_from_prices(price_rows: list[dict]) -> dict[str, float]:
+    """Day-over-day returns keyed by ISO date, from price rows (any order)."""
+    rows = sorted(price_rows, key=lambda r: r["date"])
+    out: dict[str, float] = {}
+    for i in range(1, len(rows)):
+        prev = float(rows[i - 1].get("close") or 0.0)
+        cur = float(rows[i].get("close") or 0.0)
+        if prev > 0:
+            out[rows[i]["date"]] = cur / prev - 1.0
+    return out
+
+
+def basket_daily_returns(symbols: list[str], prices_by_symbol: dict[str, list[dict]]) -> dict[str, float]:
+    """Average daily return across a basket's member indices, keyed by date.
+
+    Each member contributes its own day-over-day return; the basket's return
+    for a given date is the mean of whichever members quoted that day. This
+    tolerates members with different trading calendars (e.g. US vs HK holidays).
     """
-    if not benchmark_prices or len(portfolio_series) < 2:
-        return None
+    per_symbol: list[dict[str, float]] = []
+    for sym in symbols:
+        rows = prices_by_symbol.get(sym)
+        if rows:
+            per_symbol.append(_returns_by_date_from_prices(rows))
+    if not per_symbol:
+        return {}
+    all_dates: set[str] = set()
+    for rets in per_symbol:
+        all_dates.update(rets.keys())
+    basket: dict[str, float] = {}
+    for d in all_dates:
+        vals = [rets[d] for rets in per_symbol if d in rets]
+        if vals:
+            basket[d] = sum(vals) / len(vals)
+    return basket
 
-    bench_by_date = {p["date"]: float(p.get("close") or 0.0) for p in benchmark_prices}
 
-    # Walk the portfolio's date axis; collect (port_return_t, bench_return_t)
-    # pairs only for days where the benchmark also has a price. This is the
-    # right move for thinly-traded local indices that don't quote every day.
-    pairs: list[tuple[float, float]] = []
-    last_bench_value: float | None = None
-    for i in range(1, len(portfolio_series)):
-        date = portfolio_series[i][0]
-        bench_val = bench_by_date.get(date)
-        if bench_val is None or bench_val <= 0:
-            last_bench_value = None
+def _trailing_return(returns_by_date: dict[str, float], window: int) -> float:
+    """Compound the most-recent `window` daily returns into a total return."""
+    dates = sorted(returns_by_date.keys())
+    recent = dates[-window:] if len(dates) > window else dates
+    cumulative = 1.0
+    for d in recent:
+        cumulative *= 1.0 + returns_by_date[d]
+    return cumulative - 1.0
+
+
+async def home_market_metrics(db, positions_eur: dict[str, float], securities_map: dict[str, dict]) -> dict:
+    """Value-weighted beta + 1Y excess return of the portfolio against each
+    holding's *own* home-market index basket.
+
+    For every held security we resolve its country of risk to a basket
+    (US / EU / UK / CN / EM / …), build that basket's average daily-return
+    series, regress the security's daily returns against it for beta, and take
+    `security_1y_return − basket_1y_return` for the excess. Securities are then
+    aggregated value-weighted. Returns 0s + empty groups when there's no data.
+    """
+    # Resolve each held security to a basket, collecting the symbols we need.
+    sec_group: dict[str, str] = {}
+    needed_symbols: set[str] = set()
+    for symbol, value in positions_eur.items():
+        if value <= 0:
             continue
-        if last_bench_value is None or last_bench_value <= 0:
-            last_bench_value = bench_val
+        sec = securities_map.get(symbol) or {}
+        group = resolve_benchmark_group((sec.get("geography") or "").strip())
+        sec_group[symbol] = group
+        needed_symbols.update(basket_symbols(group))
+
+    if not sec_group:
+        return {"beta": 0.0, "alpha_1y": 0.0, "coverage_pct": 0.0, "groups": []}
+
+    # Load benchmark prices for every index referenced by a needed basket.
+    bench_prices: dict[str, list[dict]] = {}
+    for sym in needed_symbols:
+        rows = await db.get_benchmark_prices(sym, days=365 * 5)
+        if rows:
+            bench_prices[sym] = rows
+
+    # Build each basket's daily-return series + its trailing-1Y return once.
+    basket_returns: dict[str, dict[str, float]] = {}
+    basket_1y: dict[str, float] = {}
+    for group in set(sec_group.values()):
+        syms = [s for s in basket_symbols(group) if s in bench_prices]
+        br = basket_daily_returns(syms, bench_prices)
+        basket_returns[group] = br
+        basket_1y[group] = _trailing_return(br, TRADING_DAYS_PER_YEAR)
+
+    # Per-security beta + excess return, accumulated value-weighted overall and
+    # per group (for the transparency breakdown).
+    total_value = sum(v for v in positions_eur.values() if v > 0)
+    covered_value = 0.0
+    agg_beta_w = 0.0
+    agg_alpha_w = 0.0
+    group_acc: dict[str, dict[str, float]] = {}
+
+    for symbol, value in positions_eur.items():
+        if value <= 0:
             continue
-        bench_ret = bench_val / last_bench_value - 1.0
-        last_bench_value = bench_val
-        if i - 1 < len(portfolio_returns):
-            pairs.append((portfolio_returns[i - 1], bench_ret))
+        group = sec_group[symbol]
+        br = basket_returns.get(group) or {}
+        if not br:
+            continue
+        sec_rows = await db.get_prices(symbol, days=365 * 5)
+        if not sec_rows:
+            continue
+        sec_rets = _returns_by_date_from_prices(sec_rows)
+        common = sorted(set(sec_rets) & set(br))
+        if len(common) < MIN_SAMPLES_FOR_BETA:
+            continue
+        p_series = [sec_rets[d] for d in common]
+        b_series = [br[d] for d in common]
+        sec_beta = beta(p_series, b_series)
+        sec_1y = _trailing_return(sec_rets, TRADING_DAYS_PER_YEAR)
+        excess = sec_1y - basket_1y.get(group, 0.0)
 
-    if len(pairs) < MIN_SAMPLES_FOR_BETA:
-        return None
+        covered_value += value
+        agg_beta_w += value * sec_beta
+        agg_alpha_w += value * excess
 
-    p_series = [p for p, _ in pairs]
-    b_series = [b for _, b in pairs]
+        acc = group_acc.setdefault(group, {"value": 0.0, "beta_w": 0.0, "alpha_w": 0.0})
+        acc["value"] += value
+        acc["beta_w"] += value * sec_beta
+        acc["alpha_w"] += value * excess
 
-    sorted_bench = sorted(benchmark_prices, key=lambda p: p["date"])
-    bench_chrono = [float(p.get("close") or 0.0) for p in sorted_bench]
-    bench_return_1y = 0.0
-    if len(bench_chrono) > TRADING_DAYS_PER_YEAR:
-        start = bench_chrono[-1 - TRADING_DAYS_PER_YEAR]
-        if start > 0:
-            bench_return_1y = bench_chrono[-1] / start - 1.0
+    if covered_value <= 0:
+        return {"beta": 0.0, "alpha_1y": 0.0, "coverage_pct": 0.0, "groups": []}
+
+    groups = [
+        {
+            "group": g,
+            "indices": basket_symbols(g),
+            "weight_pct": round(a["value"] / total_value, 6) if total_value > 0 else 0.0,
+            "beta": round(a["beta_w"] / a["value"], 4),
+            "alpha_1y": round(a["alpha_w"] / a["value"], 6),
+        }
+        for g, a in sorted(group_acc.items(), key=lambda kv: -kv[1]["value"])
+    ]
 
     return {
-        "beta": beta(p_series, b_series),
-        "correlation": _correlation(p_series, b_series),
-        "return_1y": bench_return_1y,
-        "samples": len(pairs),
+        "beta": round(agg_beta_w / covered_value, 4),
+        "alpha_1y": round(agg_alpha_w / covered_value, 6),
+        "coverage_pct": round(covered_value / total_value, 6) if total_value > 0 else 0.0,
+        "groups": groups,
     }
-
-
-async def _benchmark_table(
-    db,
-    portfolio_returns: list[float],
-    portfolio_series: list[tuple[str, float]],
-) -> list[dict]:
-    """Compute beta + correlation + 1y return for every benchmark in the
-    `benchmarks` table that has enough overlapping price history to matter.
-    Sorted descending by absolute correlation so the most relevant ones lead.
-    """
-    rows: list[dict] = []
-    for bench in await db.get_benchmarks():
-        symbol = bench["symbol"]
-        prices = await db.get_benchmark_prices(symbol, days=365 * 5)
-        stats = _benchmark_stats(portfolio_returns, portfolio_series, prices)
-        if stats is None:
-            continue
-        rows.append(
-            {
-                "symbol": symbol,
-                "name": bench.get("name") or symbol,
-                "mkt_short_code": bench.get("mkt_short_code"),
-                "beta": round(stats["beta"], 4),
-                "correlation": round(stats["correlation"], 4),
-                "return_1y": round(stats["return_1y"], 6),
-                "samples": stats["samples"],
-            }
-        )
-    rows.sort(key=lambda r: abs(r["correlation"]), reverse=True)
-    return rows
 
 
 async def build_composition(db, currency, settings) -> dict:
@@ -837,7 +992,6 @@ async def build_composition(db, currency, settings) -> dict:
         deposits_by_date[cf["date"]] = running
 
     daily = build_daily_pnl(snapshots, deposits_by_date)
-    series = [(d["date"], d["total_value_eur"]) for d in daily]
     # Daily HPRs across the last year only — earlier history is dominated by
     # the bootstrap period when the portfolio was tiny and deposit-timing
     # noise overwhelms real market movement. Volatility/Sharpe/beta need
@@ -848,16 +1002,9 @@ async def build_composition(db, currency, settings) -> dict:
     returns = daily_hprs(daily_last_year, filter_outliers=True)
     risk_free = float(await settings.get("risk_free_rate", DEFAULT_RISK_FREE_RATE) or DEFAULT_RISK_FREE_RATE)
 
-    benchmarks_table = await _benchmark_table(db, returns, series)
-
-    # The radar's alpha axis needs ONE reference benchmark. Use the index
-    # with the highest correlation to this portfolio — that's the one whose
-    # outperformance is most meaningful as "alpha". If there are no
-    # benchmarks at all (fresh deploy, sync hasn't run), gracefully degrade
-    # to 0% benchmark return -> alpha equals portfolio return.
-    primary = benchmarks_table[0] if benchmarks_table else None
-    primary_return_1y = primary["return_1y"] if primary else 0.0
-    primary_symbol = primary["symbol"] if primary else None
+    # Home-market benchmarking: each holding vs its own market index basket,
+    # value-weighted into one portfolio beta + alpha. No single global index.
+    home = await home_market_metrics(db, positions_eur, securities_map)
 
     cagr_value, cagr_years = inception_cagr(daily)
     return_1y_value = rolling_twr(daily, 365)
@@ -870,11 +1017,12 @@ async def build_composition(db, currency, settings) -> dict:
         "max_drawdown": max_drawdown([d["total_value_eur"] for d in daily_last_year]),
         "sharpe": sharpe_ratio(returns, risk_free),
         "hhi": hhi_concentration(positions_eur),
-        "benchmark_return_1y": primary_return_1y,
-        "primary_benchmark_symbol": primary_symbol,
+        # vs each holding's own home market, value-weighted
+        "beta_vs_home": home["beta"],
+        "alpha_1y_vs_home": home["alpha_1y"],
+        "home_coverage_pct": home["coverage_pct"],
         "risk_free_rate": risk_free,
     }
-    metrics["alpha_1y"] = metrics["return_1y"] - metrics["benchmark_return_1y"]
 
     def _b(buckets_list: list[Bucket]) -> list[dict]:
         return [{"name": b.name, "pct": round(b.pct, 6)} for b in buckets_list]
@@ -934,6 +1082,6 @@ async def build_composition(db, currency, settings) -> dict:
             "by_industry": _b(post_plan_buckets["by_industry"]),
         },
         "metrics": {k: round(v, 6) if isinstance(v, float) else v for k, v in metrics.items()},
-        "benchmarks": benchmarks_table,
+        "home_markets": home["groups"],
         "radar": radar_axes(metrics),
     }

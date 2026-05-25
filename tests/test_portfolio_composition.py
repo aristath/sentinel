@@ -15,8 +15,11 @@ import pytest
 from sentinel.portfolio_composition import (
     DEFAULT_RISK_FREE_RATE,
     TRADING_DAYS_PER_YEAR,
+    all_equity_index_symbols,
     annualized_volatility,
     asset_class_for,
+    basket_daily_returns,
+    basket_symbols,
     beta,
     build_composition,
     build_daily_pnl,
@@ -28,10 +31,81 @@ from sentinel.portfolio_composition import (
     inception_cagr,
     max_drawdown,
     radar_axes,
+    resolve_benchmark_group,
     rolling_twr,
     rollup_country_industry,
     sharpe_ratio,
 )
+
+
+class TestBenchmarkGroupResolution:
+    def test_own_index_countries(self):
+        assert resolve_benchmark_group("DE") == "DE"
+        assert resolve_benchmark_group("FR") == "FR"
+        assert resolve_benchmark_group("US") == "US"
+
+    def test_uk_stands_alone_not_eu(self):
+        assert resolve_benchmark_group("GB") == "UK"
+
+    def test_continental_eu_without_own_index_falls_to_eu(self):
+        assert resolve_benchmark_group("GR") == "EU"  # Greece — no Athens index
+        assert resolve_benchmark_group("NL") == "EU"  # Netherlands — no AEX
+        assert resolve_benchmark_group("AT") == "EU"
+
+    def test_china_maps_to_hang_seng_basket(self):
+        assert resolve_benchmark_group("CN") == "CN"
+        assert resolve_benchmark_group("HK") == "CN"
+
+    def test_emerging_without_own_index(self):
+        assert resolve_benchmark_group("TW") == "EM"  # Taiwan
+        assert resolve_benchmark_group("KR") == "EM"
+
+    def test_unknown_or_blank_falls_to_all(self):
+        assert resolve_benchmark_group("ZZ") == "ALL"
+        assert resolve_benchmark_group("") == "ALL"
+        assert resolve_benchmark_group(None) == "ALL"
+
+    def test_case_insensitive(self):
+        assert resolve_benchmark_group("de") == "DE"
+
+    def test_us_basket_has_multiple_indices(self):
+        syms = basket_symbols("US")
+        assert "SP500.IDX" in syms
+        assert "NASDAQ.IDX" in syms
+        assert len(syms) >= 3
+
+    def test_eu_basket_excludes_uk(self):
+        syms = basket_symbols("EU")
+        assert "FTSE.IDX" not in syms  # UK is not in the continental basket
+        assert "DAX.IDX" in syms
+
+    def test_all_basket_is_union_of_every_group(self):
+        all_syms = basket_symbols("ALL")
+        assert set(all_syms) == set(all_equity_index_symbols())
+        assert "SP500.IDX" in all_syms
+        assert "HSI.IDX" in all_syms
+
+
+class TestBasketDailyReturns:
+    def test_averages_member_returns_per_date(self):
+        prices = {
+            "A": [{"date": "2025-01-01", "close": 100}, {"date": "2025-01-02", "close": 110}],  # +10%
+            "B": [{"date": "2025-01-01", "close": 100}, {"date": "2025-01-02", "close": 120}],  # +20%
+        }
+        br = basket_daily_returns(["A", "B"], prices)
+        assert math.isclose(br["2025-01-02"], 0.15)  # mean of +10% and +20%
+
+    def test_tolerates_missing_member_on_a_date(self):
+        prices = {
+            "A": [{"date": "2025-01-01", "close": 100}, {"date": "2025-01-02", "close": 110}],
+            "B": [{"date": "2025-01-02", "close": 100}, {"date": "2025-01-03", "close": 120}],  # different calendar
+        }
+        br = basket_daily_returns(["A", "B"], prices)
+        # 2025-01-02 only A has a return (+10%); B's first day has no prior close
+        assert math.isclose(br["2025-01-02"], 0.10)
+
+    def test_empty_basket(self):
+        assert basket_daily_returns([], {}) == {}
 
 
 class TestContinentFor:
@@ -447,7 +521,7 @@ class TestRadarAxes:
             {
                 "return_1y": 0.0,
                 "sharpe": 0.0,
-                "benchmark_return_1y": 0.0,
+                "alpha_1y_vs_home": 0.0,
                 "volatility": 0.2,
                 "max_drawdown": 0.25,
                 "hhi": 0.275,
@@ -461,7 +535,7 @@ class TestRadarAxes:
             {
                 "return_1y": 0.5,
                 "sharpe": 3.0,
-                "benchmark_return_1y": 0.1,
+                "alpha_1y_vs_home": 0.25,
                 "volatility": 0.05,
                 "max_drawdown": 0.05,
                 "hhi": 0.05,
@@ -475,7 +549,7 @@ class TestRadarAxes:
             {
                 "return_1y": 10.0,
                 "sharpe": 100.0,
-                "benchmark_return_1y": -5.0,
+                "alpha_1y_vs_home": -5.0,
                 "volatility": -1.0,
                 "max_drawdown": -1.0,
                 "hhi": -1.0,
@@ -507,9 +581,11 @@ async def test_build_composition_integration_smoke():
     for key in ("by_country", "by_continent", "by_industry", "by_currency", "by_asset_class"):
         assert payload["composition"][key] == []
     assert payload["metrics"]["volatility"] == 0.0
-    # No benchmarks yet -> primary is None, alpha falls back to portfolio return.
-    assert payload["metrics"]["primary_benchmark_symbol"] is None
-    assert payload["benchmarks"] == []
+    # No holdings -> nothing to benchmark against home markets.
+    assert payload["metrics"]["beta_vs_home"] == 0.0
+    assert payload["metrics"]["alpha_1y_vs_home"] == 0.0
+    assert payload["metrics"]["home_coverage_pct"] == 0.0
+    assert payload["home_markets"] == []
     # Radar axes are present and bounded.
     assert set(payload["radar"].keys()) == {
         "return_1y",
@@ -524,51 +600,68 @@ async def test_build_composition_integration_smoke():
 
 
 @pytest.mark.asyncio
-async def test_build_composition_includes_benchmark_correlations():
-    """When benchmarks are loaded, each one with enough overlap gets a beta +
-    correlation row. The most correlated wins the radar's alpha slot."""
+async def test_build_composition_home_market_aggregate():
+    """Each holding is benchmarked vs its own home-market basket, then
+    value-weighted. A US holding goes against the US basket, a CN holding
+    against Hang Seng — never one global index."""
     from datetime import date, timedelta
 
     db = AsyncMock()
-    db.get_all_positions = AsyncMock(return_value=[])
-    db.get_all_securities = AsyncMock(return_value=[])
-
-    # Build a 60-day daily snapshot series so we have enough samples for beta.
-    series_dates = [(date.today() - timedelta(days=60 - i)).isoformat() for i in range(60)]
-    snapshots = [
-        {
-            "date": int(__import__("time").mktime(__import__("datetime").datetime.fromisoformat(d).timetuple())),
-            "data": {"positions": {"X": {"value_eur": 100 + i * 0.5}}, "cash_eur": 0},
-        }
-        for i, d in enumerate(series_dates)
-    ]
-    db.get_portfolio_snapshots = AsyncMock(return_value=snapshots)
-    db.get_cash_flows = AsyncMock(return_value=[])
-
-    # Two benchmarks: one perfectly correlated, one uncorrelated.
-    db.get_benchmarks = AsyncMock(
+    # Two holdings: one US, one Chinese.
+    db.get_all_positions = AsyncMock(
         return_value=[
-            {"symbol": "PERFECT.IDX", "name": "Perfect", "mkt_short_code": "FIX"},
-            {"symbol": "NOISE.IDX", "name": "Noise", "mkt_short_code": "FIX"},
+            {"symbol": "AAPL.US", "quantity": 10, "current_price": 100, "currency": "USD"},
+            {"symbol": "BABA.HK", "quantity": 10, "current_price": 100, "currency": "USD"},
         ]
     )
+    db.get_all_securities = AsyncMock(
+        return_value=[
+            {"symbol": "AAPL.US", "geography": "US", "industry": "Tech", "currency": "USD", "instr_kind_c": 1},
+            {"symbol": "BABA.HK", "geography": "CN", "industry": "Tech", "currency": "USD", "instr_kind_c": 1},
+        ]
+    )
+    db.get_portfolio_snapshots = AsyncMock(return_value=[])
+    db.get_cash_flows = AsyncMock(return_value=[])
 
-    def prices_for(symbol, **kwargs):
-        if symbol == "PERFECT.IDX":
-            # Mirror the snapshot price series exactly -> correlation 1.0
-            return [{"date": d, "close": 100 + i * 0.5} for i, d in enumerate(series_dates)][::-1]
-        # Noise: alternating up/down
-        return [{"date": d, "close": 100 + (1 if i % 2 == 0 else -1)} for i, d in enumerate(series_dates)][::-1]
+    # 60 daily dates of price history for securities + benchmark indices.
+    dates = [(date.today() - timedelta(days=60 - i)).isoformat() for i in range(60)]
 
-    db.get_benchmark_prices = AsyncMock(side_effect=prices_for)
+    def rising(base, step):
+        return [{"date": d, "close": base + i * step} for i, d in enumerate(dates)]
+
+    sec_prices = {
+        "AAPL.US": rising(100, 1.0),  # steady riser
+        "BABA.HK": rising(100, 0.5),
+    }
+    # SP500 basket member rises slower than AAPL (AAPL has positive alpha);
+    # HSI rises faster than BABA (BABA has negative alpha).
+    bench_prices = {
+        "SP500.IDX": rising(100, 0.5),
+        "NASDAQ.IDX": rising(100, 0.5),
+        "DJI30.IDX": rising(100, 0.5),
+        "RUT.IDX": rising(100, 0.5),
+        "HSI.IDX": rising(100, 1.0),
+    }
+
+    db.get_prices = AsyncMock(side_effect=lambda symbol, **kw: sec_prices.get(symbol, []))
+    db.get_benchmark_prices = AsyncMock(side_effect=lambda symbol, **kw: bench_prices.get(symbol, []))
 
     currency = AsyncMock()
+    currency.to_eur_for_date = AsyncMock(side_effect=lambda amt, *a, **k: amt)
     settings = AsyncMock()
     settings.get = AsyncMock(return_value=DEFAULT_RISK_FREE_RATE)
 
+    # PositionCalculator converts via currency.to_eur
+    currency.to_eur = AsyncMock(side_effect=lambda amt, *a, **k: amt)
+
     payload = await build_composition(db, currency, settings)
 
-    assert len(payload["benchmarks"]) == 2
-    # The perfectly-correlated benchmark should lead the list and become primary.
-    assert payload["benchmarks"][0]["symbol"] == "PERFECT.IDX"
-    assert payload["metrics"]["primary_benchmark_symbol"] == "PERFECT.IDX"
+    groups = {g["group"] for g in payload["home_markets"]}
+    assert groups == {"US", "CN"}
+    # Both holdings covered.
+    assert payload["metrics"]["home_coverage_pct"] == 1.0
+    # AAPL beat its (slower) US basket -> positive US alpha; BABA lagged its
+    # (faster) Hang Seng -> negative CN alpha.
+    by_group = {g["group"]: g for g in payload["home_markets"]}
+    assert by_group["US"]["alpha_1y"] > 0
+    assert by_group["CN"]["alpha_1y"] < 0
