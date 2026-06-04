@@ -312,10 +312,18 @@ class TestDeficitSellsSimulatedCash:
 
         securities_map = {
             "FRESH.EU": {
-                "symbol": "FRESH.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+                "symbol": "FRESH.EU",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_sell": 1,
+                "user_multiplier": 0.3,
             },
             "STALE.EU": {
-                "symbol": "STALE.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+                "symbol": "STALE.EU",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_sell": 1,
+                "user_multiplier": 0.3,
             },
         }
         positions = [
@@ -351,7 +359,11 @@ class TestDeficitSellsSimulatedCash:
 
         securities_map = {
             "FRESH.EU": {
-                "symbol": "FRESH.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+                "symbol": "FRESH.EU",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_sell": 1,
+                "user_multiplier": 0.3,
             },
         }
         positions = [{"symbol": "FRESH.EU", "quantity": 10, "current_price": 100.0}]
@@ -386,10 +398,18 @@ class TestDeficitSellsSimulatedCash:
 
         securities_map = {
             "RECENT_SELL.EU": {
-                "symbol": "RECENT_SELL.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+                "symbol": "RECENT_SELL.EU",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_sell": 1,
+                "user_multiplier": 0.3,
             },
             "UNTRADED.EU": {
-                "symbol": "UNTRADED.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+                "symbol": "UNTRADED.EU",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_sell": 1,
+                "user_multiplier": 0.3,
             },
         }
         positions = [
