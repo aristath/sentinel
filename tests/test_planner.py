@@ -280,6 +280,137 @@ class TestDeficitSellsSimulatedCash:
         # Portfolio returns positive cash, so no deficit sells needed
         assert sells == []
 
+    @staticmethod
+    def _cooloff_engine(latest_trades: dict):
+        """Build an engine whose db exposes a recent-trade map and cool-off settings."""
+        db = MagicMock()
+        db.get_latest_trades_for_symbols = AsyncMock(return_value=latest_trades)
+        # Fallback path for symbols absent from the bulk map: no trade history.
+        db.get_trades = AsyncMock(return_value=[])
+        engine = RebalanceEngine(db=db)
+        engine._db = db
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(
+            side_effect=lambda key, default=None: {
+                "strategy_core_cooloff_days": 21,
+                "strategy_same_side_cooloff_days": 15,
+                "strategy_funding_conviction_bias": 1.0,
+            }.get(key, default)
+        )
+        return engine
+
+    @pytest.mark.asyncio
+    async def test_funding_rotation_skips_cooloff_names(self):
+        """Funding-rotation sells must not churn a name still inside its cool-off window."""
+        import time
+
+        two_days_ago = int(time.time()) - 2 * 86400
+        engine = self._cooloff_engine({"FRESH.EU": {"side": "BUY", "executed_at": two_days_ago}})
+
+        securities_map = {
+            "FRESH.EU": {
+                "symbol": "FRESH.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+            },
+            "STALE.EU": {
+                "symbol": "STALE.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+            },
+        }
+        positions = [
+            {"symbol": "FRESH.EU", "quantity": 10, "current_price": 100.0},
+            {"symbol": "STALE.EU", "quantity": 10, "current_price": 100.0},
+        ]
+
+        sells = await engine._generate_deficit_sells(
+            500.0,
+            reason_kind="funding_rotation",
+            total_value=10000.0,
+            preloaded_positions=positions,
+            preloaded_securities_map=securities_map,
+            preloaded_symbol_scores={"FRESH.EU": 0.1, "STALE.EU": 0.1},
+            preloaded_symbol_prices={"FRESH.EU": 100.0, "STALE.EU": 100.0},
+        )
+
+        sold = {s.symbol for s in sells}
+        # FRESH.EU was bought 2 days ago -> within 21-day core cool-off -> excluded.
+        assert "FRESH.EU" not in sold
+        assert "STALE.EU" in sold
+
+    @pytest.mark.asyncio
+    async def test_cash_deficit_repair_bypasses_cooloff(self):
+        """Negative-balance repair is the one flow that MUST bypass cool-off: a real
+        negative cash balance accrues margin interest and has to be covered, even when
+        the only sellable name was traded inside its cool-off window."""
+        import time
+
+        two_days_ago = int(time.time()) - 2 * 86400
+        # The sole holding was bought 2 days ago -> deep inside its cool-off window.
+        engine = self._cooloff_engine({"FRESH.EU": {"side": "BUY", "executed_at": two_days_ago}})
+
+        securities_map = {
+            "FRESH.EU": {
+                "symbol": "FRESH.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+            },
+        }
+        positions = [{"symbol": "FRESH.EU", "quantity": 10, "current_price": 100.0}]
+
+        sells = await engine._generate_deficit_sells(
+            500.0,
+            reason_kind="cash_deficit",
+            total_value=10000.0,
+            preloaded_positions=positions,
+            preloaded_securities_map=securities_map,
+            preloaded_symbol_scores={"FRESH.EU": 0.1},
+            preloaded_symbol_prices={"FRESH.EU": 100.0},
+        )
+
+        sold = {s.symbol for s in sells}
+        # Cool-off is bypassed for negative-balance repair: the name is sold anyway.
+        assert "FRESH.EU" in sold
+
+    @pytest.mark.asyncio
+    async def test_funding_rotation_blocks_same_side_and_allows_untraded(self):
+        """Funding rotation also blocks a recent same-side sell, and never blocks an untraded name."""
+        import time
+
+        two_days_ago = int(time.time()) - 2 * 86400
+        engine = self._cooloff_engine(
+            {
+                # Sold 2 days ago -> same-side (15d) window still open -> blocked.
+                "RECENT_SELL.EU": {"side": "SELL", "executed_at": two_days_ago},
+                # No entry for UNTRADED.EU -> no history -> must remain sellable.
+            }
+        )
+
+        securities_map = {
+            "RECENT_SELL.EU": {
+                "symbol": "RECENT_SELL.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+            },
+            "UNTRADED.EU": {
+                "symbol": "UNTRADED.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+            },
+        }
+        positions = [
+            {"symbol": "RECENT_SELL.EU", "quantity": 10, "current_price": 100.0},
+            {"symbol": "UNTRADED.EU", "quantity": 10, "current_price": 100.0},
+        ]
+
+        sells = await engine._generate_deficit_sells(
+            500.0,
+            reason_kind="funding_rotation",
+            total_value=10000.0,
+            preloaded_positions=positions,
+            preloaded_securities_map=securities_map,
+            preloaded_symbol_scores={"RECENT_SELL.EU": 0.1, "UNTRADED.EU": 0.1},
+            preloaded_symbol_prices={"RECENT_SELL.EU": 100.0, "UNTRADED.EU": 100.0},
+        )
+
+        sold = {s.symbol for s in sells}
+        assert "RECENT_SELL.EU" not in sold  # same-side cool-off still open
+        assert "UNTRADED.EU" in sold  # no trade history -> allowed
+
 
 class TestContrarianSizing:
     @pytest.mark.asyncio

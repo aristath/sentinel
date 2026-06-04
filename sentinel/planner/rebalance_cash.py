@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import logging
 import math
 from dataclasses import replace
 from typing import TYPE_CHECKING
@@ -16,6 +17,8 @@ from .rebalance_rules import calculate_transaction_cost
 if TYPE_CHECKING:
     from .rebalance import RebalanceEngine
 
+logger = logging.getLogger(__name__)
+
 
 async def _setting(engine: "RebalanceEngine", key: str, default: float | int) -> float | int:
     """Read setting with safe fallback for mocked/unit-test engines."""
@@ -24,6 +27,24 @@ async def _setting(engine: "RebalanceEngine", key: str, default: float | int) ->
     except Exception:
         return default
     return default if value is None else value
+
+
+async def _load_latest_trades(engine: "RebalanceEngine", symbols: list[str]) -> dict[str, dict]:
+    """Best-effort latest-trade-per-symbol lookup for cool-off gating.
+
+    Returns an empty map when the backing db doesn't expose the bulk getter
+    (e.g. mocked engines in unit tests), in which case cool-off gating is a
+    no-op and the caller falls back to its prior behaviour.
+    """
+    getter = getattr(engine._db, "get_latest_trades_for_symbols", None)
+    if not callable(getter) or not symbols:
+        return {}
+    try:
+        maybe = getter(symbols)
+        result = await maybe if inspect.isawaitable(maybe) else maybe
+    except Exception:
+        return {}
+    return result if isinstance(result, dict) else {}
 
 
 async def apply_cash_constraint(
@@ -497,6 +518,52 @@ async def generate_deficit_sells(
         total_value += sum(float(p["eur_value"]) for p in position_data)
     else:
         total_value = await engine._portfolio.total_value()
+
+    # Cool-off gating for funding-rotation sells only.
+    #
+    # This path builds sells directly and historically skipped the cool-off
+    # check the main recommendation path enforces, letting the engine sell names
+    # it had just bought to fund new buys (churn). Funding-rotation sells raise
+    # cash for *optional* buys, so a name still inside its cool-off window is not
+    # a good sell: we drop it and simply buy less. We never demote it to a
+    # fallback tier — selling a good holding to satisfy a cash constraint is
+    # itself a bad trade. If nothing eligible remains, we make no trade and let a
+    # later cycle act once the window expires.
+    #
+    # Negative-balance repair (reason_kind="cash_deficit") is the one exception
+    # and is intentionally NOT gated here: a real negative cash balance accrues
+    # margin interest and must be covered. (Currency-only deficits are handled
+    # upstream by the trading:balance_fix FX-conversion job; this path only sells
+    # securities when an FX conversion can't cover the shortfall.)
+    #
+    # The *core* window is used as the opposite-side bound (rather than per-sleeve):
+    # it's the more conservative of the configured windows, and over-blocking only
+    # ever means "trade less", never a bad trade. The same-side window guards
+    # re-selling a name we recently sold, matching the main-path policy.
+    if reason_kind == "funding_rotation":
+        cooloff_days = int(await _setting(engine, "strategy_core_cooloff_days", 21))
+        same_side_cooloff_days = int(await _setting(engine, "strategy_same_side_cooloff_days", 15))
+        if position_data and (cooloff_days > 0 or same_side_cooloff_days > 0):
+            latest_trades = await _load_latest_trades(engine, [p["symbol"] for p in position_data])
+            blocked_symbols: set[str] = set()
+            for pos in position_data:
+                is_blocked, _ = await engine._check_cooloff_violation(
+                    pos["symbol"],
+                    "sell",
+                    cooloff_days,
+                    same_side_cooloff_days=same_side_cooloff_days,
+                    latest_trade=latest_trades.get(pos["symbol"]),
+                    as_of_date=as_of_date,
+                )
+                if is_blocked:
+                    blocked_symbols.add(pos["symbol"])
+            if blocked_symbols:
+                position_data = [p for p in position_data if p["symbol"] not in blocked_symbols]
+                logger.debug(
+                    "Cool-off suppressed %d funding-rotation sell candidate(s): %s",
+                    len(blocked_symbols),
+                    sorted(blocked_symbols),
+                )
 
     for pos in position_data:
         if remaining_deficit <= 0:
