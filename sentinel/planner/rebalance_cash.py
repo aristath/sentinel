@@ -26,6 +26,24 @@ async def _setting(engine: "RebalanceEngine", key: str, default: float | int) ->
     return default if value is None else value
 
 
+async def _load_latest_trades(engine: "RebalanceEngine", symbols: list[str]) -> dict[str, dict]:
+    """Best-effort latest-trade-per-symbol lookup for cool-off gating.
+
+    Returns an empty map when the backing db doesn't expose the bulk getter
+    (e.g. mocked engines in unit tests), in which case cool-off gating is a
+    no-op and the caller falls back to its prior behaviour.
+    """
+    getter = getattr(engine._db, "get_latest_trades_for_symbols", None)
+    if not callable(getter) or not symbols:
+        return {}
+    try:
+        maybe = getter(symbols)
+        result = await maybe if inspect.isawaitable(maybe) else maybe
+    except Exception:
+        return {}
+    return result if isinstance(result, dict) else {}
+
+
 async def apply_cash_constraint(
     *,
     engine: "RebalanceEngine",
@@ -497,6 +515,39 @@ async def generate_deficit_sells(
         total_value += sum(float(p["eur_value"]) for p in position_data)
     else:
         total_value = await engine._portfolio.total_value()
+
+    # Cool-off gating. This funding/deficit path builds sells directly and
+    # historically skipped the cool-off check the main recommendation path
+    # enforces, so the engine would sell names it had just bought to fund new
+    # buys (churn). Funding-rotation sells must respect cool-off outright;
+    # negative-balance repair prefers fresh names but may fall back to names
+    # still in their window as a last resort to avoid a margin-incurring deficit.
+    cooloff_days = int(await _setting(engine, "strategy_core_cooloff_days", 21))
+    same_side_cooloff_days = int(await _setting(engine, "strategy_same_side_cooloff_days", 15))
+    if position_data and (cooloff_days > 0 or same_side_cooloff_days > 0):
+        latest_trades = await _load_latest_trades(engine, [p["symbol"] for p in position_data])
+        blocked_symbols: set[str] = set()
+        for pos in position_data:
+            is_blocked, _ = await engine._check_cooloff_violation(
+                pos["symbol"],
+                "sell",
+                cooloff_days,
+                same_side_cooloff_days=same_side_cooloff_days,
+                latest_trade=latest_trades.get(pos["symbol"]),
+                as_of_date=as_of_date,
+            )
+            if is_blocked:
+                blocked_symbols.add(pos["symbol"])
+        if blocked_symbols:
+            if reason_kind == "funding_rotation":
+                # Never churn: drop names still inside their cool-off window.
+                position_data = [p for p in position_data if p["symbol"] not in blocked_symbols]
+            else:
+                # Negative-balance repair: exhaust fresh names first, then fall
+                # back to cool-off names only if the deficit still isn't covered.
+                position_data = [p for p in position_data if p["symbol"] not in blocked_symbols] + [
+                    p for p in position_data if p["symbol"] in blocked_symbols
+                ]
 
     for pos in position_data:
         if remaining_deficit <= 0:
