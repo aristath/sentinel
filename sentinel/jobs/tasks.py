@@ -254,6 +254,30 @@ async def sync_exchange_rates() -> None:
     logger.info(f"Exchange rates synced: {len(rates)} currencies")
 
 
+def _parse_broker_timestamp(date_str: str) -> int:
+    """Parse a broker trade date into a unix timestamp (0 if unparseable).
+
+    Tradernet/Freedom24 has used several date formats over time: ISO 8601 with a
+    'T' separator and milliseconds ("2026-06-03T11:46:14.640"), space-separated
+    ("2026-06-03 11:46:14"), and date-only ("2026-06-03"). The previous parser
+    only handled the space and date-only forms, so the current ISO form silently
+    collapsed to midnight and lost the intraday time. ``datetime.fromisoformat``
+    handles all of these (including a trailing 'Z'/offset); we fall back to the
+    date portion only if the full string can't be parsed.
+    """
+    if not isinstance(date_str, str) or not date_str.strip():
+        return 0
+    raw = date_str.strip()
+    try:
+        return int(datetime.fromisoformat(raw).timestamp())
+    except ValueError:
+        pass
+    try:
+        return int(datetime.strptime(raw[:10], "%Y-%m-%d").timestamp())
+    except (ValueError, TypeError):
+        return 0
+
+
 async def sync_trades(db, broker) -> None:
     """
     Sync trade history from broker.
@@ -313,15 +337,9 @@ async def sync_trades(db, broker) -> None:
         if not trade_id or not symbol:
             continue
 
-        # Parse broker date to unix timestamp (Tradernet: "YYYY-MM-DD HH:MM:SS" or "YYYY-MM-DD")
-        try:
-            if " " in date_str:
-                dt = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-            else:
-                dt = datetime.strptime(date_str[:10], "%Y-%m-%d")
-            executed_at_ts = int(dt.timestamp())
-        except (ValueError, TypeError):
-            executed_at_ts = 0
+        # Parse broker date to unix timestamp. Handles ISO 8601 ("...T..."),
+        # space-separated, and date-only forms (see _parse_broker_timestamp).
+        executed_at_ts = _parse_broker_timestamp(date_str)
 
         row_id = await db.upsert_trade(
             broker_trade_id=trade_id,

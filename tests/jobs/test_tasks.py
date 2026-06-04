@@ -862,3 +862,59 @@ class TestBackupR2:
                                     mock_create.assert_called_once()
                                     mock_client.assert_called_once()
                                     mock_upload.assert_called_once()
+
+
+class TestParseBrokerTimestamp:
+    """Tests for _parse_broker_timestamp covering the broker date formats."""
+
+    def test_iso_with_t_and_milliseconds_preserves_time(self):
+        """The current Tradernet/Freedom24 ISO form keeps its intraday time."""
+        from datetime import datetime
+
+        from sentinel.jobs.tasks import _parse_broker_timestamp
+
+        ts = _parse_broker_timestamp("2026-06-03T11:46:14.640")
+        # Round-trips back to the same wall-clock instant (not midnight).
+        assert datetime.fromtimestamp(ts) == datetime(2026, 6, 3, 11, 46, 14)
+
+    def test_space_separated_form(self):
+        from datetime import datetime
+
+        from sentinel.jobs.tasks import _parse_broker_timestamp
+
+        ts = _parse_broker_timestamp("2026-06-03 11:46:14")
+        assert datetime.fromtimestamp(ts) == datetime(2026, 6, 3, 11, 46, 14)
+
+    def test_date_only_form(self):
+        from datetime import datetime
+
+        from sentinel.jobs.tasks import _parse_broker_timestamp
+
+        ts = _parse_broker_timestamp("2026-06-03")
+        assert datetime.fromtimestamp(ts) == datetime(2026, 6, 3, 0, 0, 0)
+
+    def test_iso_with_trailing_z_is_utc(self):
+        from datetime import datetime, timezone
+
+        from sentinel.jobs.tasks import _parse_broker_timestamp
+
+        ts = _parse_broker_timestamp("2026-06-03T11:46:14.640Z")
+        assert datetime.fromtimestamp(ts, tz=timezone.utc).replace(microsecond=0) == datetime(
+            2026, 6, 3, 11, 46, 14, tzinfo=timezone.utc
+        )
+
+    def test_garbage_with_valid_date_prefix_falls_back_to_date(self):
+        from datetime import datetime
+
+        from sentinel.jobs.tasks import _parse_broker_timestamp
+
+        ts = _parse_broker_timestamp("2026-06-03 not-a-time")
+        assert datetime.fromtimestamp(ts) == datetime(2026, 6, 3, 0, 0, 0)
+
+    def test_empty_or_invalid_returns_zero(self):
+        from sentinel.jobs.tasks import _parse_broker_timestamp
+
+        assert _parse_broker_timestamp("") == 0
+        assert _parse_broker_timestamp("   ") == 0
+        assert _parse_broker_timestamp("nonsense") == 0
+        assert _parse_broker_timestamp(None) == 0  # type: ignore[arg-type]
