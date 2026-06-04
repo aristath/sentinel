@@ -339,43 +339,36 @@ class TestDeficitSellsSimulatedCash:
         assert "STALE.EU" in sold
 
     @pytest.mark.asyncio
-    async def test_cash_deficit_repair_never_sells_cooloff_names(self):
-        """Negative-balance repair must not sell a cool-off name even if the deficit
-        isn't fully covered. A cool-off sell is a bad trade; better to leave a
-        residual deficit and let the next cycle act once the window expires."""
+    async def test_cash_deficit_repair_bypasses_cooloff(self):
+        """Negative-balance repair is the one flow that MUST bypass cool-off: a real
+        negative cash balance accrues margin interest and has to be covered, even when
+        the only sellable name was traded inside its cool-off window."""
         import time
 
         two_days_ago = int(time.time()) - 2 * 86400
+        # The sole holding was bought 2 days ago -> deep inside its cool-off window.
         engine = self._cooloff_engine({"FRESH.EU": {"side": "BUY", "executed_at": two_days_ago}})
 
         securities_map = {
             "FRESH.EU": {
                 "symbol": "FRESH.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
             },
-            "STALE.EU": {
-                "symbol": "STALE.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
-            },
         }
-        positions = [
-            {"symbol": "FRESH.EU", "quantity": 10, "current_price": 100.0},
-            {"symbol": "STALE.EU", "quantity": 10, "current_price": 100.0},
-        ]
+        positions = [{"symbol": "FRESH.EU", "quantity": 10, "current_price": 100.0}]
 
-        # Deficit larger than the one eligible position: the cool-off name must
-        # still never be sold to cover the remainder.
         sells = await engine._generate_deficit_sells(
-            1500.0,
+            500.0,
             reason_kind="cash_deficit",
             total_value=10000.0,
             preloaded_positions=positions,
             preloaded_securities_map=securities_map,
-            preloaded_symbol_scores={"FRESH.EU": 0.1, "STALE.EU": 0.1},
-            preloaded_symbol_prices={"FRESH.EU": 100.0, "STALE.EU": 100.0},
+            preloaded_symbol_scores={"FRESH.EU": 0.1},
+            preloaded_symbol_prices={"FRESH.EU": 100.0},
         )
 
         sold = {s.symbol for s in sells}
-        assert "FRESH.EU" not in sold  # cool-off name never sold, even under deficit
-        assert "STALE.EU" in sold  # only the eligible name is sold (partial repair)
+        # Cool-off is bypassed for negative-balance repair: the name is sold anyway.
+        assert "FRESH.EU" in sold
 
     @pytest.mark.asyncio
     async def test_funding_rotation_blocks_same_side_and_allows_untraded(self):
