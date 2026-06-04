@@ -339,8 +339,10 @@ class TestDeficitSellsSimulatedCash:
         assert "STALE.EU" in sold
 
     @pytest.mark.asyncio
-    async def test_cash_deficit_repair_falls_back_to_cooloff_names(self):
-        """Negative-balance repair exhausts fresh names first, then falls back to cool-off names."""
+    async def test_cash_deficit_repair_never_sells_cooloff_names(self):
+        """Negative-balance repair must not sell a cool-off name even if the deficit
+        isn't fully covered. A cool-off sell is a bad trade; better to leave a
+        residual deficit and let the next cycle act once the window expires."""
         import time
 
         two_days_ago = int(time.time()) - 2 * 86400
@@ -359,7 +361,8 @@ class TestDeficitSellsSimulatedCash:
             {"symbol": "STALE.EU", "quantity": 10, "current_price": 100.0},
         ]
 
-        # Deficit larger than a single position so the fallback name is needed too.
+        # Deficit larger than the one eligible position: the cool-off name must
+        # still never be sold to cover the remainder.
         sells = await engine._generate_deficit_sells(
             1500.0,
             reason_kind="cash_deficit",
@@ -370,10 +373,9 @@ class TestDeficitSellsSimulatedCash:
             preloaded_symbol_prices={"FRESH.EU": 100.0, "STALE.EU": 100.0},
         )
 
-        order = [s.symbol for s in sells]
-        # Fresh (non-cool-off) name is exhausted first; cool-off name only as fallback.
-        assert order[0] == "STALE.EU"
-        assert "FRESH.EU" in order
+        sold = {s.symbol for s in sells}
+        assert "FRESH.EU" not in sold  # cool-off name never sold, even under deficit
+        assert "STALE.EU" in sold  # only the eligible name is sold (partial repair)
 
     @pytest.mark.asyncio
     async def test_funding_rotation_blocks_same_side_and_allows_untraded(self):

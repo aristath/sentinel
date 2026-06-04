@@ -522,16 +522,18 @@ async def generate_deficit_sells(
     # Cool-off gating. This funding/deficit path builds sells directly and
     # historically skipped the cool-off check the main recommendation path
     # enforces, so the engine would sell names it had just bought to fund new
-    # buys (churn). Funding-rotation sells must respect cool-off outright;
-    # negative-balance repair prefers fresh names but may fall back to names
-    # still in their window as a last resort to avoid a margin-incurring deficit.
+    # buys (churn). A name still inside its cool-off window is simply not a good
+    # trade right now, so we drop it outright — for both funding rotation and
+    # negative-balance repair. We never demote it to a fallback tier: doing so
+    # could sell a perfectly good holding ahead of a worse one just to satisfy a
+    # cash constraint, which is itself a bad trade. If nothing eligible remains,
+    # we make no trade and let the next cycle (once the window expires) act.
     #
-    # We deliberately use the *core* window as the opposite-side bound for every
-    # funding sell (rather than per-sleeve): it's the more conservative of the
-    # configured windows, and over-blocking is safe in both branches — a rotation
-    # sell is simply skipped (we buy less), and a deficit sell is only deferred to
-    # the fallback tier, never dropped. The same-side window guards re-selling a
-    # name we recently sold, matching the main-path policy.
+    # The *core* window is used as the opposite-side bound for every funding
+    # sell (rather than per-sleeve): it's the more conservative of the configured
+    # windows, and over-blocking only ever means "trade less", never a bad trade.
+    # The same-side window guards re-selling a name we recently sold, matching
+    # the main-path policy.
     cooloff_days = int(await _setting(engine, "strategy_core_cooloff_days", 21))
     same_side_cooloff_days = int(await _setting(engine, "strategy_same_side_cooloff_days", 15))
     if position_data and (cooloff_days > 0 or same_side_cooloff_days > 0):
@@ -549,25 +551,13 @@ async def generate_deficit_sells(
             if is_blocked:
                 blocked_symbols.add(pos["symbol"])
         if blocked_symbols:
-            if reason_kind == "funding_rotation":
-                # Never churn: drop names still inside their cool-off window.
-                position_data = [p for p in position_data if p["symbol"] not in blocked_symbols]
-                logger.debug(
-                    "Cool-off suppressed %d funding-rotation sell candidate(s): %s",
-                    len(blocked_symbols),
-                    sorted(blocked_symbols),
-                )
-            else:
-                # Negative-balance repair: exhaust fresh names first, then fall
-                # back to cool-off names only if the deficit still isn't covered.
-                position_data = [p for p in position_data if p["symbol"] not in blocked_symbols] + [
-                    p for p in position_data if p["symbol"] in blocked_symbols
-                ]
-                logger.debug(
-                    "Cool-off deprioritized %d deficit-repair sell candidate(s) to fallback: %s",
-                    len(blocked_symbols),
-                    sorted(blocked_symbols),
-                )
+            position_data = [p for p in position_data if p["symbol"] not in blocked_symbols]
+            logger.debug(
+                "Cool-off suppressed %d %s sell candidate(s): %s",
+                len(blocked_symbols),
+                reason_kind,
+                sorted(blocked_symbols),
+            )
 
     for pos in position_data:
         if remaining_deficit <= 0:
