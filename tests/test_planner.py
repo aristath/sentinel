@@ -285,6 +285,8 @@ class TestDeficitSellsSimulatedCash:
         """Build an engine whose db exposes a recent-trade map and cool-off settings."""
         db = MagicMock()
         db.get_latest_trades_for_symbols = AsyncMock(return_value=latest_trades)
+        # Fallback path for symbols absent from the bulk map: no trade history.
+        db.get_trades = AsyncMock(return_value=[])
         engine = RebalanceEngine(db=db)
         engine._db = db
         engine._currency = MagicMock()
@@ -372,6 +374,47 @@ class TestDeficitSellsSimulatedCash:
         # Fresh (non-cool-off) name is exhausted first; cool-off name only as fallback.
         assert order[0] == "STALE.EU"
         assert "FRESH.EU" in order
+
+    @pytest.mark.asyncio
+    async def test_funding_rotation_blocks_same_side_and_allows_untraded(self):
+        """Funding rotation also blocks a recent same-side sell, and never blocks an untraded name."""
+        import time
+
+        two_days_ago = int(time.time()) - 2 * 86400
+        engine = self._cooloff_engine(
+            {
+                # Sold 2 days ago -> same-side (15d) window still open -> blocked.
+                "RECENT_SELL.EU": {"side": "SELL", "executed_at": two_days_ago},
+                # No entry for UNTRADED.EU -> no history -> must remain sellable.
+            }
+        )
+
+        securities_map = {
+            "RECENT_SELL.EU": {
+                "symbol": "RECENT_SELL.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+            },
+            "UNTRADED.EU": {
+                "symbol": "UNTRADED.EU", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.3,
+            },
+        }
+        positions = [
+            {"symbol": "RECENT_SELL.EU", "quantity": 10, "current_price": 100.0},
+            {"symbol": "UNTRADED.EU", "quantity": 10, "current_price": 100.0},
+        ]
+
+        sells = await engine._generate_deficit_sells(
+            500.0,
+            reason_kind="funding_rotation",
+            total_value=10000.0,
+            preloaded_positions=positions,
+            preloaded_securities_map=securities_map,
+            preloaded_symbol_scores={"RECENT_SELL.EU": 0.1, "UNTRADED.EU": 0.1},
+            preloaded_symbol_prices={"RECENT_SELL.EU": 100.0, "UNTRADED.EU": 100.0},
+        )
+
+        sold = {s.symbol for s in sells}
+        assert "RECENT_SELL.EU" not in sold  # same-side cool-off still open
+        assert "UNTRADED.EU" in sold  # no trade history -> allowed
 
 
 class TestContrarianSizing:
