@@ -488,6 +488,8 @@ class TestContrarianSizing:
         engine._currency.get_rate = AsyncMock(return_value=1.0)
         engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
         engine._get_deficit_sells = AsyncMock(return_value=[])
+        engine._deposit_history = MagicMock()
+        engine._deposit_history.get_rolling_6m_avg_deposit = AsyncMock(return_value=500.0)
 
         recs = await engine.get_recommendations(
             ideal={"AMD": 0.20},
@@ -568,6 +570,8 @@ class TestContrarianSizing:
         engine._currency.get_rate = AsyncMock(return_value=1.0)
         engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
         engine._get_deficit_sells = AsyncMock(return_value=[])
+        engine._deposit_history = MagicMock()
+        engine._deposit_history.get_rolling_6m_avg_deposit = AsyncMock(return_value=500.0)
 
         recs = await engine.get_recommendations(
             ideal={"BASE": 0.20},
@@ -623,6 +627,18 @@ class TestContrarianSizing:
             "strategy_lot_coarse_max_pct": 0.30,
             "strategy_coarse_max_new_lots_per_cycle": 1,
             "strategy_core_floor_pct": 0.05,
+            "strategy_min_opp_score": 0.55,
+            "max_position_pct": 25,
+            "strategy_opportunity_addon_threshold": 0.75,
+            "strategy_entry_t1_dd": -0.10,
+            "strategy_entry_t2_dd": -0.16,
+            "strategy_entry_t3_dd": -0.22,
+            "strategy_entry_memory_days": 42,
+            "strategy_memory_max_boost": 0.18,
+            "strategy_opportunity_cooloff_days": 0,
+            "strategy_core_cooloff_days": 0,
+            "strategy_same_side_cooloff_days": 0,
+            "strategy_rotation_threshold": 0.8,
         }
         engine._settings.get = AsyncMock(side_effect=lambda key, default=None: settings_values.get(key, default))
         engine._portfolio = MagicMock()
@@ -631,6 +647,8 @@ class TestContrarianSizing:
         engine._currency.get_rate = AsyncMock(return_value=1.0)
         engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
         engine._get_deficit_sells = AsyncMock(return_value=[])
+        engine._deposit_history = MagicMock()
+        engine._deposit_history.get_rolling_6m_avg_deposit = AsyncMock(return_value=500.0)
 
         recs = await engine.get_recommendations(
             ideal={"CATL": 0.7},
@@ -693,6 +711,8 @@ class TestContrarianSizing:
         engine._currency.get_rate = AsyncMock(return_value=1.0)
         engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
         engine._get_deficit_sells = AsyncMock(return_value=[])
+        engine._deposit_history = MagicMock()
+        engine._deposit_history.get_rolling_6m_avg_deposit = AsyncMock(return_value=500.0)
 
         recs = await engine.get_recommendations(
             ideal={"AAPL": 0.70},

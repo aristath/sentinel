@@ -20,8 +20,9 @@ import {
   Button,
   ActionIcon,
   Table,
+  Tooltip,
 } from '@mantine/core';
-import { IconPlus, IconArrowRight, IconCash, IconWallet, IconListCheck, IconTrendingUp, IconPencil, IconX } from '@tabler/icons-react';
+import { IconPlus, IconArrowRight, IconCash, IconWallet, IconListCheck, IconTrendingUp, IconPencil, IconX, IconClockPause } from '@tabler/icons-react';
 import { SecurityTable } from '../components/SecurityTable';
 import { AddSecurityModal } from '../components/AddSecurityModal';
 import { DeleteSecurityModal } from '../components/DeleteSecurityModal';
@@ -117,6 +118,7 @@ function UnifiedPage() {
   });
   const recommendations = recommendationsData?.recommendations;
   const planSummary = recommendationsData?.summary;
+  const deferred = recommendationsData?.deferred;
 
   const { data: cashFlows } = useQuery({
     queryKey: ['cashflows'],
@@ -469,6 +471,44 @@ function UnifiedPage() {
                   <Text size="sm" c="dimmed" fs="italic" className="unified__status-no-plan">No pending actions</Text>
                 )}
               </Group>
+
+              {/* Deferred row: buys we want but can't fund yet without a bad sell — waiting on deposits */}
+              {deferred && deferred.length > 0 && (
+                <Group gap="xs" wrap="wrap" className="unified__status-row unified__status-row--deferred">
+                  <Group gap="xs" className="unified__status-section unified__status-section--deferred">
+                    <IconClockPause size={18} style={{ opacity: 0.6 }} className="unified__status-icon" />
+                    <Text size="sm" c="dimmed" className="unified__status-label">Deferred:</Text>
+                  </Group>
+                  <Group gap={6} wrap="wrap" className="unified__status-deferred-steps">
+                    {deferred.map((d) => {
+                      const daysWaiting = d.created_at
+                        ? Math.floor((Date.now() / 1000 - d.created_at) / 86400)
+                        : null;
+                      const waitLabel = daysWaiting !== null
+                        ? `${daysWaiting === 0 ? 'today' : `${daysWaiting}d`}`
+                        : '';
+                      return (
+                        <Tooltip
+                          key={`${d.symbol}-${d.action}`}
+                          label={`${d.reason}${waitLabel ? ` · waiting ${waitLabel}` : ''}`}
+                          multiline
+                          w={260}
+                          withArrow
+                        >
+                          <Badge
+                            size="md"
+                            color={d.reserved ? 'orange' : 'yellow'}
+                            variant="light"
+                            className="unified__status-deferred-badge"
+                          >
+                            {d.reserved ? 'RESERVE' : 'BUY'} {formatEur(d.target_amount_eur)} {d.symbol}
+                          </Badge>
+                        </Tooltip>
+                      );
+                    })}
+                  </Group>
+                </Group>
+              )}
             </Stack>
           </Card>
 

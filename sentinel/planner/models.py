@@ -33,6 +33,8 @@ class TradeRecommendation:
     clara_target_pct: Optional[float] = None
     baseline_target_pct: Optional[float] = None
     opportunity_target_pct: Optional[float] = None
+    profit_amount_eur: Optional[float] = None  # Profit amount for sell recommendations
+    profits_first: Optional[bool] = None  # True if selling profits only
 
 
 @dataclass

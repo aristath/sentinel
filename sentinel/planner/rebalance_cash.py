@@ -69,6 +69,9 @@ async def apply_cash_constraint(
     sells = [r for r in recommendations if r.action == "sell"]
     buys = [r for r in recommendations if r.action == "buy"]
 
+    # Reset the reserve-target signal each call; set below only if we actually reserve.
+    engine._reserved_target_symbol = None
+
     if not buys:
         return recommendations
 
@@ -202,6 +205,49 @@ async def apply_cash_constraint(
                 if total_buy_costs <= available_budget:
                     return recommendations
 
+    # Reserve-for-target: if the single most-wanted buy can't be funded this cycle (even
+    # after acceptable funding sells) but deposits would cover it (+margin) within a few
+    # months, hold cash and wait for it instead of frittering on lesser buys. We still take
+    # any *legitimately great* trade (a deep contrarian entry) — idle cash beats a mediocre
+    # buy, but a great opportunity beats idle cash.
+    reserving = False
+    if buys:
+        top_buy = max(buys, key=lambda b: b.priority)
+        top_cost = top_buy.value_delta_eur + calculate_transaction_cost(top_buy.value_delta_eur, fixed_fee, pct_fee)
+        if top_cost > available_budget:
+            try:
+                avg_monthly_deposit = float(await engine._deposit_history.get_rolling_6m_avg_deposit(as_of_date))
+            except Exception:
+                avg_monthly_deposit = 0.0
+            if avg_monthly_deposit > 0:
+                margin = float(await _setting(engine, "strategy_reserve_margin_pct", 0.30))
+                max_months = float(await _setting(engine, "strategy_reserve_max_months", 3))
+                needed = top_buy.value_delta_eur * (1 + margin)
+                months_to_target = (needed - available_budget) / avg_monthly_deposit
+                if months_to_target <= max_months:
+                    reserving = True
+                    engine._reserved_target_symbol = top_buy.symbol
+                    great_bar = float(await _setting(engine, "strategy_reserve_great_opp_score", 0.75))
+                    great_conv_pct = float(await _setting(engine, "strategy_reserve_great_conviction_pct", 0.20))
+                    # A "legitimately great" trade needs BOTH a deep contrarian score AND
+                    # top-X% Clara conviction across the universe — a hard dip in a name we
+                    # actually believe in, not just any name that fell.
+                    conviction_values = sorted(conviction_by_symbol.values(), reverse=True)
+                    if conviction_values:
+                        cutoff_idx = max(0, math.ceil(len(conviction_values) * great_conv_pct) - 1)
+                        top_conviction_floor = conviction_values[cutoff_idx]
+                    else:
+                        top_conviction_floor = 0.0
+                    great_buys = [
+                        b
+                        for b in buys
+                        if float(b.contrarian_score) >= great_bar
+                        and conviction_by_symbol.get(b.symbol, 0.0) >= top_conviction_floor
+                    ]
+                    if not great_buys:
+                        return sells  # nothing great enough — hold all cash for the target
+                    buys = great_buys  # deploy only into great trades; reserve the rest
+
     # Scale down buys
     buys_by_priority = sorted(buys, key=lambda x: -x.priority)
     remaining_budget = available_budget
@@ -305,11 +351,12 @@ async def apply_cash_constraint(
 
     final_buys.sort(key=lambda x: -x.priority)
 
-    # Top-up with leftover budget
+    # Top-up with leftover budget — but not when reserving: there the leftover is being
+    # deliberately held for the target buy, not poured into the great trades we did take.
     total_buy_cost = sum(
         b.value_delta_eur + calculate_transaction_cost(b.value_delta_eur, fixed_fee, pct_fee) for b in final_buys
     )
-    leftover = available_budget - total_buy_cost
+    leftover = 0.0 if reserving else available_budget - total_buy_cost
 
     iterations = 0
     while leftover > 0 and iterations < 1000:
@@ -577,9 +624,28 @@ async def generate_deficit_sells(
         eur_value = pos["eur_value"]
         score = pos["score"]
 
-        if eur_value <= remaining_deficit:
-            sell_qty = (qty // lot_size) * lot_size
+        # Calculate how much we're overweight vs target
+        current_alloc = eur_value / total_value if total_value > 0 else float(pos["current_allocation"])
+        target_alloc = float(pos["target_allocation"])
+        overweight_pct = max(0.0, current_alloc - target_alloc)
+        overweight_value = overweight_pct * total_value
+
+        # Only skip non-overweight positions for funding_rotation
+        # For cash_deficit, we must sell even if not overweight to cover the deficit
+        if overweight_value <= 0:
+            if reason_kind == "funding_rotation":
+                continue  # Skip if not overweight for funding_rotation
+
+        if overweight_value <= remaining_deficit:
+            # Sell entire overweight amount
+            rate = await engine._currency.get_rate(currency)
+            if currency != "EUR" and rate > 0:
+                overweight_qty = overweight_value / (price * rate)
+            else:
+                overweight_qty = overweight_value / price
+            sell_qty = (int(overweight_qty) // lot_size) * lot_size
         else:
+            # Sell only what's needed to cover the deficit
             rate = await engine._currency.get_rate(currency)
             if rate > 0:
                 local_needed = remaining_deficit / rate
@@ -587,12 +653,12 @@ async def generate_deficit_sells(
                 local_needed = remaining_deficit
             shares_needed = local_needed / price
             sell_qty = math.ceil(shares_needed / lot_size) * lot_size
-            sell_qty = min(sell_qty, qty)
+
+        sell_qty = min(sell_qty, qty)
 
         if sell_qty < lot_size:
             continue
 
-        current_alloc = eur_value / total_value if total_value > 0 else float(pos["current_allocation"])
         target_alloc = float(pos["target_allocation"])
         sell_value_local = sell_qty * price
         sell_value_eur = await engine._currency.to_eur(sell_value_local, currency)

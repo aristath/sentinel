@@ -47,6 +47,29 @@ async def get_recommendations(
     # Cash after plan: start + sells - sell_fees - buys - buy_fees
     cash_after_plan = current_cash + total_sell_value - sell_fees - total_buy_value - buy_fees
 
+    # Deferred trades: buys the planner wants but can't fund this cycle without a bad
+    # sell — parked to wait for deposits to accumulate enough cash. Reconciled by
+    # get_recommendations above, so the bucket is fresh here.
+    pending_getter = getattr(deps.db, "get_pending_trades", None)
+    deferred: list[dict] = []
+    if callable(pending_getter):
+        maybe_rows = pending_getter()
+        if inspect.isawaitable(maybe_rows):
+            deferred = [
+                {
+                    "symbol": row["symbol"],
+                    "action": row["action"],
+                    "target_amount_eur": row["target_amount_eur"],
+                    "reason": row["reason"],
+                    # "reserved" = the allocator is actively holding cash for this exact buy;
+                    # otherwise it's a plain deferral. Carried in the reason prefix set by the planner.
+                    "reserved": str(row["reason"] or "").startswith("reserved:"),
+                    "created_at": row["created_at"],
+                    "last_evaluated": row["last_evaluated"],
+                }
+                for row in await maybe_rows
+            ]
+
     return {
         "recommendations": [
             {
@@ -75,6 +98,7 @@ async def get_recommendations(
             }
             for r in recommendations
         ],
+        "deferred": deferred,
         "summary": {
             "current_cash": current_cash,
             "total_sell_value": total_sell_value,

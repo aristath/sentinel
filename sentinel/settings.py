@@ -63,6 +63,14 @@ DEFAULTS = {
     "strategy_core_cooloff_days": 21,
     "strategy_same_side_cooloff_days": 15,
     "strategy_rotation_time_stop_days": 90,
+    "strategy_rotation_threshold": 0.9,
+    # Reserve-for-target: hold cash for a wanted buy if deposits would fund it (+margin)
+    # within max_months. While reserving, only deploy into a "legitimately great" trade:
+    # deterministic score >= great_opp_score AND top great_conviction_pct by Clara conviction.
+    "strategy_reserve_margin_pct": 0.30,
+    "strategy_reserve_max_months": 3,
+    "strategy_reserve_great_opp_score": 0.75,
+    "strategy_reserve_great_conviction_pct": 0.20,
     "strategy_core_new_min_score": 0.30,
     "strategy_core_new_min_dip_score": 0.20,
     "strategy_max_funding_sells_per_cycle": 2,

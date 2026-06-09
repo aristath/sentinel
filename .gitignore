@@ -55,3 +55,5 @@ world/world
 
 # Ergon Studio working dir
 .ergon.studio/
+
+.coverage

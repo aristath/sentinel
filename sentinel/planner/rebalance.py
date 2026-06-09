@@ -23,6 +23,7 @@ from sentinel.strategy import (
     recent_dd252_min,
 )
 
+from .deposit_history import DepositHistoryHelper
 from .models import TradeRecommendation
 from .preferences import has_strategic_buy_pressure
 from .rebalance_cash import apply_cash_constraint, generate_deficit_sells, get_deficit_sells
@@ -79,6 +80,95 @@ class RebalanceEngine:
         self._portfolio = portfolio or Portfolio()
         self._settings = settings or Settings()
         self._currency = currency or Currency()
+        self._deposit_history = DepositHistoryHelper(db=self._db, currency=self._currency)
+        # Symbol the cash allocator reserved cash for this cycle (set by apply_cash_constraint).
+        self._reserved_target_symbol: str | None = None
+
+    async def _calculate_months_to_self_correct(
+        self,
+        excess_above_target_eur: float,
+        as_of_date: str | None = None,
+    ) -> float:
+        """
+        Calculate how many months of deposits would correct the excess allocation.
+
+        Args:
+            excess_above_target_eur: The amount (in EUR) by which the position exceeds its target allocation.
+            as_of_date: Optional date string (YYYY-MM-DD or ISO datetime) to use for deposit history calculation.
+                       If None, uses today's date.
+
+        Returns:
+            float: Number of months needed to correct the excess via deposits. Returns infinity if no deposits
+                   are available or if excess is zero/negative.
+        """
+        avg_monthly_deposit_6m = await self._deposit_history.get_rolling_6m_avg_deposit(as_of_date)
+        if avg_monthly_deposit_6m <= 0:
+            return float("inf")  # No deposits = infinite time to correct
+        return excess_above_target_eur / avg_monthly_deposit_6m
+
+    @staticmethod
+    def _build_deferred_buys(
+        buys_before: dict[str, TradeRecommendation],
+        buys_after: set[str],
+        avg_monthly_deposit_6m: float | None,
+        reserved_symbol: str | None = None,
+    ) -> list[dict]:
+        """Buys we wanted but couldn't fund this cycle — parked to wait for deposits.
+
+        A buy is dropped by the cash constraint when there's no cash and no acceptable
+        funding sell to cover it. Exactly one such buy can be the cash allocator's
+        **reserved** target (`reserved_symbol`) — the one we're actively holding cash for;
+        every other dropped buy is plainly **deferred** (waiting while cash is deployed
+        elsewhere). The reason carries the `reserved:`/`deferred:` prefix and, when deposit
+        history exists, a rough months-of-deposits-to-fund estimate.
+        """
+        deferred: list[dict] = []
+        for symbol, buy in buys_before.items():
+            if symbol in buys_after:
+                continue  # survived the cash constraint (possibly scaled) — not deferred
+            cost_eur = float(buy.value_delta_eur)
+            status = "reserved" if symbol == reserved_symbol else "deferred"
+            if avg_monthly_deposit_6m and avg_monthly_deposit_6m > 0:
+                months = cost_eur / avg_monthly_deposit_6m
+                reason = f"{status}: ~{months:.1f}mo of deposits to fund €{cost_eur:,.0f} buy"
+            else:
+                reason = f"{status}: insufficient cash to fund €{cost_eur:,.0f} buy"
+            deferred.append(
+                {
+                    "symbol": symbol,
+                    "action": "buy",
+                    "target_amount_eur": cost_eur,
+                    "reason": reason,
+                }
+            )
+        return deferred
+
+    async def _reconcile_pending_trades(self, deferred: list[dict]) -> None:
+        """Sync the deferred-trades bucket with this cycle's deferred set.
+
+        Each `(symbol, action)` deferred this cycle is parked, or — if already parked — has
+        its amount/reason refreshed and `last_evaluated` bumped (so the displayed status stays
+        current as deposits accumulate), while `created_at` is preserved to record how long it
+        has been waiting. Entries no longer deferred (executed, or no longer wanted) are removed.
+        """
+        get = getattr(self._db, "get_pending_trades", None)
+        if not callable(get):
+            return
+        maybe_rows = get()
+        if not inspect.isawaitable(maybe_rows):
+            return  # Non-async db (e.g. a test mock) — nothing to reconcile.
+        existing = {row["trade_key"]: row for row in await maybe_rows}
+        new_by_key = {f"{d['symbol']}:{d['action']}": d for d in deferred}
+
+        for key in existing:
+            if key not in new_by_key:
+                await self._db.remove_pending_trade(key)
+
+        for key, d in new_by_key.items():
+            if key in existing:
+                await self._db.update_pending_trade(key, d["target_amount_eur"], d["reason"])
+            else:
+                await self._db.add_pending_trade(key, d["symbol"], d["action"], d["target_amount_eur"], d["reason"])
 
     async def _load_runtime_settings(self) -> dict[str, float]:
         defaults: dict[str, float] = {
@@ -98,12 +188,13 @@ class RebalanceEngine:
             "strategy_opportunity_cooloff_days": DEFAULTS["strategy_opportunity_cooloff_days"],
             "strategy_core_cooloff_days": DEFAULTS["strategy_core_cooloff_days"],
             "strategy_same_side_cooloff_days": DEFAULTS["strategy_same_side_cooloff_days"],
-            "strategy_core_new_min_score": DEFAULTS["strategy_core_new_min_score"],
-            "strategy_core_new_min_dip_score": DEFAULTS["strategy_core_new_min_dip_score"],
-            "strategy_coarse_max_new_lots_per_cycle": DEFAULTS["strategy_coarse_max_new_lots_per_cycle"],
             "strategy_core_floor_pct": DEFAULTS["strategy_core_floor_pct"],
             "strategy_max_opportunity_buys_per_cycle": DEFAULTS["strategy_max_opportunity_buys_per_cycle"],
             "strategy_max_new_opportunity_buys_per_cycle": DEFAULTS["strategy_max_new_opportunity_buys_per_cycle"],
+            "strategy_rotation_threshold": DEFAULTS["strategy_rotation_threshold"],
+            "strategy_core_new_min_score": DEFAULTS["strategy_core_new_min_score"],
+            "strategy_core_new_min_dip_score": DEFAULTS["strategy_core_new_min_dip_score"],
+            "strategy_coarse_max_new_lots_per_cycle": DEFAULTS["strategy_coarse_max_new_lots_per_cycle"],
         }
         keys = list(defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, defaults[k]) for k in keys])
@@ -336,6 +427,9 @@ class RebalanceEngine:
                 "state": strategy_states.get(symbol) or {},
             }
 
+        # Calculate average monthly deposit for self-correction logic
+        avg_monthly_deposit_6m = await self._deposit_history.get_rolling_6m_avg_deposit(as_of_date)
+
         # Generate recommendations
         recommendations = []
 
@@ -352,6 +446,7 @@ class RebalanceEngine:
                 settings_ctx=settings_ctx,
                 latest_trade=latest_trades_map.get(symbol),
                 as_of_date=as_of_date,
+                avg_monthly_deposit_6m=avg_monthly_deposit_6m,
             )
             if rec:
                 recommendations.append(rec)
@@ -378,6 +473,9 @@ class RebalanceEngine:
             max_new_opp_buys=int(settings_ctx["strategy_max_new_opportunity_buys_per_cycle"]),
         )
 
+        # Snapshot the buys we *want* before the cash constraint trims/drops any.
+        buys_before = {r.symbol: r for r in recommendations if r.action == "buy"}
+
         # Apply cash constraint (including optional funding sells)
         recommendations = await self._apply_cash_constraint(
             recommendations,
@@ -400,6 +498,21 @@ class RebalanceEngine:
                 symbol: float(sec.get("price", 0.0) or 0.0) for symbol, sec in security_data.items()
             },
         )
+
+        # A buy that we wanted but the cash constraint dropped — couldn't be funded
+        # without a bad sell — is deferred to wait for deposits. Buys rescued by an
+        # acceptable funding sell survive in `recommendations` and are NOT deferred.
+        buys_after = {r.symbol for r in recommendations if r.action == "buy"}
+        deferred = self._build_deferred_buys(
+            buys_before,
+            buys_after,
+            avg_monthly_deposit_6m,
+            reserved_symbol=self._reserved_target_symbol,
+        )
+
+        # Persist the deferred-trades bucket on live runs only (skip during backtests).
+        if as_of_date is None:
+            await self._reconcile_pending_trades(deferred)
 
         # Cache result only when live (not as_of_date)
         if as_of_date is None:
@@ -510,6 +623,7 @@ class RebalanceEngine:
         settings_ctx: dict[str, float],
         latest_trade: dict | None = None,
         as_of_date: str | None = None,
+        avg_monthly_deposit_6m: float | None = None,
     ) -> TradeRecommendation | None:
         """Build a single trade recommendation for a symbol."""
         current_alloc = current.get(symbol, 0)
@@ -612,9 +726,63 @@ class RebalanceEngine:
             return None
 
         if delta < 0 or forced_sell_qty > 0:
-            rounded_qty = min(rounded_qty, current_qty)
-            if rounded_qty < lot_size:
+            # Calculate months to self-correct for sell recommendations
+            if avg_monthly_deposit_6m is None:
+                avg_monthly_deposit_6m = await self._deposit_history.get_rolling_6m_avg_deposit(as_of_date)
+
+            excess_above_target_eur = max(0, -delta * total_value)
+            months_to_self_correct = await self._calculate_months_to_self_correct(excess_above_target_eur, as_of_date)
+
+            # Profit amount drives the profits-first sell cap.
+            profit_amount = (price - avg_cost) * current_qty
+
+            # Don't proactively trim an overweight position if monthly deposits will dilute it
+            # back to target within ~3 months (unless it's an extreme contrarian opportunity).
+            # This is a "don't churn" gate, not a deferral — deposits do the work.
+            if months_to_self_correct <= 3 and opp_score >= -0.25:
                 return None
+
+            # For rotation trades (selling A to buy B), check opportunity and conviction
+            if not forced_sell_qty > 0:
+                rotation_threshold = settings_ctx["strategy_rotation_threshold"]
+                has_rotation_candidate = False
+
+                for other_symbol, other_delta in ideal.items():
+                    if other_symbol == symbol:
+                        continue
+                    if other_delta > 0:  # Potential buy candidate
+                        other_signal = signal_data.get(other_symbol, {})
+                        opportunity_A = opp_score  # dip_score of A (how cheap is it?)
+                        opportunity_B = float(other_signal.get("opp_score", 0.0) or 0.0)  # dip_score of B
+                        conviction_A = float(signal.get("user_multiplier", 0.5) or 0.5)  # Clara score of A
+                        conviction_B = float(other_signal.get("user_multiplier", 0.5) or 0.5)  # Clara score of B
+
+                        # Skip sell if B's conviction is too low relative to A
+                        if conviction_B < conviction_A * rotation_threshold:
+                            continue
+
+                        # Recommend rotation if B is a better opportunity AND has higher conviction
+                        if opportunity_B > opportunity_A and conviction_B > conviction_A:
+                            has_rotation_candidate = True
+                            break
+
+                # If no suitable rotation candidate found, skip this sell for funding_rotation
+                # For cash deficits, we still need to sell to cover the deficit
+                if not has_rotation_candidate and opp_score >= -0.25:
+                    return None
+
+                # Use min(profit_amount, excess_above_target_eur) as max sell amount
+                max_sell_eur = min(max(0, profit_amount), excess_above_target_eur)
+                if currency != "EUR":
+                    max_sell_local = max_sell_eur / fx_rate if fx_rate > 0 else max_sell_eur
+                else:
+                    max_sell_local = max_sell_eur
+                max_sell_qty = (int(max_sell_local / price) // lot_size) * lot_size
+
+                # Ensure we don't sell more than available quantity
+                rounded_qty = min(rounded_qty, current_qty, max_sell_qty)
+                if rounded_qty < lot_size:
+                    return None
 
         if delta > 0 and forced_sell_qty <= 0:
             # For new core names without strategic preference pressure, require
@@ -673,21 +841,23 @@ class RebalanceEngine:
             floor_pct = settings_ctx["strategy_core_floor_pct"]
             if sleeve == "core":
                 current_value = current_alloc * total_value
-                max_sell_value_eur = max(0.0, current_value - (floor_pct * total_value))
-                core_floor_active = current_value <= (floor_pct * total_value)
-                if max_sell_value_eur <= 0:
-                    return None
-                if currency != "EUR":
-                    max_sell_local = max_sell_value_eur / fx_rate if fx_rate > 0 else max_sell_value_eur
-                else:
-                    max_sell_local = max_sell_value_eur
-                max_sell_qty = (int(max_sell_local / price) // lot_size) * lot_size
-                # Keep at least one lot for held core positions.
-                if current_qty >= lot_size:
-                    max_sell_qty = min(max_sell_qty, max(0, current_qty - lot_size))
-                rounded_qty = min(rounded_qty, max_sell_qty)
-                if rounded_qty < lot_size:
-                    return None
+                # Only apply floor protection if position is ABOVE the floor
+                if current_alloc > floor_pct:
+                    max_sell_value_eur = max(0.0, current_value - (floor_pct * total_value))
+                    core_floor_active = True
+                    if max_sell_value_eur <= 0:
+                        return None
+                    if currency != "EUR":
+                        max_sell_local = max_sell_value_eur / fx_rate if fx_rate > 0 else max_sell_value_eur
+                    else:
+                        max_sell_local = max_sell_value_eur
+                    max_sell_qty = (int(max_sell_local / price) // lot_size) * lot_size
+                    # Keep at least one lot for held core positions.
+                    if current_qty >= lot_size:
+                        max_sell_qty = min(max_sell_qty, max(0, current_qty - lot_size))
+                    rounded_qty = min(rounded_qty, max_sell_qty)
+                    if rounded_qty < lot_size:
+                        return None
 
         # Recalculate EUR value
         local_value = rounded_qty * price
@@ -792,6 +962,8 @@ class RebalanceEngine:
             clara_target_pct=float(signal.get("clara_target_pct", 0.0) or 0.0),
             baseline_target_pct=float(signal.get("baseline_target_pct", 0.0) or 0.0),
             opportunity_target_pct=float(signal.get("opportunity_target_pct", 0.0) or 0.0),
+            profit_amount_eur=profit_amount if action == "sell" else None,
+            profits_first=action == "sell" and profit_amount > 0,
         )
 
     async def _check_cooloff_violation(
