@@ -79,12 +79,15 @@ class TestNewRebalancePhilosophy:
         # excess = 1700 EUR, deposits = 500/mo → months_to_self_correct = 3.4 > 3
         rec = await engine._build_recommendation(
             symbol="ASML.EU",
-            ideal={"ASML.EU": 0.03},
+            ideal={"ASML.EU": 0.03, "BUYME": 0.10},
             current={"ASML.EU": 0.20},
             total_value=10000.0,
             security_data=security_data,
-            contrarian_scores={"ASML.EU": -0.30},
-            signal_data={"ASML.EU": {"scaleout_stage": 0, "sleeve": "core", "opp_score": -0.30}},
+            contrarian_scores={"ASML.EU": 0.0},
+            signal_data={
+                "ASML.EU": {"scaleout_stage": 0, "sleeve": "core", "opp_score": 0.0, "user_multiplier": 0.5},
+                "BUYME": {"sleeve": "core", "opp_score": 0.6, "user_multiplier": 0.9},
+            },
             min_trade_value=100.0,
             settings_ctx={
                 "strategy_core_floor_pct": 0.05,
@@ -143,12 +146,15 @@ class TestNewRebalancePhilosophy:
         # excess = 1800 EUR, deposits = 500/mo → months_to_self_correct = 3.6 > 3
         rec = await engine._build_recommendation(
             symbol="TSM.US",
-            ideal={"TSM.US": 0.10},
+            ideal={"TSM.US": 0.10, "BUYME": 0.10},
             current={"TSM.US": 0.28},
             total_value=10000.0,
             security_data=security_data,
-            contrarian_scores={"TSM.US": -0.30},
-            signal_data={"TSM.US": {"scaleout_stage": 0, "sleeve": "core", "opp_score": -0.30}},
+            contrarian_scores={"TSM.US": 0.0},
+            signal_data={
+                "TSM.US": {"scaleout_stage": 0, "sleeve": "core", "opp_score": 0.0, "user_multiplier": 0.5},
+                "BUYME": {"sleeve": "core", "opp_score": 0.6, "user_multiplier": 0.9},
+            },
             min_trade_value=100.0,
             settings_ctx={
                 "strategy_core_floor_pct": 0.05,

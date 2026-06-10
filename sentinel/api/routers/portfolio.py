@@ -216,11 +216,30 @@ async def get_portfolio_pnl_history(
     if not result_snapshots:
         return {"snapshots": [], "summary": None}
 
+    # Overlay the benchmark's trailing-1Y return on the same axis as the
+    # portfolio's rolling TWR — the honest "would a plain all-world ETF have
+    # done better?" comparison. Degrades to nulls if the benchmark has no data.
+    from sentinel.portfolio_composition import benchmark_rolling_returns
+
+    benchmark_symbol = await deps.settings.get("performance_benchmark_symbol", "VWCE.EU")
+    # The benchmark is an investable ETF held in the `prices` table (e.g. VWCE.EU).
+    benchmark_rows = await deps.db.get_prices(benchmark_symbol, days=days + 365 + 10)
+    benchmark_returns = benchmark_rolling_returns(
+        benchmark_rows or [],
+        [s["date"] for s in result_snapshots],
+        window_days=window,
+    )
+    for s in result_snapshots:
+        s["benchmark_ann_return"] = benchmark_returns.get(s["date"])
+
     first = result_snapshots[0]
     last = first
+    last_benchmark = None
     for s in result_snapshots:
         if s["total_value_eur"] is not None:
             last = s
+        if s.get("benchmark_ann_return") is not None:
+            last_benchmark = s["benchmark_ann_return"]
 
     summary = {
         "start_value": first["total_value_eur"],
@@ -230,6 +249,9 @@ async def get_portfolio_pnl_history(
         "pnl_absolute": last["pnl_eur"],
         "pnl_percent": last["pnl_pct"],
         "target_ann_return": 11.0,
+        "benchmark_symbol": benchmark_symbol,
+        "benchmark_ann_return": last_benchmark,
+        "actual_ann_return": last.get("actual_ann_return"),
     }
 
     return {"snapshots": result_snapshots, "summary": summary}

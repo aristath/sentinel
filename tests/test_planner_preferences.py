@@ -4,9 +4,31 @@ from sentinel.planner.preferences import (
     DEFAULT_DECAY_FADE_FACTOR,
     decayed_user_multiplier,
     has_strategic_buy_pressure,
+    is_explicit_downgrade,
     normalize_user_multiplier,
     preference_tilt,
 )
+
+# --- is_explicit_downgrade -----------------------------------------------
+
+
+def test_explicit_downgrade_requires_timestamp():
+    """A <= 0.5 value with no timestamp (never rated) is NOT a downgrade."""
+    assert is_explicit_downgrade({"user_multiplier": 0.5, "user_multiplier_updated_at": None}) is False
+    assert is_explicit_downgrade({"user_multiplier": 0.2}) is False
+
+
+def test_explicit_downgrade_true_when_rated_at_or_below_neutral():
+    assert is_explicit_downgrade({"user_multiplier": 0.5, "user_multiplier_updated_at": "2026-06-01T00:00:00Z"}) is True
+    assert is_explicit_downgrade({"user_multiplier": 0.1, "user_multiplier_updated_at": "2026-06-01T00:00:00Z"}) is True
+
+
+def test_explicit_downgrade_false_above_neutral():
+    """An endorsed name (> 0.5) is never a funding-first downgrade."""
+    assert (
+        is_explicit_downgrade({"user_multiplier": 0.8, "user_multiplier_updated_at": "2026-06-01T00:00:00Z"}) is False
+    )
+
 
 # --- decayed_user_multiplier ---------------------------------------------
 

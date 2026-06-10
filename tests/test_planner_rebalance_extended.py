@@ -610,9 +610,11 @@ class TestBuildRecommendationPaths:
     @pytest.mark.asyncio
     async def test_sell_reason_code_rebalance_sell(self, _make_engine, _settings_ctx):
         engine = _make_engine()
+        # A core overweight only sells when a higher-conviction rotation
+        # candidate exists — provide one (BUYME) so the drift-sell proceeds.
         rec = await engine._build_recommendation(
             symbol="CORE_SELL",
-            ideal={"CORE_SELL": 0.03},
+            ideal={"CORE_SELL": 0.03, "BUYME": 0.10},
             current={"CORE_SELL": 0.20},
             total_value=10000.0,
             security_data={
@@ -633,7 +635,10 @@ class TestBuildRecommendationPaths:
                 }
             },
             contrarian_scores={},
-            signal_data={"CORE_SELL": {"sleeve": "core", "opp_score": -0.30}},
+            signal_data={
+                "CORE_SELL": {"sleeve": "core", "opp_score": 0.0, "user_multiplier": 0.5},
+                "BUYME": {"sleeve": "core", "opp_score": 0.6, "user_multiplier": 0.9},
+            },
             min_trade_value=100.0,
             settings_ctx={
                 **_settings_ctx,

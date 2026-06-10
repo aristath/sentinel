@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 from sentinel.strategy import compute_contrarian_signal
 
 from .models import TradeRecommendation
-from .preferences import normalize_user_multiplier
+from .preferences import is_explicit_downgrade, normalize_user_multiplier
 from .rebalance_rules import calculate_transaction_cost
 
 if TYPE_CHECKING:
@@ -533,12 +533,17 @@ async def generate_deficit_sells(
                 "current_allocation": curr_alloc,
                 "overweight": overweight,
                 "conviction": conviction,
+                # Deliberately rated <= 0.5 → "done with this name": preferred
+                # funding source, sold first and never shielded by the cap below.
+                "is_downgrade": is_explicit_downgrade(sec),
             }
         )
 
     if max_sell_conviction is not None:
         cap = max(0.0, min(1.0, float(max_sell_conviction)))
-        limited = [p for p in position_data if float(p["conviction"]) <= cap]
+        # Explicitly-downgraded names stay eligible even if their (stale) conviction
+        # sits above the cap — a name we've decided to exit is always fundable.
+        limited = [p for p in position_data if float(p["conviction"]) <= cap or p["is_downgrade"]]
         # If nothing is eligible under cap, do not force higher-conviction sells for low-conviction buys.
         if reason_kind == "funding_rotation" and not limited:
             return sells
@@ -548,6 +553,8 @@ async def generate_deficit_sells(
     if reason_kind == "funding_rotation":
         position_data.sort(
             key=lambda x: (
+                # Downgraded names are the piggy bank: drain them first.
+                0 if x["is_downgrade"] else 1,
                 -x["overweight"],
                 (x["conviction"] * x["conviction"]) * conviction_bias,
                 x["score"],

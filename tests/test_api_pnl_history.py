@@ -44,6 +44,7 @@ class TestPnlHistoryResponseFormat:
         deps = MagicMock()
         deps.db = temp_db
         deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
 
         result = await get_portfolio_pnl_history(deps)
 
@@ -81,6 +82,7 @@ class TestPnlHistoryResponseFormat:
         deps = MagicMock()
         deps.db = temp_db
         deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
 
         result = await get_portfolio_pnl_history(deps)
 
@@ -97,6 +99,7 @@ class TestPnlHistoryResponseFormat:
             "pnl_eur",
             "pnl_pct",
             "actual_ann_return",
+            "benchmark_ann_return",
         }
         assert expected_keys == set(snap.keys())
 
@@ -107,6 +110,7 @@ class TestPnlHistoryResponseFormat:
         assert "pnl_absolute" in summary
         assert "target_ann_return" in summary
         assert summary["target_ann_return"] == 11.0
+        assert summary["benchmark_symbol"] == "VWCE.EU"
 
 
 class TestPnlHistoryComputations:
@@ -137,6 +141,7 @@ class TestPnlHistoryComputations:
         deps = MagicMock()
         deps.db = temp_db
         deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
 
         result = await get_portfolio_pnl_history(deps)
 
@@ -174,6 +179,7 @@ class TestPnlHistoryComputations:
         deps = MagicMock()
         deps.db = temp_db
         deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
 
         result = await get_portfolio_pnl_history(deps)
 
@@ -181,6 +187,65 @@ class TestPnlHistoryComputations:
         for snap in result["snapshots"]:
             if snap["net_deposits_eur"] is not None:
                 assert snap["net_deposits_eur"] == 5000.0
+
+    @pytest.mark.asyncio
+    async def test_benchmark_series_populated_when_prices_exist(self, temp_db):
+        """When the benchmark symbol has price history, each point carries a
+        benchmark_ann_return and the summary names the benchmark."""
+        from sentinel.api.routers.portfolio import get_portfolio_pnl_history
+
+        base_date = datetime.now(tz=timezone.utc).date() - timedelta(days=750)
+        for i in range(750):
+            d = base_date + timedelta(days=i)
+            ts = _midnight_utc(d.isoformat())
+            await temp_db.upsert_portfolio_snapshot(
+                ts, {"positions": {"A": {"quantity": 10, "value_eur": 1000.0}}, "cash_eur": 0.0}
+            )
+
+        # Benchmark rising 100 → 1.20x over the two years.
+        bench = [{"date": (base_date + timedelta(days=i)).isoformat(), "close": 100.0 + (i * 0.05)} for i in range(750)]
+        await temp_db.save_prices("VWCE.EU", bench)
+
+        currency = MagicMock()
+        currency.to_eur_for_date = AsyncMock(side_effect=lambda a, c, d: a)
+
+        deps = MagicMock()
+        deps.db = temp_db
+        deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
+
+        result = await get_portfolio_pnl_history(deps)
+
+        assert result["summary"]["benchmark_symbol"] == "VWCE.EU"
+        assert result["summary"]["benchmark_ann_return"] is not None
+        # At least one output point has a computed trailing-1Y benchmark return.
+        assert any(s["benchmark_ann_return"] is not None for s in result["snapshots"])
+
+    @pytest.mark.asyncio
+    async def test_missing_benchmark_data_degrades_to_null(self, temp_db):
+        """No benchmark prices → benchmark_ann_return is null everywhere, no crash."""
+        from sentinel.api.routers.portfolio import get_portfolio_pnl_history
+
+        base_date = datetime.now(tz=timezone.utc).date() - timedelta(days=750)
+        for i in range(750):
+            d = base_date + timedelta(days=i)
+            ts = _midnight_utc(d.isoformat())
+            await temp_db.upsert_portfolio_snapshot(
+                ts, {"positions": {"A": {"quantity": 10, "value_eur": 1000.0}}, "cash_eur": 0.0}
+            )
+
+        currency = MagicMock()
+        currency.to_eur_for_date = AsyncMock(side_effect=lambda a, c, d: a)
+
+        deps = MagicMock()
+        deps.db = temp_db
+        deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
+
+        result = await get_portfolio_pnl_history(deps)
+
+        assert result["summary"]["benchmark_ann_return"] is None
+        assert all(s["benchmark_ann_return"] is None for s in result["snapshots"])
 
     @pytest.mark.asyncio
     async def test_stale_snapshots_do_not_trigger_backfill_on_read(self, temp_db):
@@ -198,6 +263,7 @@ class TestPnlHistoryComputations:
         deps = MagicMock()
         deps.db = temp_db
         deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
 
         result = await get_portfolio_pnl_history(deps)
         assert "snapshots" in result

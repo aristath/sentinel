@@ -20,6 +20,7 @@ from sentinel.portfolio_composition import (
     asset_class_for,
     basket_daily_returns,
     basket_symbols,
+    benchmark_rolling_returns,
     beta,
     build_composition,
     build_daily_pnl,
@@ -679,3 +680,25 @@ async def test_build_composition_home_market_aggregate():
     by_group = {g["group"]: g for g in payload["home_markets"]}
     assert by_group["US"]["alpha_1y"] > 0
     assert by_group["CN"]["alpha_1y"] < 0
+
+
+class TestBenchmarkRollingReturns:
+    """Pure trailing-window benchmark return helper for the chart overlay."""
+
+    def test_empty_rows_all_none(self):
+        out = benchmark_rolling_returns([], ["2026-01-01", "2026-06-01"])
+        assert out == {"2026-01-01": None, "2026-06-01": None}
+
+    def test_trailing_return_uses_close_on_or_before(self):
+        # 100 at start of window, 120 a year later → +20% trailing return.
+        rows = [
+            {"date": "2025-06-10", "close": 100.0},
+            {"date": "2026-06-10", "close": 120.0},
+        ]
+        out = benchmark_rolling_returns(rows, ["2026-06-10"], window_days=365)
+        assert out["2026-06-10"] == pytest.approx(20.0)
+
+    def test_insufficient_history_is_none(self):
+        rows = [{"date": "2026-06-10", "close": 120.0}]
+        out = benchmark_rolling_returns(rows, ["2026-06-10"], window_days=365)
+        assert out["2026-06-10"] is None

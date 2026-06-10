@@ -25,7 +25,7 @@ from sentinel.strategy import (
 
 from .deposit_history import DepositHistoryHelper
 from .models import TradeRecommendation
-from .preferences import has_strategic_buy_pressure
+from .preferences import has_strategic_buy_pressure, is_explicit_downgrade
 from .rebalance_cash import apply_cash_constraint, generate_deficit_sells, get_deficit_sells
 from .rebalance_rules import (
     calculate_priority,
@@ -425,6 +425,7 @@ class RebalanceEngine:
                 "ticket_pct": lot_profile["ticket_pct"],
                 "min_ticket_eur": lot_profile["min_ticket_eur"],
                 "state": strategy_states.get(symbol) or {},
+                "is_downgrade": is_explicit_downgrade(sec) if sec else False,
             }
 
         # Calculate average monthly deposit for self-correction logic
@@ -646,6 +647,7 @@ class RebalanceEngine:
         allow_sell = sec_data.get("allow_sell", 1)
         lot_class = sec_data.get("lot_class", "standard")
         ticket_pct = float(sec_data.get("ticket_pct", 0.0) or 0.0)
+        is_downgrade = bool(sec_data.get("is_downgrade", False))
         signal = signal_data.get(symbol, {})
         sleeve = str(signal.get("sleeve", "core"))
         state = sec_data.get("state", {}) or {}
@@ -686,12 +688,43 @@ class RebalanceEngine:
         if abs(delta) < 0.0001 and forced_sell_qty <= 0:  # No significant change needed
             return None
 
+        # Pre-compute opportunity-sleeve tranche intent. The contrarian sleeve is
+        # designed to ladder entries deeper into a drawdown (T1 → T2 → T3); a buy
+        # that *raises* the tranche stage is the strategy deepening into a crash,
+        # not churn, so it is exempted from the same-side cool-off below. The
+        # opposite-side cool-off (buying right after a sell) still applies, and the
+        # values are reused by the authoritative tranche gate further down.
+        current_stage = int(state.get("tranche_stage", 0) or 0)
+        desired_stage = 0
+        recent_stage = 0
+        is_tranche_raising_buy = False
+        if sleeve == "opportunity" and delta > 0 and forced_sell_qty <= 0:
+            desired_stage = desired_tranche_stage(
+                float(signal.get("dd252", 0.0) or 0.0),
+                entry_t1_dd,
+                entry_t2_dd,
+                entry_t3_dd,
+            )
+            recent_stage = desired_tranche_stage(
+                float(signal.get("dd252_recent_min", signal.get("dd252", 0.0)) or 0.0),
+                entry_t1_dd,
+                entry_t2_dd,
+                entry_t3_dd,
+            )
+            # Event memory: allow entry after rebound if a qualifying dip happened recently.
+            if desired_stage <= 0 and int(signal.get("cycle_turn", 0) or 0) == 1 and recent_stage > 0:
+                desired_stage = max(1, recent_stage - 1)
+            is_tranche_raising_buy = desired_stage > current_stage
+
         # Check cool-off period
         if sleeve == "opportunity":
             cooloff_days = int(settings_ctx["strategy_opportunity_cooloff_days"])
         else:
             cooloff_days = int(settings_ctx["strategy_core_cooloff_days"])
         same_side_cooloff_days = int(settings_ctx["strategy_same_side_cooloff_days"])
+        if is_tranche_raising_buy:
+            # Laddering a deeper tranche right after a shallower one is intended.
+            same_side_cooloff_days = 0
         action_for_cooloff = "sell" if forced_sell_qty > 0 else ("buy" if delta > 0 else "sell")
         is_blocked, _ = await self._check_cooloff_violation(
             symbol,
@@ -733,13 +766,19 @@ class RebalanceEngine:
             excess_above_target_eur = max(0, -delta * total_value)
             months_to_self_correct = await self._calculate_months_to_self_correct(excess_above_target_eur, as_of_date)
 
-            # Profit amount drives the profits-first sell cap.
-            profit_amount = (price - avg_cost) * current_qty
+            # Profit amount (EUR) drives the profits-first sell cap. The position's
+            # unrealized gain is in the security's local currency; convert to EUR so
+            # the min() below compares like with like (excess_above_target_eur is EUR).
+            profit_amount_local = (price - avg_cost) * current_qty
+            if currency != "EUR":
+                profit_amount_eur = profit_amount_local * fx_rate if fx_rate > 0 else profit_amount_local
+            else:
+                profit_amount_eur = profit_amount_local
 
             # Don't proactively trim an overweight position if monthly deposits will dilute it
-            # back to target within ~3 months (unless it's an extreme contrarian opportunity).
-            # This is a "don't churn" gate, not a deferral — deposits do the work.
-            if months_to_self_correct <= 3 and opp_score >= -0.25:
+            # back to target within ~3 months. This is a "don't churn" gate, not a
+            # deferral — deposits do the work.
+            if months_to_self_correct <= 3:
                 return None
 
             # For rotation trades (selling A to buy B), check opportunity and conviction
@@ -766,13 +805,14 @@ class RebalanceEngine:
                             has_rotation_candidate = True
                             break
 
-                # If no suitable rotation candidate found, skip this sell for funding_rotation
-                # For cash deficits, we still need to sell to cover the deficit
-                if not has_rotation_candidate and opp_score >= -0.25:
+                # If no suitable rotation candidate found, skip this drift-driven sell.
+                # (Real cash deficits are covered separately via the deficit-sell path.)
+                if not has_rotation_candidate:
                     return None
 
-                # Use min(profit_amount, excess_above_target_eur) as max sell amount
-                max_sell_eur = min(max(0, profit_amount), excess_above_target_eur)
+                # Cap the sell at the position's unrealized profit (in EUR), so a
+                # routine drift-rebalance never realizes a loss on a name we still hold.
+                max_sell_eur = min(max(0, profit_amount_eur), excess_above_target_eur)
                 if currency != "EUR":
                     max_sell_local = max_sell_eur / fx_rate if fx_rate > 0 else max_sell_eur
                 else:
@@ -800,25 +840,9 @@ class RebalanceEngine:
                     if dip_score < core_new_min_dip and cycle_turn == 0:
                         return None
 
-            # Tranche entry control for opportunity sleeve.
-            desired_stage = 0
+            # Tranche entry control for opportunity sleeve. desired_stage /
+            # current_stage were computed up front (for the cool-off exemption).
             if sleeve == "opportunity":
-                desired_stage = desired_tranche_stage(
-                    float(signal.get("dd252", 0.0) or 0.0),
-                    entry_t1_dd,
-                    entry_t2_dd,
-                    entry_t3_dd,
-                )
-                recent_stage = desired_tranche_stage(
-                    float(signal.get("dd252_recent_min", signal.get("dd252", 0.0)) or 0.0),
-                    entry_t1_dd,
-                    entry_t2_dd,
-                    entry_t3_dd,
-                )
-                # Event memory: allow entry after rebound if a qualifying dip happened recently.
-                if desired_stage <= 0 and int(signal.get("cycle_turn", 0) or 0) == 1 and recent_stage > 0:
-                    desired_stage = max(1, recent_stage - 1)
-                current_stage = int(state.get("tranche_stage", 0) or 0)
                 if desired_stage <= 0:
                     return None
                 if desired_stage <= current_stage and current_qty > 0:
@@ -837,9 +861,11 @@ class RebalanceEngine:
 
         core_floor_active = False
         if delta < 0 or forced_sell_qty > 0:
-            # Protect core holdings from over-trimming.
+            # Protect core holdings from over-trimming — but NOT names we've
+            # deliberately written off (slider <= 0.5). For those the target is
+            # zero and a full exit is the whole point, so the floor is bypassed.
             floor_pct = settings_ctx["strategy_core_floor_pct"]
-            if sleeve == "core":
+            if sleeve == "core" and not is_downgrade:
                 current_value = current_alloc * total_value
                 # Only apply floor protection if position is ABOVE the floor
                 if current_alloc > floor_pct:
@@ -962,8 +988,8 @@ class RebalanceEngine:
             clara_target_pct=float(signal.get("clara_target_pct", 0.0) or 0.0),
             baseline_target_pct=float(signal.get("baseline_target_pct", 0.0) or 0.0),
             opportunity_target_pct=float(signal.get("opportunity_target_pct", 0.0) or 0.0),
-            profit_amount_eur=profit_amount if action == "sell" else None,
-            profits_first=action == "sell" and profit_amount > 0,
+            profit_amount_eur=profit_amount_eur if action == "sell" else None,
+            profits_first=action == "sell" and profit_amount_eur > 0,
         )
 
     async def _check_cooloff_violation(

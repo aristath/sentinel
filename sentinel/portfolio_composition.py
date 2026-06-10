@@ -16,10 +16,11 @@ All pure functions where possible so the math is testable in isolation.
 
 from __future__ import annotations
 
+import bisect
 import math
 from dataclasses import dataclass
 from datetime import date as date_type
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # ISO-3166-1 alpha-2 country code -> continent. Full coverage so a new
 # ticker in any country degrades gracefully instead of falling into
@@ -619,6 +620,50 @@ def sharpe_ratio(returns: list[float], risk_free_rate: float) -> float:
         return 0.0
     daily_rf = risk_free_rate / TRADING_DAYS_PER_YEAR
     return (mean - daily_rf) / std * math.sqrt(TRADING_DAYS_PER_YEAR)
+
+
+def benchmark_rolling_returns(
+    benchmark_rows: list[dict],
+    target_dates: list[str],
+    window_days: int = 365,
+) -> dict[str, float | None]:
+    """Trailing-`window_days` price return (%) of a benchmark at each target date.
+
+    Mirrors the portfolio's rolling-1Y TWR line so the two can be plotted on the
+    same axis. For each target date `d` the return is
+    `(close(d) / close(d - window_days) - 1) * 100`, using the most recent
+    benchmark close on or before each point (the benchmark trades on different
+    days than our snapshots). Returns `None` for a date when there isn't enough
+    history on or before `d - window_days`.
+
+    Args:
+        benchmark_rows: ``[{"date": "YYYY-MM-DD", "close": float}, ...]`` (any order).
+        target_dates: dates to evaluate the trailing return at.
+        window_days: lookback window (default 365, matching `actual_ann_return`).
+    """
+    points = sorted(
+        ((r["date"], float(r["close"])) for r in benchmark_rows if r.get("close") is not None),
+        key=lambda x: x[0],
+    )
+    if not points:
+        return {d: None for d in target_dates}
+    dates = [p[0] for p in points]
+    closes = [p[1] for p in points]
+
+    def close_on_or_before(target: str) -> float | None:
+        idx = bisect.bisect_right(dates, target) - 1
+        return closes[idx] if idx >= 0 else None
+
+    out: dict[str, float | None] = {}
+    for d in target_dates:
+        now_close = close_on_or_before(d)
+        then_target = (datetime.strptime(d, "%Y-%m-%d") - timedelta(days=window_days)).strftime("%Y-%m-%d")
+        then_close = close_on_or_before(then_target)
+        if not now_close or not then_close or then_close <= 0:
+            out[d] = None
+        else:
+            out[d] = round((now_close / then_close - 1.0) * 100.0, 2)
+    return out
 
 
 def beta(portfolio_returns: list[float], benchmark_returns: list[float]) -> float:

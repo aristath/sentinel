@@ -25,8 +25,11 @@ function smoothSeries(values, windowSize) {
 export function PortfolioPnLChart({ snapshots = [], summary = null, height = 300 }) {
   const [containerRef, width] = useResponsiveWidth(300);
   const [showActual, setShowActual] = useState(true);
+  const [showBenchmark, setShowBenchmark] = useState(true);
   const [showTarget, setShowTarget] = useState(false);
   const [smoothWindow, setSmoothWindow] = useState('1D');
+
+  const benchmarkLabel = summary?.benchmark_symbol || 'VWCE.EU';
 
   const formatPct = (value) => {
     if (value == null) return '';
@@ -42,6 +45,14 @@ export function PortfolioPnLChart({ snapshots = [], summary = null, height = 300
       >
         <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: catppuccin.green, display: 'inline-block' }} />
         Actual
+      </span>
+
+      <span
+        onClick={() => setShowBenchmark((prev) => !prev)}
+        style={{ display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer', opacity: showBenchmark ? 1 : 0.35, userSelect: 'none' }}
+      >
+        <span style={{ width: '6px', height: '6px', borderRadius: '50%', backgroundColor: catppuccin.blue, display: 'inline-block' }} />
+        {benchmarkLabel}
       </span>
 
       <span
@@ -85,7 +96,13 @@ export function PortfolioPnLChart({ snapshots = [], summary = null, height = 300
   const actualSeriesRaw = snapshots.map((s) => (s.actual_ann_return != null ? Number(s.actual_ann_return) : null));
   const actualSeries = smoothSeries(actualSeriesRaw, SMOOTH_WINDOWS[smoothWindow]);
 
-  const values = actualSeries.filter((v) => v != null);
+  const benchmarkSeriesRaw = snapshots.map((s) => (s.benchmark_ann_return != null ? Number(s.benchmark_ann_return) : null));
+  const benchmarkSeries = smoothSeries(benchmarkSeriesRaw, SMOOTH_WINDOWS[smoothWindow]);
+
+  const values = [
+    ...actualSeries.filter((v) => v != null),
+    ...(showBenchmark ? benchmarkSeries.filter((v) => v != null) : []),
+  ];
   const minVal = values.length ? Math.min(...values, 0) : -10;
   const maxVal = values.length ? Math.max(...values, 10) : 10;
   const range = Math.max(1, maxVal - minVal);
@@ -103,10 +120,18 @@ export function PortfolioPnLChart({ snapshots = [], summary = null, height = 300
   }
   const actualPath = showActual ? buildSmoothPath(actualPoints) : null;
 
+  const benchmarkPoints = [];
+  for (let i = 0; i < snapshots.length; i += 1) {
+    const value = benchmarkSeries[i];
+    if (value != null) benchmarkPoints.push({ x: scaleX(i), y: scaleY(value) });
+  }
+  const benchmarkPath = showBenchmark ? buildSmoothPath(benchmarkPoints) : null;
+
   const target = summary?.target_ann_return;
   const targetY = target != null ? scaleY(Number(target)) : null;
 
   const last = [...actualSeries].reverse().find((v) => v != null);
+  const lastBenchmark = [...benchmarkSeries].reverse().find((v) => v != null);
 
   return (
     <div ref={containerRef} style={{ width: '100%', height }}>
@@ -121,9 +146,17 @@ export function PortfolioPnLChart({ snapshots = [], summary = null, height = 300
           <line x1={padding.left} y1={targetY} x2={width - padding.right} y2={targetY} stroke={catppuccin.overlay0} strokeWidth="1.5" strokeDasharray="4,3" opacity="0.8" />
         )}
 
+        {benchmarkPath && <path d={benchmarkPath} fill="none" stroke={catppuccin.blue} strokeWidth="2" opacity="0.85" />}
+
         {actualPath && <path d={actualPath} fill="none" stroke={catppuccin.green} strokeWidth="2" opacity="0.95" />}
 
-        {last != null && (
+        {showBenchmark && lastBenchmark != null && (
+          <text x={width - padding.right + 4} y={scaleY(lastBenchmark)} fontSize="10" fill={catppuccin.blue} dominantBaseline="middle">
+            {formatPct(lastBenchmark)}
+          </text>
+        )}
+
+        {showActual && last != null && (
           <text x={width - padding.right + 4} y={scaleY(last)} fontSize="10" fill={catppuccin.green} dominantBaseline="middle">
             {formatPct(last)}
           </text>

@@ -123,6 +123,29 @@ def has_strategic_buy_pressure(effective_multiplier: object) -> bool:
     return normalize_user_multiplier(effective_multiplier) >= STRATEGIC_BUY_PRESSURE_THRESHOLD
 
 
+def is_explicit_downgrade(security: dict[str, Any]) -> bool:
+    """Return whether a security was *deliberately* rated at or below neutral.
+
+    "Done with this name" — used to make a position a preferred funding source
+    (first to be sold, loss or not, when cash is needed elsewhere). It is true
+    only when BOTH hold:
+
+    - `user_multiplier <= 0.5` (at or below neutral), and
+    - `user_multiplier_updated_at` is present (the slider was actually touched).
+
+    Never-rated securities sit at the 0.5 default with a NULL timestamp, so they
+    are NOT downgrades — a name nobody has assessed must not be sold at a loss
+    just because it defaults to neutral. The weekly decay job only ever fades
+    values *toward* 0.5 (never across it) and skips already-neutral rows, so a
+    `<= 0.5` value carrying a timestamp always traces back to a deliberate rating.
+    """
+    if parse_utc_datetime(security.get("user_multiplier_updated_at")) is None:
+        return False
+    return (
+        normalize_user_multiplier(security.get("user_multiplier", NEUTRAL_USER_MULTIPLIER)) <= NEUTRAL_USER_MULTIPLIER
+    )
+
+
 def normalize_weights(weights: dict[str, float]) -> dict[str, float]:
     """Normalize positive weights to sum to one."""
     positive: dict[str, float] = {}

@@ -27,13 +27,16 @@ DEFAULTS = {
     # Position limits (for planner)
     "max_position_pct": 25,  # Hard cap per security
     "min_position_pct": 2,  # Min 2% position size
-    "min_trade_value": 100.0,  # Minimum trade value (EUR)
+    "min_trade_value": 400.0,  # Minimum trade value (EUR)
     # Cash management
     "min_cash_buffer": 0.005,  # Keep 0.5% cash minimum
     "target_cash_pct": 0,  # Fully invested strategy
     "simulated_cash_eur": None,  # Override cash in research mode (None = use real)
     # Rebalancing
     "rebalance_threshold_pct": 5,  # Rebalance when 5% off target
+    # Performance chart benchmark: trailing-1Y return overlaid on the portfolio's
+    # rolling TWR line. VWCE.EU (FTSE All-World ETF) = the "plain index" yardstick.
+    "performance_benchmark_symbol": "VWCE.EU",
     # Dividend reinvestment
     "max_dividend_reinvestment_boost": 0.15,  # Max score boost for uninvested dividends
     # API

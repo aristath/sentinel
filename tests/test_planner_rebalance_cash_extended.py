@@ -448,3 +448,90 @@ class TestGenerateDeficitSellsTotalValue:
             preloaded_symbol_prices={"A": 100.0},
         )
         assert len(sells) > 0
+
+
+class TestDowngradedFundingPriority:
+    """Explicitly-downgraded names are the preferred funding source (Fix 3)."""
+
+    def _engine(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(side_effect=lambda key, default=None: default)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        return engine
+
+    @pytest.mark.asyncio
+    async def test_downgraded_name_sold_before_more_overweight_winner(self):
+        """A downgraded loser funds buys before a more-overweight high-conviction name."""
+        engine = self._engine()
+        positions = [
+            {"symbol": "WIN", "quantity": 30, "current_price": 100.0},
+            {"symbol": "DOWN", "quantity": 5, "current_price": 100.0},
+        ]
+        secmap = {
+            # WIN: far more overweight, but endorsed → touched last.
+            "WIN": {
+                "symbol": "WIN",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_sell": 1,
+                "user_multiplier": 0.9,
+                "user_multiplier_updated_at": "2026-06-01T00:00:00Z",
+            },
+            # DOWN: deliberately downgraded → drained first despite less overweight.
+            "DOWN": {
+                "symbol": "DOWN",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_sell": 1,
+                "user_multiplier": 0.2,
+                "user_multiplier_updated_at": "2026-06-01T00:00:00Z",
+            },
+        }
+        sells = await engine._generate_deficit_sells(
+            deficit_eur=200.0,
+            ideal={"WIN": 0.05},  # DOWN absent → target 0
+            current={"WIN": 0.30, "DOWN": 0.05},
+            total_value=10000.0,
+            reason_kind="funding_rotation",
+            preloaded_positions=positions,
+            preloaded_securities_map=secmap,
+            preloaded_symbol_scores={"WIN": 0.5, "DOWN": 0.5},
+            preloaded_symbol_prices={"WIN": 100.0, "DOWN": 100.0},
+        )
+        assert sells
+        assert sells[0].symbol == "DOWN"
+
+    @pytest.mark.asyncio
+    async def test_downgraded_name_exempt_from_conviction_cap(self):
+        """A downgraded name funds buys even when its conviction exceeds the cap."""
+        engine = self._engine()
+        positions = [{"symbol": "DOWN", "quantity": 5, "current_price": 100.0}]
+        secmap = {
+            "DOWN": {
+                "symbol": "DOWN",
+                "currency": "EUR",
+                "min_lot": 1,
+                "allow_sell": 1,
+                "user_multiplier": 0.2,
+                "user_multiplier_updated_at": "2026-06-01T00:00:00Z",
+            }
+        }
+        # Cap below DOWN's 0.2 conviction — without the downgrade exemption it
+        # would be filtered out and no sell produced.
+        sells = await engine._generate_deficit_sells(
+            deficit_eur=200.0,
+            ideal={},
+            current={"DOWN": 0.05},
+            total_value=10000.0,
+            reason_kind="funding_rotation",
+            max_sell_conviction=0.1,
+            preloaded_positions=positions,
+            preloaded_securities_map=secmap,
+            preloaded_symbol_scores={"DOWN": 0.5},
+            preloaded_symbol_prices={"DOWN": 100.0},
+        )
+        assert sells
+        assert sells[0].symbol == "DOWN"
