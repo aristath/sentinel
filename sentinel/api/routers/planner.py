@@ -9,7 +9,9 @@ from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.planner import Planner
+from sentinel.planner.deposit_history import DepositHistoryHelper
 from sentinel.portfolio import Portfolio
+from sentinel.settings import DEFAULTS
 from sentinel.utils.fees import FeeCalculator
 
 router = APIRouter(prefix="/planner", tags=["planner"])
@@ -46,29 +48,19 @@ async def get_recommendations(
 
     # Cash after plan: start + sells - sell_fees - buys - buy_fees
     cash_after_plan = current_cash + total_sell_value - sell_fees - total_buy_value - buy_fees
-
-    # Deferred trades: buys the planner wants but can't fund this cycle without a bad
-    # sell — parked to wait for deposits to accumulate enough cash. Reconciled by
-    # get_recommendations above, so the bucket is fresh here.
-    pending_getter = getattr(deps.db, "get_pending_trades", None)
-    deferred: list[dict] = []
-    if callable(pending_getter):
-        maybe_rows = pending_getter()
-        if inspect.isawaitable(maybe_rows):
-            deferred = [
-                {
-                    "symbol": row["symbol"],
-                    "action": row["action"],
-                    "target_amount_eur": row["target_amount_eur"],
-                    "reason": row["reason"],
-                    # "reserved" = the allocator is actively holding cash for this exact buy;
-                    # otherwise it's a plain deferral. Carried in the reason prefix set by the planner.
-                    "reserved": str(row["reason"] or "").startswith("reserved:"),
-                    "created_at": row["created_at"],
-                    "last_evaluated": row["last_evaluated"],
-                }
-                for row in await maybe_rows
-            ]
+    current_total_value = await portfolio.total_value()
+    projection_months_raw = await deps.settings.get(
+        "strategy_projection_months", default=DEFAULTS["strategy_projection_months"]
+    )
+    projection_months = float(projection_months_raw if projection_months_raw is not None else 0.0)
+    avg_monthly_net_deposit_6m = await DepositHistoryHelper(
+        db=deps.db,
+        currency=deps.currency,
+    ).get_rolling_6m_avg_net_deposit()
+    projected_contribution_eur = avg_monthly_net_deposit_6m * max(0.0, projection_months)
+    projected_total_value_eur = current_total_value + projected_contribution_eur
+    if projected_total_value_eur <= 0:
+        projected_total_value_eur = current_total_value
 
     return {
         "recommendations": [
@@ -98,13 +90,18 @@ async def get_recommendations(
             }
             for r in recommendations
         ],
-        "deferred": deferred,
+        "deferred": [],
         "summary": {
             "current_cash": current_cash,
             "total_sell_value": total_sell_value,
             "total_buy_value": total_buy_value,
             "total_fees": total_fees,
             "cash_after_plan": cash_after_plan,
+            "current_total_value_eur": current_total_value,
+            "avg_monthly_net_deposit_6m": avg_monthly_net_deposit_6m,
+            "projection_months": projection_months,
+            "projected_contribution_eur": projected_contribution_eur,
+            "projected_total_value_eur": projected_total_value_eur,
         },
     }
 

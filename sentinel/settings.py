@@ -74,6 +74,12 @@ DEFAULTS = {
     "strategy_reserve_max_months": 3,
     "strategy_reserve_great_opp_score": 0.75,
     "strategy_reserve_great_conviction_pct": 0.20,
+    # Target EUR amounts are planned against current portfolio value plus the
+    # trailing 6-month net monthly contribution projected this many months.
+    "strategy_projection_months": 12,
+    # Contrarian timing influence on trade priority, as +/- percent around the
+    # projected EUR gap. 25 means score 0.0 -> 75%, 0.5 -> 100%, 1.0 -> 125%.
+    "strategy_priority_contrarian_weight_pct": 25.0,
     "strategy_core_new_min_score": 0.30,
     "strategy_core_new_min_dip_score": 0.20,
     "strategy_max_funding_sells_per_cycle": 2,

@@ -12,7 +12,7 @@ class TradeRecommendation:
     action: str  # 'buy' or 'sell'
     current_allocation: float  # Current % of portfolio
     target_allocation: float  # Target % of portfolio
-    allocation_delta: float  # Target - Current (positive = underweight)
+    allocation_delta: float  # EUR gap as share of current portfolio (positive = buy)
     current_value_eur: float
     target_value_eur: float
     value_delta_eur: float  # Amount to buy (+) or sell (-)

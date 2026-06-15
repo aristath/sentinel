@@ -466,6 +466,11 @@ function UnifiedPage() {
                         After plan: <span style={{ color: planSummary.cash_after_plan >= 0 ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-red-6)' }}>{formatEur(planSummary.cash_after_plan)}</span>
                       </Text>
                     )}
+                    {planSummary && (
+                      <Text size="sm" c="dimmed" fw={500} className="unified__status-plan-assumption">
+                        Projection: {formatEur(planSummary.avg_monthly_net_deposit_6m || 0)}/mo for {Math.round(planSummary.projection_months || 0)} mo, base {formatEur(planSummary.projected_total_value_eur || 0)}
+                      </Text>
+                    )}
                   </Group>
                 ) : (
                   <Text size="sm" c="dimmed" fs="italic" className="unified__status-no-plan">No pending actions</Text>

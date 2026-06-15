@@ -155,7 +155,7 @@ class TestApplyCashConstraintEdgeCases:
         assert result[0].memory_entry is True
 
     @pytest.mark.asyncio
-    async def test_multiple_buys_scaled_proportionally(self):
+    async def test_multiple_buys_use_priority_waterfall(self):
         engine = RebalanceEngine(db=MagicMock())
         engine._settings = MagicMock()
         engine._settings.get = AsyncMock(
@@ -164,7 +164,7 @@ class TestApplyCashConstraintEdgeCases:
             )
         )
         engine._portfolio = MagicMock()
-        engine._portfolio.total_cash_eur = AsyncMock(return_value=1000.0)
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=1500.0)
         engine._currency = MagicMock()
         engine._currency.get_rate = AsyncMock(return_value=1.0)
         engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
@@ -177,9 +177,9 @@ class TestApplyCashConstraintEdgeCases:
             target_allocation=0.1,
             allocation_delta=0.1,
             current_value_eur=0.0,
-            target_value_eur=500.0,
-            value_delta_eur=500.0,
-            quantity=5,
+            target_value_eur=1000.0,
+            value_delta_eur=1000.0,
+            quantity=10,
             price=100.0,
             currency="EUR",
             lot_size=1,
@@ -194,9 +194,9 @@ class TestApplyCashConstraintEdgeCases:
             target_allocation=0.1,
             allocation_delta=0.1,
             current_value_eur=0.0,
-            target_value_eur=500.0,
-            value_delta_eur=500.0,
-            quantity=5,
+            target_value_eur=1000.0,
+            value_delta_eur=1000.0,
+            quantity=10,
             price=100.0,
             currency="EUR",
             lot_size=1,
@@ -207,10 +207,65 @@ class TestApplyCashConstraintEdgeCases:
         result = await engine._apply_cash_constraint(
             [buy1, buy2], min_trade_value=100.0, symbol_convictions={"B1": 0.8, "B2": 0.7}
         )
-        # Budget 1000 = total cost 1000, no scaling needed
-        assert len(result) == 2
-        total_qty = sum(r.quantity for r in result)
-        assert total_qty == 10
+        by_symbol = {r.symbol: r for r in result}
+        assert by_symbol["B1"].quantity == 10
+        assert by_symbol["B2"].quantity == 5
+
+    @pytest.mark.asyncio
+    async def test_partial_budget_stays_on_top_priority_buy(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(
+            side_effect=lambda key, default=None: {"transaction_fee_fixed": 0.0, "transaction_fee_percent": 0.0}.get(
+                key, 0.0
+            )
+        )
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=700.0)
+        engine._currency = MagicMock()
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._generate_deficit_sells = AsyncMock(return_value=[])
+
+        top = TradeRecommendation(
+            symbol="TOP",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.1,
+            allocation_delta=0.1,
+            current_value_eur=0.0,
+            target_value_eur=1000.0,
+            value_delta_eur=1000.0,
+            quantity=10,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.8,
+            priority=2.0,
+            reason="buy",
+        )
+        second = TradeRecommendation(
+            symbol="SECOND",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.1,
+            allocation_delta=0.1,
+            current_value_eur=0.0,
+            target_value_eur=1000.0,
+            value_delta_eur=1000.0,
+            quantity=10,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.7,
+            priority=1.0,
+            reason="buy",
+        )
+
+        result = await engine._apply_cash_constraint(
+            [top, second], min_trade_value=100.0, symbol_convictions={"TOP": 0.8, "SECOND": 0.7}
+        )
+        assert [(r.symbol, r.quantity) for r in result] == [("TOP", 7)]
 
     @pytest.mark.asyncio
     async def test_buy_minimum_respected(self):
@@ -250,8 +305,8 @@ class TestApplyCashConstraintEdgeCases:
         assert len(result) == 0
 
     @pytest.mark.asyncio
-    async def test_conviction_based_buy_trimming(self):
-        """When budget is tight, lower-conviction buys are trimmed first."""
+    async def test_equal_priority_waterfall_keeps_first_buy_first(self):
+        """When priorities tie, the existing order remains the queue order."""
         engine = RebalanceEngine(db=MagicMock())
         engine._settings = MagicMock()
         engine._settings.get = AsyncMock(
@@ -323,8 +378,7 @@ class TestApplyCashConstraintEdgeCases:
             min_trade_value=100.0,
             symbol_convictions={"HIGH": 0.9, "MED": 0.7, "LOW": 0.5},
         )
-        symbols = {r.symbol for r in result if r.action == "buy"}
-        assert "HIGH" in symbols
+        assert [r.symbol for r in result if r.action == "buy"] == ["HIGH"]
 
     @pytest.mark.asyncio
     async def test_top_up_with_leftover_budget(self):
@@ -448,6 +502,32 @@ class TestGenerateDeficitSellsTotalValue:
             preloaded_symbol_prices={"A": 100.0},
         )
         assert len(sells) > 0
+
+    @pytest.mark.asyncio
+    async def test_funding_rotation_uses_projected_target_value_for_overweight(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(side_effect=lambda key, default=None: default)
+        engine._currency = MagicMock()
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+
+        sells = await engine._generate_deficit_sells(
+            deficit_eur=500.0,
+            ideal={"A": 0.25},
+            current={"A": 10_000.0 / 24_000.0},
+            total_value=24_000.0,
+            planning_total_value=48_000.0,
+            reason_kind="funding_rotation",
+            preloaded_positions=[{"symbol": "A", "quantity": 100, "current_price": 100.0}],
+            preloaded_securities_map={
+                "A": {"symbol": "A", "currency": "EUR", "min_lot": 1, "allow_sell": 1, "user_multiplier": 0.5}
+            },
+            preloaded_symbol_scores={"A": 0.5},
+            preloaded_symbol_prices={"A": 100.0},
+        )
+
+        assert sells == []
 
 
 class TestDowngradedFundingPriority:

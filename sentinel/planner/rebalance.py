@@ -81,13 +81,12 @@ class RebalanceEngine:
         self._settings = settings or Settings()
         self._currency = currency or Currency()
         self._deposit_history = DepositHistoryHelper(db=self._db, currency=self._currency)
-        # Symbol the cash allocator reserved cash for this cycle (set by apply_cash_constraint).
-        self._reserved_target_symbol: str | None = None
 
     async def _calculate_months_to_self_correct(
         self,
         excess_above_target_eur: float,
         as_of_date: str | None = None,
+        avg_monthly_net_deposit_6m: float | None = None,
     ) -> float:
         """
         Calculate how many months of deposits would correct the excess allocation.
@@ -101,74 +100,11 @@ class RebalanceEngine:
             float: Number of months needed to correct the excess via deposits. Returns infinity if no deposits
                    are available or if excess is zero/negative.
         """
-        avg_monthly_deposit_6m = await self._deposit_history.get_rolling_6m_avg_deposit(as_of_date)
-        if avg_monthly_deposit_6m <= 0:
+        if avg_monthly_net_deposit_6m is None:
+            avg_monthly_net_deposit_6m = await self._get_avg_monthly_net_deposit(as_of_date)
+        if avg_monthly_net_deposit_6m <= 0:
             return float("inf")  # No deposits = infinite time to correct
-        return excess_above_target_eur / avg_monthly_deposit_6m
-
-    @staticmethod
-    def _build_deferred_buys(
-        buys_before: dict[str, TradeRecommendation],
-        buys_after: set[str],
-        avg_monthly_deposit_6m: float | None,
-        reserved_symbol: str | None = None,
-    ) -> list[dict]:
-        """Buys we wanted but couldn't fund this cycle — parked to wait for deposits.
-
-        A buy is dropped by the cash constraint when there's no cash and no acceptable
-        funding sell to cover it. Exactly one such buy can be the cash allocator's
-        **reserved** target (`reserved_symbol`) — the one we're actively holding cash for;
-        every other dropped buy is plainly **deferred** (waiting while cash is deployed
-        elsewhere). The reason carries the `reserved:`/`deferred:` prefix and, when deposit
-        history exists, a rough months-of-deposits-to-fund estimate.
-        """
-        deferred: list[dict] = []
-        for symbol, buy in buys_before.items():
-            if symbol in buys_after:
-                continue  # survived the cash constraint (possibly scaled) — not deferred
-            cost_eur = float(buy.value_delta_eur)
-            status = "reserved" if symbol == reserved_symbol else "deferred"
-            if avg_monthly_deposit_6m and avg_monthly_deposit_6m > 0:
-                months = cost_eur / avg_monthly_deposit_6m
-                reason = f"{status}: ~{months:.1f}mo of deposits to fund €{cost_eur:,.0f} buy"
-            else:
-                reason = f"{status}: insufficient cash to fund €{cost_eur:,.0f} buy"
-            deferred.append(
-                {
-                    "symbol": symbol,
-                    "action": "buy",
-                    "target_amount_eur": cost_eur,
-                    "reason": reason,
-                }
-            )
-        return deferred
-
-    async def _reconcile_pending_trades(self, deferred: list[dict]) -> None:
-        """Sync the deferred-trades bucket with this cycle's deferred set.
-
-        Each `(symbol, action)` deferred this cycle is parked, or — if already parked — has
-        its amount/reason refreshed and `last_evaluated` bumped (so the displayed status stays
-        current as deposits accumulate), while `created_at` is preserved to record how long it
-        has been waiting. Entries no longer deferred (executed, or no longer wanted) are removed.
-        """
-        get = getattr(self._db, "get_pending_trades", None)
-        if not callable(get):
-            return
-        maybe_rows = get()
-        if not inspect.isawaitable(maybe_rows):
-            return  # Non-async db (e.g. a test mock) — nothing to reconcile.
-        existing = {row["trade_key"]: row for row in await maybe_rows}
-        new_by_key = {f"{d['symbol']}:{d['action']}": d for d in deferred}
-
-        for key in existing:
-            if key not in new_by_key:
-                await self._db.remove_pending_trade(key)
-
-        for key, d in new_by_key.items():
-            if key in existing:
-                await self._db.update_pending_trade(key, d["target_amount_eur"], d["reason"])
-            else:
-                await self._db.add_pending_trade(key, d["symbol"], d["action"], d["target_amount_eur"], d["reason"])
+        return excess_above_target_eur / avg_monthly_net_deposit_6m
 
     async def _load_runtime_settings(self) -> dict[str, float]:
         defaults: dict[str, float] = {
@@ -195,10 +131,37 @@ class RebalanceEngine:
             "strategy_core_new_min_score": DEFAULTS["strategy_core_new_min_score"],
             "strategy_core_new_min_dip_score": DEFAULTS["strategy_core_new_min_dip_score"],
             "strategy_coarse_max_new_lots_per_cycle": DEFAULTS["strategy_coarse_max_new_lots_per_cycle"],
+            "strategy_projection_months": DEFAULTS["strategy_projection_months"],
+            "strategy_priority_contrarian_weight_pct": DEFAULTS["strategy_priority_contrarian_weight_pct"],
         }
         keys = list(defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, defaults[k]) for k in keys])
         return {k: float(v if v is not None else defaults[k]) for k, v in zip(keys, values, strict=False)}
+
+    async def _get_avg_monthly_net_deposit(self, as_of_date: str | None = None) -> float:
+        getter = getattr(self._deposit_history, "get_rolling_6m_avg_net_deposit", None)
+        value: Any = None
+        if callable(getter):
+            maybe_value = getter(as_of_date)
+            if inspect.isawaitable(maybe_value):
+                value = await maybe_value
+            elif isinstance(maybe_value, int | float):
+                value = maybe_value
+        if value is None:
+            # Older test doubles may only expose the gross deposit helper.
+            value = await self._deposit_history.get_rolling_6m_avg_deposit(as_of_date)
+        return float(value or 0.0)
+
+    @staticmethod
+    def _projected_total_value(
+        total_value: float,
+        avg_monthly_net_deposit_6m: float,
+        projection_months: float,
+    ) -> float:
+        projected = float(total_value) + (float(avg_monthly_net_deposit_6m) * max(0.0, float(projection_months)))
+        if projected <= 0:
+            return float(total_value)
+        return projected
 
     async def get_recommendations(
         self,
@@ -428,8 +391,14 @@ class RebalanceEngine:
                 "is_downgrade": is_explicit_downgrade(sec) if sec else False,
             }
 
-        # Calculate average monthly deposit for self-correction logic
-        avg_monthly_deposit_6m = await self._deposit_history.get_rolling_6m_avg_deposit(as_of_date)
+        # Net contribution rate drives retirement-fund planning: target EUR
+        # values are sized against the portfolio we expect after contributions.
+        avg_monthly_net_deposit_6m = await self._get_avg_monthly_net_deposit(as_of_date)
+        planning_total_value = self._projected_total_value(
+            total_value,
+            avg_monthly_net_deposit_6m,
+            settings_ctx["strategy_projection_months"],
+        )
 
         # Generate recommendations
         recommendations = []
@@ -447,7 +416,8 @@ class RebalanceEngine:
                 settings_ctx=settings_ctx,
                 latest_trade=latest_trades_map.get(symbol),
                 as_of_date=as_of_date,
-                avg_monthly_deposit_6m=avg_monthly_deposit_6m,
+                avg_monthly_deposit_6m=avg_monthly_net_deposit_6m,
+                planning_total_value=planning_total_value,
             )
             if rec:
                 recommendations.append(rec)
@@ -461,6 +431,7 @@ class RebalanceEngine:
             ideal=ideal,
             current=current,
             total_value=total_value,
+            planning_total_value=planning_total_value,
         )
         if deficit_sells:
             deficit_symbols = {s.symbol for s in deficit_sells}
@@ -474,9 +445,6 @@ class RebalanceEngine:
             max_new_opp_buys=int(settings_ctx["strategy_max_new_opportunity_buys_per_cycle"]),
         )
 
-        # Snapshot the buys we *want* before the cash constraint trims/drops any.
-        buys_before = {r.symbol: r for r in recommendations if r.action == "buy"}
-
         # Apply cash constraint (including optional funding sells)
         recommendations = await self._apply_cash_constraint(
             recommendations,
@@ -485,6 +453,7 @@ class RebalanceEngine:
             ideal=ideal,
             current=current,
             total_value=total_value,
+            planning_total_value=planning_total_value,
             symbol_convictions={
                 symbol: self._normalize_conviction(sec.get("user_multiplier", 0.5))
                 for symbol, sec in securities_map.items()
@@ -499,21 +468,6 @@ class RebalanceEngine:
                 symbol: float(sec.get("price", 0.0) or 0.0) for symbol, sec in security_data.items()
             },
         )
-
-        # A buy that we wanted but the cash constraint dropped — couldn't be funded
-        # without a bad sell — is deferred to wait for deposits. Buys rescued by an
-        # acceptable funding sell survive in `recommendations` and are NOT deferred.
-        buys_after = {r.symbol for r in recommendations if r.action == "buy"}
-        deferred = self._build_deferred_buys(
-            buys_before,
-            buys_after,
-            avg_monthly_deposit_6m,
-            reserved_symbol=self._reserved_target_symbol,
-        )
-
-        # Persist the deferred-trades bucket on live runs only (skip during backtests).
-        if as_of_date is None:
-            await self._reconcile_pending_trades(deferred)
 
         # Cache result only when live (not as_of_date)
         if as_of_date is None:
@@ -625,13 +579,20 @@ class RebalanceEngine:
         latest_trade: dict | None = None,
         as_of_date: str | None = None,
         avg_monthly_deposit_6m: float | None = None,
+        planning_total_value: float | None = None,
     ) -> TradeRecommendation | None:
         """Build a single trade recommendation for a symbol."""
         current_alloc = current.get(symbol, 0)
         target_alloc = ideal.get(symbol, 0)
-        delta = target_alloc - current_alloc
-
-        raw_value_delta = delta * total_value
+        planning_value = planning_total_value if planning_total_value and planning_total_value > 0 else total_value
+        current_value_eur = current_alloc * total_value
+        target_value_eur = target_alloc * planning_value
+        raw_value_delta = target_value_eur - current_value_eur
+        # Express the projected EUR gap as a share of today's portfolio for
+        # priority/trade-direction purposes. The raw target percentage remains
+        # the model's ideal allocation; the EUR target is projected.
+        delta = raw_value_delta / total_value if total_value > 0 else target_alloc - current_alloc
+        planning_current_alloc = current_value_eur / planning_value if planning_value > 0 else current_alloc
         sec_data = security_data.get(symbol)
 
         if not sec_data:
@@ -761,10 +722,14 @@ class RebalanceEngine:
         if delta < 0 or forced_sell_qty > 0:
             # Calculate months to self-correct for sell recommendations
             if avg_monthly_deposit_6m is None:
-                avg_monthly_deposit_6m = await self._deposit_history.get_rolling_6m_avg_deposit(as_of_date)
+                avg_monthly_deposit_6m = await self._get_avg_monthly_net_deposit(as_of_date)
 
-            excess_above_target_eur = max(0, -delta * total_value)
-            months_to_self_correct = await self._calculate_months_to_self_correct(excess_above_target_eur, as_of_date)
+            excess_above_target_eur = max(0, -raw_value_delta)
+            months_to_self_correct = await self._calculate_months_to_self_correct(
+                excess_above_target_eur,
+                as_of_date,
+                avg_monthly_net_deposit_6m=avg_monthly_deposit_6m,
+            )
 
             # Profit amount (EUR) drives the profits-first sell cap. The position's
             # unrealized gain is in the security's local currency; convert to EUR so
@@ -866,10 +831,10 @@ class RebalanceEngine:
             # zero and a full exit is the whole point, so the floor is bypassed.
             floor_pct = settings_ctx["strategy_core_floor_pct"]
             if sleeve == "core" and not is_downgrade:
-                current_value = current_alloc * total_value
+                current_value = current_value_eur
                 # Only apply floor protection if position is ABOVE the floor
                 if current_alloc > floor_pct:
-                    max_sell_value_eur = max(0.0, current_value - (floor_pct * total_value))
+                    max_sell_value_eur = max(0.0, current_value - (floor_pct * planning_value))
                     core_floor_active = True
                     if max_sell_value_eur <= 0:
                         return None
@@ -897,7 +862,6 @@ class RebalanceEngine:
 
         # Enforce hard per-symbol cap for buys.
         if delta > 0 and forced_sell_qty <= 0:
-            current_value_eur = current_alloc * total_value
             max_target_value_eur = max_position_pct * total_value
             max_buy_eur = max(0.0, max_target_value_eur - current_value_eur)
             if max_buy_eur <= 0:
@@ -940,7 +904,7 @@ class RebalanceEngine:
             reason = generate_buy_reason(
                 symbol=symbol,
                 contrarian_score=contrarian_score,
-                current_alloc=current_alloc,
+                current_alloc=planning_current_alloc,
                 target_alloc=target_alloc,
                 signal=signal,
                 lot_class=lot_class,
@@ -951,15 +915,19 @@ class RebalanceEngine:
             reason = generate_sell_reason(
                 symbol=symbol,
                 contrarian_score=contrarian_score,
-                current_alloc=current_alloc,
+                current_alloc=planning_current_alloc,
                 target_alloc=target_alloc,
                 signal=signal,
             )
 
         priority = calculate_priority(
             action=action,
-            allocation_delta=delta,
+            value_delta_eur=raw_value_delta,
             contrarian_score=contrarian_score,
+            contrarian_weight_pct=settings_ctx.get(
+                "strategy_priority_contrarian_weight_pct",
+                DEFAULTS["strategy_priority_contrarian_weight_pct"],
+            ),
         )
 
         return TradeRecommendation(
@@ -968,8 +936,8 @@ class RebalanceEngine:
             current_allocation=current_alloc,
             target_allocation=target_alloc,
             allocation_delta=delta,
-            current_value_eur=current_alloc * total_value,
-            target_value_eur=target_alloc * total_value,
+            current_value_eur=current_value_eur,
+            target_value_eur=target_value_eur,
             value_delta_eur=actual_value_eur if delta > 0 else -actual_value_eur,
             quantity=rounded_qty,
             price=price,
@@ -1065,6 +1033,7 @@ class RebalanceEngine:
         ideal: dict[str, float] | None = None,
         current: dict[str, float] | None = None,
         total_value: float | None = None,
+        planning_total_value: float | None = None,
         symbol_convictions: dict[str, float] | None = None,
         preloaded_positions: list[dict] | None = None,
         preloaded_securities_map: dict[str, dict] | None = None,
@@ -1080,6 +1049,7 @@ class RebalanceEngine:
             ideal=ideal,
             current=current,
             total_value=total_value,
+            planning_total_value=planning_total_value,
             symbol_convictions=symbol_convictions,
             preloaded_positions=preloaded_positions,
             preloaded_securities_map=preloaded_securities_map,
@@ -1093,6 +1063,7 @@ class RebalanceEngine:
         ideal: dict[str, float] | None = None,
         current: dict[str, float] | None = None,
         total_value: float | None = None,
+        planning_total_value: float | None = None,
     ) -> list[TradeRecommendation]:
         """Generate sell recommendations if negative balances can't be covered."""
         return await get_deficit_sells(
@@ -1101,6 +1072,7 @@ class RebalanceEngine:
             ideal=ideal,
             current=current,
             total_value=total_value,
+            planning_total_value=planning_total_value,
         )
 
     async def _generate_deficit_sells(
@@ -1110,6 +1082,7 @@ class RebalanceEngine:
         ideal: dict[str, float] | None = None,
         current: dict[str, float] | None = None,
         total_value: float | None = None,
+        planning_total_value: float | None = None,
         reason_kind: str = "cash_deficit",
         max_sell_conviction: float | None = None,
         preloaded_positions: list[dict] | None = None,
@@ -1125,6 +1098,7 @@ class RebalanceEngine:
             ideal=ideal,
             current=current,
             total_value=total_value,
+            planning_total_value=planning_total_value,
             reason_kind=reason_kind,
             max_sell_conviction=max_sell_conviction,
             preloaded_positions=preloaded_positions,

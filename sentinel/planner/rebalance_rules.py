@@ -81,12 +81,26 @@ def get_forced_opportunity_exit(
     return None
 
 
-def calculate_priority(action: str, allocation_delta: float, contrarian_score: float) -> float:
-    """Calculate relative recommendation priority score."""
-    base = abs(allocation_delta) * 10
+def calculate_priority(
+    action: str,
+    value_delta_eur: float,
+    contrarian_score: float,
+    contrarian_weight_pct: float = 25.0,
+) -> float:
+    """Calculate relative priority from projected EUR gap and timing.
+
+    The contrarian score acts as a bounded multiplier around the EUR gap. With
+    the default 25% weight, a neutral 0.5 timing score leaves priority unchanged,
+    0.0 reduces a buy priority to 75%, and 1.0 raises it to 125%.
+    """
+    base = abs(float(value_delta_eur))
+    score = max(0.0, min(1.0, float(contrarian_score)))
+    weight = max(0.0, min(1.0, float(contrarian_weight_pct) / 100.0))
     if action == "buy":
-        return base + contrarian_score
-    return base - contrarian_score
+        multiplier = 1.0 - weight + (2.0 * weight * score)
+    else:
+        multiplier = 1.0 + weight - (2.0 * weight * score)
+    return base * multiplier
 
 
 def generate_buy_reason(

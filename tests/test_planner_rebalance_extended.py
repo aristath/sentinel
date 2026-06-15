@@ -330,6 +330,9 @@ class TestBuildRecommendationPaths:
             "strategy_opportunity_cooloff_days": 15,
             "strategy_same_side_cooloff_days": 10,
             "strategy_core_floor_pct": 0.05,
+            "strategy_core_new_min_score": 0.30,
+            "strategy_core_new_min_dip_score": 0.20,
+            "strategy_coarse_max_new_lots_per_cycle": 1,
         }
 
     @pytest.mark.asyncio
@@ -606,6 +609,49 @@ class TestBuildRecommendationPaths:
         assert rec is not None
         assert rec.action == "buy"
         assert rec.reason_code == "rebalance_buy"
+
+    @pytest.mark.asyncio
+    async def test_buy_target_value_uses_projected_planning_total(self, _make_engine, _settings_ctx):
+        engine = _make_engine()
+
+        rec = await engine._build_recommendation(
+            symbol="BYD.285.AS",
+            ideal={"BYD.285.AS": 0.034},
+            current={"BYD.285.AS": 0.0},
+            total_value=24_000.0,
+            planning_total_value=48_000.0,
+            security_data={
+                "BYD.285.AS": {
+                    "price": 100.0,
+                    "currency": "EUR",
+                    "fx_rate": 1.0,
+                    "lot_size": 1,
+                    "current_qty": 0,
+                    "avg_cost": 0.0,
+                    "allow_buy": 1,
+                    "allow_sell": 1,
+                    "trade_blocked": False,
+                    "lot_class": "standard",
+                    "ticket_pct": 0.0,
+                    "min_ticket_eur": 0,
+                    "state": {},
+                }
+            },
+            contrarian_scores={},
+            signal_data={
+                "BYD.285.AS": {
+                    "sleeve": "core",
+                    "clara_target_pct": 0.034,
+                    "user_multiplier": 0.9,
+                }
+            },
+            min_trade_value=100.0,
+            settings_ctx=_settings_ctx,
+        )
+
+        assert rec is not None
+        assert rec.target_value_eur == pytest.approx(48_000.0 * 0.034)
+        assert rec.value_delta_eur == pytest.approx(1600.0)
 
     @pytest.mark.asyncio
     async def test_sell_reason_code_rebalance_sell(self, _make_engine, _settings_ctx):

@@ -27,6 +27,7 @@ STRATEGY_KEYS = {
     "strategy_opportunity_addon_threshold",
     "strategy_max_opportunity_buys_per_cycle",
     "strategy_max_new_opportunity_buys_per_cycle",
+    "strategy_priority_contrarian_weight_pct",
 }
 PLANNER_SETTING_KEYS = {
     *STRATEGY_KEYS,
@@ -52,6 +53,7 @@ PLANNER_SETTING_KEYS = {
     "strategy_max_funding_sells_per_cycle",
     "strategy_max_funding_turnover_pct",
     "strategy_funding_conviction_bias",
+    "strategy_projection_months",
 }
 
 # Global LED controller reference (set by app lifespan)
@@ -222,6 +224,11 @@ async def set_settings_batch(
         or parsed_values["strategy_opportunity_addon_threshold"] > 1
     ):
         raise HTTPException(status_code=400, detail="'strategy_opportunity_addon_threshold' must be in [0, 1]")
+    if (
+        parsed_values["strategy_priority_contrarian_weight_pct"] < 0
+        or parsed_values["strategy_priority_contrarian_weight_pct"] > 100
+    ):
+        raise HTTPException(status_code=400, detail="'strategy_priority_contrarian_weight_pct' must be in [0, 100]")
     for key in ("strategy_max_opportunity_buys_per_cycle", "strategy_max_new_opportunity_buys_per_cycle"):
         if parsed_values[key] < 0 or parsed_values[key] > 50:
             raise HTTPException(status_code=400, detail=f"'{key}' must be in [0, 50]")

@@ -47,6 +47,50 @@ async def _load_latest_trades(engine: "RebalanceEngine", symbols: list[str]) -> 
     return result if isinstance(result, dict) else {}
 
 
+async def _one_lot_value_eur(
+    engine: "RebalanceEngine",
+    buy: TradeRecommendation,
+    fx_rates: dict[str, float],
+) -> float:
+    one_lot_local = buy.lot_size * buy.price
+    if buy.currency == "EUR":
+        return one_lot_local
+    rate = fx_rates.get(buy.currency, 0.0)
+    if rate > 0:
+        return one_lot_local * rate
+    return await engine._currency.to_eur(one_lot_local, buy.currency)
+
+
+async def _value_to_quantity(
+    engine: "RebalanceEngine",
+    buy: TradeRecommendation,
+    value_eur: float,
+    fx_rates: dict[str, float],
+) -> tuple[int, float]:
+    if value_eur <= 0 or buy.price <= 0 or buy.lot_size <= 0:
+        return 0, 0.0
+
+    if buy.currency != "EUR":
+        rate = fx_rates.get(buy.currency, 0.0)
+        local_value = value_eur / rate if rate > 0 else value_eur
+    else:
+        local_value = value_eur
+
+    raw_qty = local_value / buy.price
+    qty = (int(raw_qty) // buy.lot_size) * buy.lot_size
+    qty = min(qty, buy.quantity)
+    if qty < buy.lot_size:
+        return 0, 0.0
+
+    actual_local = qty * buy.price
+    if buy.currency != "EUR":
+        rate = fx_rates.get(buy.currency, 0.0)
+        actual_eur = actual_local * rate if rate > 0 else await engine._currency.to_eur(actual_local, buy.currency)
+    else:
+        actual_eur = actual_local
+    return qty, actual_eur
+
+
 async def apply_cash_constraint(
     *,
     engine: "RebalanceEngine",
@@ -56,6 +100,7 @@ async def apply_cash_constraint(
     ideal: dict[str, float] | None = None,
     current: dict[str, float] | None = None,
     total_value: float | None = None,
+    planning_total_value: float | None = None,
     symbol_convictions: dict[str, float] | None = None,
     preloaded_positions: list[dict] | None = None,
     preloaded_securities_map: dict[str, dict] | None = None,
@@ -68,9 +113,6 @@ async def apply_cash_constraint(
 
     sells = [r for r in recommendations if r.action == "sell"]
     buys = [r for r in recommendations if r.action == "buy"]
-
-    # Reset the reserve-target signal each call; set below only if we actually reserve.
-    engine._reserved_target_symbol = None
 
     if not buys:
         return recommendations
@@ -117,35 +159,6 @@ async def apply_cash_constraint(
                 )
                 for s in all_securities
             }
-    if total_buy_costs > available_budget and len(buys) > 1:
-        buy_rank = []
-        for buy in buys:
-            conviction = conviction_by_symbol.get(buy.symbol, 0.5)
-            rank = float(buy.priority) * (0.5 + conviction)
-            buy_rank.append((buy, conviction, rank))
-        sorted_by_rank = sorted(buy_rank, key=lambda x: x[2])
-        ranks = [r for _, _, r in sorted_by_rank]
-        median_rank = ranks[len(ranks) // 2]
-        trimmed_symbols: set[str] = set()
-        running_cost = total_buy_costs
-        for buy, _, rank in sorted_by_rank:
-            if running_cost <= available_budget:
-                break
-            if rank >= median_rank:
-                continue
-            trimmed_symbols.add(buy.symbol)
-            running_cost -= buy.value_delta_eur + calculate_transaction_cost(buy.value_delta_eur, fixed_fee, pct_fee)
-
-        if trimmed_symbols:
-            buys = [b for b in buys if b.symbol not in trimmed_symbols]
-            recommendations = [r for r in recommendations if not (r.action == "buy" and r.symbol in trimmed_symbols)]
-            total_buy_costs = sum(
-                r.value_delta_eur + calculate_transaction_cost(r.value_delta_eur, fixed_fee, pct_fee) for r in buys
-            )
-
-    if not buys:
-        return sells
-
     if total_buy_costs <= available_budget:
         return sells + buys
 
@@ -159,6 +172,7 @@ async def apply_cash_constraint(
             ideal=ideal,
             current=current,
             total_value=total_value,
+            planning_total_value=planning_total_value,
             reason_kind="funding_rotation",
             max_sell_conviction=buy_conviction_cap,
             preloaded_positions=preloaded_positions,
@@ -205,194 +219,29 @@ async def apply_cash_constraint(
                 if total_buy_costs <= available_budget:
                     return recommendations
 
-    # Reserve-for-target: if the single most-wanted buy can't be funded this cycle (even
-    # after acceptable funding sells) but deposits would cover it (+margin) within a few
-    # months, hold cash and wait for it instead of frittering on lesser buys. We still take
-    # any *legitimately great* trade (a deep contrarian entry) — idle cash beats a mediocre
-    # buy, but a great opportunity beats idle cash.
-    reserving = False
-    if buys:
-        top_buy = max(buys, key=lambda b: b.priority)
-        top_cost = top_buy.value_delta_eur + calculate_transaction_cost(top_buy.value_delta_eur, fixed_fee, pct_fee)
-        if top_cost > available_budget:
-            try:
-                avg_monthly_deposit = float(await engine._deposit_history.get_rolling_6m_avg_deposit(as_of_date))
-            except Exception:
-                avg_monthly_deposit = 0.0
-            if avg_monthly_deposit > 0:
-                margin = float(await _setting(engine, "strategy_reserve_margin_pct", 0.30))
-                max_months = float(await _setting(engine, "strategy_reserve_max_months", 3))
-                needed = top_buy.value_delta_eur * (1 + margin)
-                months_to_target = (needed - available_budget) / avg_monthly_deposit
-                if months_to_target <= max_months:
-                    reserving = True
-                    engine._reserved_target_symbol = top_buy.symbol
-                    great_bar = float(await _setting(engine, "strategy_reserve_great_opp_score", 0.75))
-                    great_conv_pct = float(await _setting(engine, "strategy_reserve_great_conviction_pct", 0.20))
-                    # A "legitimately great" trade needs BOTH a deep contrarian score AND
-                    # top-X% Clara conviction across the universe — a hard dip in a name we
-                    # actually believe in, not just any name that fell.
-                    conviction_values = sorted(conviction_by_symbol.values(), reverse=True)
-                    if conviction_values:
-                        cutoff_idx = max(0, math.ceil(len(conviction_values) * great_conv_pct) - 1)
-                        top_conviction_floor = conviction_values[cutoff_idx]
-                    else:
-                        top_conviction_floor = 0.0
-                    great_buys = [
-                        b
-                        for b in buys
-                        if float(b.contrarian_score) >= great_bar
-                        and conviction_by_symbol.get(b.symbol, 0.0) >= top_conviction_floor
-                    ]
-                    if not great_buys:
-                        return sells  # nothing great enough — hold all cash for the target
-                    buys = great_buys  # deploy only into great trades; reserve the rest
-
-    # Scale down buys
-    buys_by_priority = sorted(buys, key=lambda x: -x.priority)
+    # Waterfall allocation: fully fund the highest-priority projected gap before
+    # moving to the next one. Unreached buys are simply the tail of the ranked plan.
+    final_buys: list[TradeRecommendation] = []
     remaining_budget = available_budget
-
-    buy_minimums = []
-    for buy in buys_by_priority:
-        one_lot_local = buy.lot_size * buy.price
-        if buy.currency != "EUR":
-            rate = fx_rates.get(buy.currency, 0.0)
-            if rate > 0:
-                one_lot_eur = one_lot_local * rate
-            else:
-                one_lot_eur = await engine._currency.to_eur(one_lot_local, buy.currency)
-        else:
-            one_lot_eur = one_lot_local
-
-        if one_lot_eur >= min_trade_value:
-            min_qty = buy.lot_size
-            min_eur = one_lot_eur
-        elif one_lot_eur <= 0:
-            continue
-        else:
-            lots_needed = int(min_trade_value / one_lot_eur) + 1
-            min_qty = lots_needed * buy.lot_size
-            min_eur = lots_needed * one_lot_eur
-
-        if min_qty > buy.quantity:
-            min_qty = buy.quantity
-            min_local_value = min_qty * buy.price
-            if buy.currency != "EUR":
-                rate = fx_rates.get(buy.currency, 0.0)
-                min_eur = (
-                    min_local_value * rate if rate > 0 else await engine._currency.to_eur(min_local_value, buy.currency)
-                )
-            else:
-                min_eur = min_local_value
-
-        min_cost_with_tx = min_eur + calculate_transaction_cost(min_eur, fixed_fee, pct_fee)
-        ideal_cost_with_tx = buy.value_delta_eur + calculate_transaction_cost(buy.value_delta_eur, fixed_fee, pct_fee)
-        buy_minimums.append(
-            {
-                "buy": buy,
-                "min_qty": min_qty,
-                "min_eur": min_eur,
-                "min_cost": min_cost_with_tx,
-                "ideal_eur": buy.value_delta_eur,
-                "ideal_cost": ideal_cost_with_tx,
-            }
-        )
-
-    included_buys = []
-    for item in buy_minimums:
-        if item["min_cost"] <= remaining_budget:
-            included_buys.append(item)
-            remaining_budget -= item["min_cost"]
-
-    if not included_buys:
-        return sells
-
-    # Distribute remaining budget proportionally
-    total_extra_needed = sum(max(0, item["ideal_cost"] - item["min_cost"]) for item in included_buys)
-
-    final_buys = []
-    for item in included_buys:
-        buy = item["buy"]
-        min_eur = item["min_eur"]
-        ideal_cost = item["ideal_cost"]
-        allocated_eur = min_eur
-
-        if total_extra_needed > 0 and remaining_budget > 0:
-            extra_needed = max(0, ideal_cost - item["min_cost"])
-            proportion = extra_needed / total_extra_needed
-            extra_budget = proportion * remaining_budget
-            extra_trade_value = extra_budget / (1 + pct_fee)
-            allocated_eur += extra_trade_value
-
-        # Convert back to quantity
-        if buy.currency != "EUR":
-            rate = fx_rates.get(buy.currency, 0.0)
-            local_value = allocated_eur / rate if rate > 0 else allocated_eur
-        else:
-            local_value = allocated_eur
-
-        raw_qty = local_value / buy.price
-        rounded_qty = (int(raw_qty) // buy.lot_size) * buy.lot_size
-
-        if rounded_qty < buy.lot_size:
+    for buy in sorted(buys, key=lambda r: (float(r.priority), float(r.value_delta_eur)), reverse=True):
+        one_lot_eur = await _one_lot_value_eur(engine, buy, fx_rates)
+        if one_lot_eur <= 0:
             continue
 
-        actual_local = rounded_qty * buy.price
-        if buy.currency != "EUR":
-            rate = fx_rates.get(buy.currency, 0.0)
-            actual_eur = actual_local * rate if rate > 0 else await engine._currency.to_eur(actual_local, buy.currency)
-        else:
-            actual_eur = actual_local
-
-        if actual_eur < min_trade_value:
+        cost_for_full_buy = buy.value_delta_eur + calculate_transaction_cost(buy.value_delta_eur, fixed_fee, pct_fee)
+        desired_eur = buy.value_delta_eur if cost_for_full_buy <= remaining_budget else remaining_budget / (1 + pct_fee)
+        qty, actual_eur = await _value_to_quantity(engine, buy, desired_eur, fx_rates)
+        if qty < buy.lot_size or actual_eur < min_trade_value:
             continue
 
-        final_buys.append(replace(buy, value_delta_eur=actual_eur, quantity=rounded_qty))
+        cost = actual_eur + calculate_transaction_cost(actual_eur, fixed_fee, pct_fee)
+        if cost > remaining_budget:
+            continue
+
+        final_buys.append(replace(buy, value_delta_eur=actual_eur, quantity=qty))
+        remaining_budget -= cost
 
     final_buys.sort(key=lambda x: -x.priority)
-
-    # Top-up with leftover budget — but not when reserving: there the leftover is being
-    # deliberately held for the target buy, not poured into the great trades we did take.
-    total_buy_cost = sum(
-        b.value_delta_eur + calculate_transaction_cost(b.value_delta_eur, fixed_fee, pct_fee) for b in final_buys
-    )
-    leftover = 0.0 if reserving else available_budget - total_buy_cost
-
-    iterations = 0
-    while leftover > 0 and iterations < 1000:
-        iterations += 1
-        added_any = False
-        for i, buy in enumerate(final_buys):
-            one_lot_local = buy.lot_size * buy.price
-            if buy.currency != "EUR":
-                rate = fx_rates.get(buy.currency, 0.0)
-                one_lot_eur = (
-                    one_lot_local * rate if rate > 0 else await engine._currency.to_eur(one_lot_local, buy.currency)
-                )
-            else:
-                one_lot_eur = one_lot_local
-            one_lot_cost = one_lot_eur + calculate_transaction_cost(one_lot_eur, fixed_fee, pct_fee)
-
-            if one_lot_cost <= leftover:
-                new_qty = buy.quantity + buy.lot_size
-                new_local_value = new_qty * buy.price
-                if buy.currency != "EUR":
-                    rate = fx_rates.get(buy.currency, 0.0)
-                    new_eur = (
-                        new_local_value * rate
-                        if rate > 0
-                        else await engine._currency.to_eur(new_local_value, buy.currency)
-                    )
-                else:
-                    new_eur = new_local_value
-
-                final_buys[i] = replace(buy, value_delta_eur=new_eur, quantity=new_qty)
-                leftover -= one_lot_cost
-                added_any = True
-
-        if not added_any:
-            break
-
     return sells + final_buys
 
 
@@ -403,6 +252,7 @@ async def get_deficit_sells(
     ideal: dict[str, float] | None = None,
     current: dict[str, float] | None = None,
     total_value: float | None = None,
+    planning_total_value: float | None = None,
 ) -> list[TradeRecommendation]:
     """Generate sell recommendations if negative balances can't be covered."""
     balances = await engine._get_cash_balances_for_context(as_of_date=as_of_date)
@@ -434,6 +284,7 @@ async def get_deficit_sells(
         ideal=ideal,
         current=current,
         total_value=total_value,
+        planning_total_value=planning_total_value,
         reason_kind="cash_deficit",
     )
 
@@ -446,6 +297,7 @@ async def generate_deficit_sells(
     ideal: dict[str, float] | None = None,
     current: dict[str, float] | None = None,
     total_value: float | None = None,
+    planning_total_value: float | None = None,
     reason_kind: str = "cash_deficit",
     max_sell_conviction: float | None = None,
     preloaded_positions: list[dict] | None = None,
@@ -518,7 +370,14 @@ async def generate_deficit_sells(
 
         curr_alloc = float((current or {}).get(symbol, 0.0))
         tgt_alloc = float((ideal or {}).get(symbol, 0.0))
-        overweight = max(0.0, curr_alloc - tgt_alloc)
+        planning_value = (
+            float(planning_total_value)
+            if planning_total_value is not None and planning_total_value > 0
+            else float(total_value or 0.0)
+        )
+        projected_target_value = tgt_alloc * planning_value if planning_value > 0 else 0.0
+        overweight_value = max(0.0, eur_value - projected_target_value)
+        overweight = (overweight_value / planning_value) if planning_value > 0 else max(0.0, curr_alloc - tgt_alloc)
 
         position_data.append(
             {
@@ -532,6 +391,7 @@ async def generate_deficit_sells(
                 "target_allocation": tgt_alloc,
                 "current_allocation": curr_alloc,
                 "overweight": overweight,
+                "overweight_value": overweight_value,
                 "conviction": conviction,
                 # Deliberately rated <= 0.5 → "done with this name": preferred
                 # funding source, sold first and never shielded by the cap below.
@@ -631,11 +491,13 @@ async def generate_deficit_sells(
         eur_value = pos["eur_value"]
         score = pos["score"]
 
-        # Calculate how much we're overweight vs target
+        # Calculate how much we're overweight vs the projected target value.
         current_alloc = eur_value / total_value if total_value > 0 else float(pos["current_allocation"])
         target_alloc = float(pos["target_allocation"])
-        overweight_pct = max(0.0, current_alloc - target_alloc)
-        overweight_value = overweight_pct * total_value
+        overweight_value = float(pos.get("overweight_value", 0.0) or 0.0)
+        if overweight_value <= 0 and planning_total_value is None:
+            overweight_pct = max(0.0, current_alloc - target_alloc)
+            overweight_value = overweight_pct * total_value
 
         # Only skip non-overweight positions for funding_rotation
         # For cash_deficit, we must sell even if not overweight to cover the deficit

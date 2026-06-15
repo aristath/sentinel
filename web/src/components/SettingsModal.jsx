@@ -59,6 +59,7 @@ export function SettingsModal({ opened, onClose }) {
       strategy_entry_memory_days: Number(settings.strategy_entry_memory_days ?? 45),
       strategy_memory_max_boost: Number(settings.strategy_memory_max_boost ?? 0.12),
       strategy_opportunity_addon_threshold: Number(settings.strategy_opportunity_addon_threshold ?? 0.75),
+      strategy_priority_contrarian_weight_pct: Number(settings.strategy_priority_contrarian_weight_pct ?? 25),
       strategy_max_opportunity_buys_per_cycle: Number(settings.strategy_max_opportunity_buys_per_cycle ?? 1),
       strategy_max_new_opportunity_buys_per_cycle: Number(settings.strategy_max_new_opportunity_buys_per_cycle ?? 1),
     });
@@ -296,6 +297,17 @@ export function SettingsModal({ opened, onClose }) {
                 min={0}
                 max={1}
                 decimalScale={3}
+              />
+
+              <NumberInput
+                label="Contrarian Priority Weight"
+                description="How strongly timing adjusts EUR target-gap priority"
+                value={strategyDraft?.strategy_priority_contrarian_weight_pct ?? settings?.strategy_priority_contrarian_weight_pct ?? 25}
+                onChange={(value) => handleStrategyChange('strategy_priority_contrarian_weight_pct', value)}
+                min={0}
+                max={100}
+                decimalScale={1}
+                suffix="%"
               />
 
               <NumberInput

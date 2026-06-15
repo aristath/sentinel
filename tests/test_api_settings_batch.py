@@ -24,6 +24,7 @@ def strategy_values(**overrides):
         "strategy_entry_memory_days": 45,
         "strategy_memory_max_boost": 0.12,
         "strategy_opportunity_addon_threshold": 0.75,
+        "strategy_priority_contrarian_weight_pct": 25.0,
         "strategy_max_opportunity_buys_per_cycle": 1,
         "strategy_max_new_opportunity_buys_per_cycle": 1,
     }
@@ -78,6 +79,8 @@ async def test_set_setting_rejects_removed_strategy_knobs(deps):
         ("strategy_max_funding_sells_per_cycle", 3),
         ("strategy_max_funding_turnover_pct", 0.18),
         ("strategy_funding_conviction_bias", 1.2),
+        ("strategy_projection_months", 18),
+        ("strategy_priority_contrarian_weight_pct", 30.0),
         ("user_multiplier_blend_pct", 75.0),
         ("user_multiplier_decay_factor", 0.85),
     ],

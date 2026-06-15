@@ -63,6 +63,23 @@ async def test_no_deposits_returns_zero():
 
 
 @pytest.mark.asyncio
+async def test_monthly_net_deposit_subtracts_withdrawals():
+    cashflows = [
+        {"type_id": "card", "amount": 3000.0, "currency": "EUR", "date": "2026-01-10"},
+        {"type_id": "card", "amount": 3000.0, "currency": "EUR", "date": "2026-02-10"},
+        {"type_id": "card_payout", "amount": -1000.0, "currency": "EUR", "date": "2026-01-20"},
+        {"type_id": "card_payout", "amount": 1000.0, "currency": "EUR", "date": "2026-02-20"},
+        {"type_id": "dividend", "amount": 999.0, "currency": "EUR", "date": "2026-03-01"},
+    ]
+    helper, db, _ = _make_helper(cashflows)
+
+    avg = await helper.get_rolling_6m_avg_net_deposit(as_of_date="2026-06-09")
+
+    assert avg == pytest.approx((3000.0 + 3000.0 - 1000.0 - 1000.0) / 6.0)
+    db.get_cash_flows.assert_awaited_once_with(start_date="2025-12-11", end_date="2026-06-09")
+
+
+@pytest.mark.asyncio
 async def test_accepts_iso_datetime_as_of_date():
     cashflows = [{"amount": 300.0, "currency": "EUR", "date": "2026-04-01"}]
     helper, db, _ = _make_helper(cashflows)

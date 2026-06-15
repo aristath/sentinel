@@ -14,37 +14,33 @@ from sentinel.planner.rebalance_rules import (
 class TestCalculatePriority:
     """Tests for calculate_priority function."""
 
-    def test_buy_priority_adds_contrarian_score(self):
-        delta = 0.05
-        score = 0.8
-        result = calculate_priority("buy", delta, score)
-        expected = abs(delta) * 10 + score
+    def test_buy_priority_multiplies_eur_gap_by_contrarian_weight(self):
+        result = calculate_priority("buy", value_delta_eur=1000.0, contrarian_score=1.0, contrarian_weight_pct=25.0)
+        expected = 1250.0
         assert result == expected
 
-    def test_sell_priority_subtracts_contrarian_score(self):
-        delta = -0.05
-        score = 0.8
-        result = calculate_priority("sell", delta, score)
-        expected = abs(delta) * 10 - score
+    def test_sell_priority_reduces_for_high_contrarian_score(self):
+        result = calculate_priority("sell", value_delta_eur=-1000.0, contrarian_score=1.0, contrarian_weight_pct=25.0)
+        expected = 750.0
         assert result == expected
 
-    def test_buy_higher_priority_with_higher_score(self):
-        r1 = calculate_priority("buy", 0.05, 0.3)
-        r2 = calculate_priority("buy", 0.05, 0.8)
+    def test_buy_higher_priority_with_higher_score_for_same_eur_gap(self):
+        r1 = calculate_priority("buy", 1000.0, 0.3)
+        r2 = calculate_priority("buy", 1000.0, 0.8)
         assert r2 > r1
 
     def test_sell_lower_priority_with_higher_score(self):
-        r1 = calculate_priority("sell", -0.05, 0.3)
-        r2 = calculate_priority("sell", -0.05, 0.8)
+        r1 = calculate_priority("sell", -1000.0, 0.3)
+        r2 = calculate_priority("sell", -1000.0, 0.8)
         assert r1 > r2  # lower score = higher priority for sells
 
-    def test_zero_delta_zero_priority(self):
-        result = calculate_priority("buy", 0.0, 0.5)
-        assert result == 0.5
+    def test_neutral_score_leaves_eur_gap_unchanged(self):
+        result = calculate_priority("buy", 1000.0, 0.5)
+        assert result == 1000.0
 
-    def test_large_delta_high_priority(self):
-        result = calculate_priority("buy", 0.20, 0.0)
-        assert result == 2.0
+    def test_zero_weight_uses_plain_eur_gap(self):
+        result = calculate_priority("buy", 1000.0, 0.0, contrarian_weight_pct=0.0)
+        assert result == 1000.0
 
 
 class TestCalculateTransactionCost:

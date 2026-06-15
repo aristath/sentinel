@@ -34,6 +34,11 @@ class TestPlannerSettings:
             runtime_config["strategy_max_opportunity_buys_per_cycle"]
             == DEFAULTS["strategy_max_opportunity_buys_per_cycle"]
         )
+        assert runtime_config["strategy_projection_months"] == DEFAULTS["strategy_projection_months"]
+        assert (
+            runtime_config["strategy_priority_contrarian_weight_pct"]
+            == DEFAULTS["strategy_priority_contrarian_weight_pct"]
+        )
 
 
 class TestRebalanceSummary:
