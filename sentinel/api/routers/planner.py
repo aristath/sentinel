@@ -17,6 +17,31 @@ from sentinel.utils.fees import FeeCalculator
 router = APIRouter(prefix="/planner", tags=["planner"])
 
 
+def _serialize_recommendation(r) -> dict:
+    return {
+        "symbol": r.symbol,
+        "action": r.action,
+        "current_allocation_pct": r.current_allocation * 100,
+        "target_allocation_pct": r.target_allocation * 100,
+        "allocation_delta_pct": r.allocation_delta * 100,
+        "current_value_eur": r.current_value_eur,
+        "target_value_eur": r.target_value_eur,
+        "value_delta_eur": r.value_delta_eur,
+        "quantity": r.quantity,
+        "price": r.price,
+        "currency": r.currency,
+        "lot_size": r.lot_size,
+        "contrarian_score": r.contrarian_score,
+        "priority": r.priority,
+        "reason": r.reason,
+        "sleeve": r.sleeve,
+        "user_multiplier": r.user_multiplier,
+        "clara_target_pct": (r.clara_target_pct * 100) if r.clara_target_pct is not None else None,
+        "baseline_target_pct": (r.baseline_target_pct * 100) if r.baseline_target_pct is not None else None,
+        "opportunity_target_pct": (r.opportunity_target_pct * 100 if r.opportunity_target_pct is not None else None),
+    }
+
+
 @router.get("/recommendations")
 async def get_recommendations(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
@@ -63,33 +88,7 @@ async def get_recommendations(
         projected_total_value_eur = current_total_value
 
     return {
-        "recommendations": [
-            {
-                "symbol": r.symbol,
-                "action": r.action,
-                "current_allocation_pct": r.current_allocation * 100,
-                "target_allocation_pct": r.target_allocation * 100,
-                "allocation_delta_pct": r.allocation_delta * 100,
-                "current_value_eur": r.current_value_eur,
-                "target_value_eur": r.target_value_eur,
-                "value_delta_eur": r.value_delta_eur,
-                "quantity": r.quantity,
-                "price": r.price,
-                "currency": r.currency,
-                "lot_size": r.lot_size,
-                "contrarian_score": r.contrarian_score,
-                "priority": r.priority,
-                "reason": r.reason,
-                "sleeve": r.sleeve,
-                "user_multiplier": r.user_multiplier,
-                "clara_target_pct": (r.clara_target_pct * 100) if r.clara_target_pct is not None else None,
-                "baseline_target_pct": (r.baseline_target_pct * 100) if r.baseline_target_pct is not None else None,
-                "opportunity_target_pct": (
-                    r.opportunity_target_pct * 100 if r.opportunity_target_pct is not None else None
-                ),
-            }
-            for r in recommendations
-        ],
+        "recommendations": [_serialize_recommendation(r) for r in recommendations],
         "deferred": [],
         "summary": {
             "current_cash": current_cash,
@@ -103,6 +102,35 @@ async def get_recommendations(
             "projected_contribution_eur": projected_contribution_eur,
             "projected_total_value_eur": projected_total_value_eur,
         },
+    }
+
+
+@router.get("/forecast")
+async def get_forecast(
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+    months: Optional[int] = None,
+    min_value: Optional[float] = None,
+) -> dict:
+    """Forecast monthly trade plans assuming stable net monthly contributions."""
+    planner = Planner()
+    if min_value is None:
+        min_value = await deps.settings.get("min_trade_value", default=100.0)
+    min_trade_value = float(min_value if min_value is not None else 100.0)
+    if months is None:
+        configured_months = await deps.settings.get(
+            "planner_forecast_months", default=DEFAULTS["planner_forecast_months"]
+        )
+        months = int(configured_months if configured_months is not None else DEFAULTS["planner_forecast_months"])
+    forecast_months = max(1, min(24, int(months)))
+    forecast = await planner.forecast_monthly_plans(months=forecast_months, min_trade_value=min_trade_value)
+    return {
+        "months": [
+            {
+                **{key: value for key, value in month.items() if key != "recommendations"},
+                "recommendations": [_serialize_recommendation(r) for r in month["recommendations"]],
+            }
+            for month in forecast
+        ]
     }
 
 

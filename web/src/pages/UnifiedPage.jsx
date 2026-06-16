@@ -43,6 +43,7 @@ import {
   deleteSecurity,
   getPortfolio,
   getRecommendations,
+  getPlannerForecast,
   getCashFlows,
   getPortfolioPnLHistory,
   getSettings,
@@ -139,6 +140,14 @@ function UnifiedPage() {
   });
   const isResearchMode = settings?.trading_mode === 'research';
   const simulatedCash = settings?.simulated_cash_eur;
+  const plannerForecastMonthCount = Number(settings?.planner_forecast_months ?? 6);
+  const { data: forecastData } = useQuery({
+    queryKey: ['planner-forecast', plannerForecastMonthCount],
+    queryFn: () => getPlannerForecast(plannerForecastMonthCount),
+    enabled: Number.isFinite(plannerForecastMonthCount),
+    refetchInterval: 60000,
+  });
+  const forecastMonths = forecastData?.months || [];
   const [editingCash, setEditingCash] = useState(false);
   const [cashValue, setCashValue] = useState('');
 
@@ -148,6 +157,7 @@ function UnifiedPage() {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       queryClient.invalidateQueries({ queryKey: ['portfolio'] });
       queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+      queryClient.invalidateQueries({ queryKey: ['planner-forecast'] });
       setEditingCash(false);
     },
   });
@@ -476,6 +486,35 @@ function UnifiedPage() {
                   <Text size="sm" c="dimmed" fs="italic" className="unified__status-no-plan">No pending actions</Text>
                 )}
               </Group>
+
+              {forecastMonths.length > 0 && (
+                <Group gap="xs" wrap="wrap" className="unified__status-row unified__status-row--forecast">
+                  <Group gap="xs" className="unified__status-section unified__status-section--forecast">
+                    <IconTrendingUp size={18} style={{ opacity: 0.6 }} className="unified__status-icon" />
+                    <Text size="sm" c="dimmed" className="unified__status-label">
+                      {plannerForecastMonthCount} mo:
+                    </Text>
+                  </Group>
+                  <Group gap={6} wrap="wrap" className="unified__status-forecast-steps">
+                    {forecastMonths.map((month) => (
+                      <Tooltip
+                        key={month.month}
+                        multiline
+                        w={320}
+                        withArrow
+                        label={`Start ${formatEur(month.starting_cash_eur)} · after plan ${formatEur(month.ending_cash_eur)} · next deposit ${formatEur(month.next_deposit_eur || 0)}`}
+                      >
+                        <Badge size="md" color="blue" variant="light" className="unified__status-forecast-badge">
+                          M{month.month}:{' '}
+                          {month.recommendations && month.recommendations.length > 0
+                            ? month.recommendations.map((rec) => `${rec.action.toUpperCase()} ${rec.symbol}`).join(', ')
+                            : 'HOLD'}
+                        </Badge>
+                      </Tooltip>
+                    ))}
+                  </Group>
+                </Group>
+              )}
 
               {/* Deferred row: buys we want but can't fund yet without a bad sell — waiting on deposits */}
               {deferred && deferred.length > 0 && (

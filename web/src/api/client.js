@@ -64,6 +64,11 @@ export const getRecommendations = (minValue) => {
   return request(url);
 };
 
+export const getPlannerForecast = (months) => {
+  const url = months !== undefined ? `/planner/forecast?months=${months}` : '/planner/forecast';
+  return request(url);
+};
+
 // Jobs/Scheduler
 export const getSchedulerStatus = () => request('/jobs');
 

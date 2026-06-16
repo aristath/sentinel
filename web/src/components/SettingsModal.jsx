@@ -311,6 +311,16 @@ export function SettingsModal({ opened, onClose }) {
               />
 
               <NumberInput
+                label="Forecast Months"
+                description="Number of future monthly plans to show"
+                value={settings?.planner_forecast_months ?? 6}
+                onChange={(value) => handleChange('planner_forecast_months', value)}
+                min={1}
+                max={24}
+                suffix=" months"
+              />
+
+              <NumberInput
                 label="Max Opportunity Buys / Cycle"
                 description="Hard cap on total opportunity buys per rebalance cycle"
                 value={strategyDraft?.strategy_max_opportunity_buys_per_cycle ?? settings?.strategy_max_opportunity_buys_per_cycle ?? 1}

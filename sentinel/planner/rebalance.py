@@ -24,7 +24,7 @@ from sentinel.strategy import (
 )
 
 from .deposit_history import DepositHistoryHelper
-from .models import TradeRecommendation
+from .models import PlannerState, TradeRecommendation
 from .preferences import has_strategic_buy_pressure, is_explicit_downgrade
 from .rebalance_cash import apply_cash_constraint, generate_deficit_sells, get_deficit_sells
 from .rebalance_rules import (
@@ -172,6 +172,7 @@ class RebalanceEngine:
         as_of_date: str | None = None,
         precomputed_rebalance_signals: dict[str, dict[str, float | int | str]] | None = None,
         precomputed_sleeves: dict[str, str] | None = None,
+        state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate trade recommendations to move toward ideal portfolio.
 
@@ -191,8 +192,8 @@ class RebalanceEngine:
             setting_value = await self._settings.get("min_trade_value", default=100.0)
             min_trade_value = float(setting_value) if setting_value is not None else 100.0
 
-        # Skip cache when as_of_date is set (e.g. backtest)
-        if as_of_date is None:
+        # Skip cache when as_of_date is set (e.g. backtest) or explicit state is supplied.
+        if as_of_date is None and state is None:
             cache_key = self._recommendation_cache_key(min_trade_value)
             cache_getter = getattr(self._db, "cache_get", None)
             if callable(cache_getter):
@@ -222,7 +223,11 @@ class RebalanceEngine:
         all_securities = await self._db.get_all_securities(active_only=False)
         securities_map = {s["symbol"]: s for s in all_securities}
 
-        all_positions = await self._get_positions_for_context(as_of_date=as_of_date, securities_map=securities_map)
+        all_positions = await self._get_positions_for_context(
+            as_of_date=as_of_date,
+            securities_map=securities_map,
+            state=state,
+        )
         positions_map = {p["symbol"]: p for p in all_positions}
 
         fee_fixed = settings_ctx["transaction_fee_fixed"]
@@ -393,7 +398,11 @@ class RebalanceEngine:
 
         # Net contribution rate drives retirement-fund planning: target EUR
         # values are sized against the portfolio we expect after contributions.
-        avg_monthly_net_deposit_6m = await self._get_avg_monthly_net_deposit(as_of_date)
+        avg_monthly_net_deposit_6m = (
+            float(state.avg_monthly_net_deposit_eur)
+            if state is not None and state.avg_monthly_net_deposit_eur is not None
+            else await self._get_avg_monthly_net_deposit(as_of_date)
+        )
         planning_total_value = self._projected_total_value(
             total_value,
             avg_monthly_net_deposit_6m,
@@ -432,6 +441,7 @@ class RebalanceEngine:
             current=current,
             total_value=total_value,
             planning_total_value=planning_total_value,
+            state=state,
         )
         if deficit_sells:
             deficit_symbols = {s.symbol for s in deficit_sells}
@@ -467,10 +477,11 @@ class RebalanceEngine:
             preloaded_symbol_prices={
                 symbol: float(sec.get("price", 0.0) or 0.0) for symbol, sec in security_data.items()
             },
+            state=state,
         )
 
-        # Cache result only when live (not as_of_date)
-        if as_of_date is None:
+        # Cache result only when live and DB-backed (not as_of_date / explicit state).
+        if as_of_date is None and state is None:
             cache_key = self._recommendation_cache_key(min_trade_value)
             cache_setter = getattr(self._db, "cache_set", None)
             if callable(cache_setter):
@@ -920,14 +931,14 @@ class RebalanceEngine:
                 signal=signal,
             )
 
+        contrarian_weight_pct = settings_ctx.get("strategy_priority_contrarian_weight_pct")
+        if contrarian_weight_pct is None:
+            contrarian_weight_pct = DEFAULTS["strategy_priority_contrarian_weight_pct"]
         priority = calculate_priority(
             action=action,
             value_delta_eur=raw_value_delta,
             contrarian_score=contrarian_score,
-            contrarian_weight_pct=settings_ctx.get(
-                "strategy_priority_contrarian_weight_pct",
-                DEFAULTS["strategy_priority_contrarian_weight_pct"],
-            ),
+            contrarian_weight_pct=float(contrarian_weight_pct),
         )
 
         return TradeRecommendation(
@@ -1039,6 +1050,7 @@ class RebalanceEngine:
         preloaded_securities_map: dict[str, dict] | None = None,
         preloaded_symbol_scores: dict[str, float] | None = None,
         preloaded_symbol_prices: dict[str, float] | None = None,
+        state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Scale down buy recommendations to fit within available cash."""
         return await apply_cash_constraint(
@@ -1055,6 +1067,7 @@ class RebalanceEngine:
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
+            state=state,
         )
 
     async def _get_deficit_sells(
@@ -1064,6 +1077,7 @@ class RebalanceEngine:
         current: dict[str, float] | None = None,
         total_value: float | None = None,
         planning_total_value: float | None = None,
+        state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate sell recommendations if negative balances can't be covered."""
         return await get_deficit_sells(
@@ -1073,6 +1087,7 @@ class RebalanceEngine:
             current=current,
             total_value=total_value,
             planning_total_value=planning_total_value,
+            state=state,
         )
 
     async def _generate_deficit_sells(
@@ -1089,6 +1104,7 @@ class RebalanceEngine:
         preloaded_securities_map: dict[str, dict] | None = None,
         preloaded_symbol_scores: dict[str, float] | None = None,
         preloaded_symbol_prices: dict[str, float] | None = None,
+        state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate sell recommendations to cover remaining deficit."""
         return await generate_deficit_sells(
@@ -1105,6 +1121,7 @@ class RebalanceEngine:
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
+            state=state,
         )
 
     async def _get_positions_for_context(
@@ -1112,8 +1129,11 @@ class RebalanceEngine:
         *,
         as_of_date: str | None,
         securities_map: dict[str, dict],
+        state: PlannerState | None = None,
     ) -> list[dict]:
         """Get positions either from live DB state or as-of snapshot state."""
+        if state is not None:
+            return state.positions
         if as_of_date is None:
             return await self._db.get_all_positions()
 
@@ -1147,8 +1167,14 @@ class RebalanceEngine:
             )
         return result
 
-    async def _get_cash_balances_for_context(self, as_of_date: str | None = None) -> dict[str, float]:
+    async def _get_cash_balances_for_context(
+        self,
+        as_of_date: str | None = None,
+        state: PlannerState | None = None,
+    ) -> dict[str, float]:
         """Get cash balances from live portfolio or as-of snapshot."""
+        if state is not None:
+            return state.eur_cash_balances()
         if as_of_date is None:
             return await self._portfolio.get_cash_balances()
 

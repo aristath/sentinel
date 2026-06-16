@@ -77,6 +77,8 @@ DEFAULTS = {
     # Target EUR amounts are planned against current portfolio value plus the
     # trailing 6-month net monthly contribution projected this many months.
     "strategy_projection_months": 12,
+    # Number of future monthly plans to show in the planner forecast.
+    "planner_forecast_months": 6,
     # Contrarian timing influence on trade priority, as +/- percent around the
     # projected EUR gap. 25 means score 0.0 -> 75%, 0.5 -> 100%, 1.0 -> 125%.
     "strategy_priority_contrarian_weight_pct": 25.0,

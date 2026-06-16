@@ -105,6 +105,7 @@ class TestSettingsDefaults:
             "strategy_funding_conviction_bias",
             "strategy_projection_months",
             "strategy_priority_contrarian_weight_pct",
+            "planner_forecast_months",
             "clara_preference_strength",
             "user_multiplier_blend_pct",
             "user_multiplier_decay_factor",

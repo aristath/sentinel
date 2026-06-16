@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING
 
 from sentinel.strategy import compute_contrarian_signal
 
-from .models import TradeRecommendation
+from .models import PlannerState, TradeRecommendation
 from .preferences import is_explicit_downgrade, normalize_user_multiplier
 from .rebalance_rules import calculate_transaction_cost
 
@@ -106,6 +106,7 @@ async def apply_cash_constraint(
     preloaded_securities_map: dict[str, dict] | None = None,
     preloaded_symbol_scores: dict[str, float] | None = None,
     preloaded_symbol_prices: dict[str, float] | None = None,
+    state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Scale down buy recommendations to fit within available cash."""
     fixed_fee = await engine._settings.get("transaction_fee_fixed", 2.0)
@@ -121,7 +122,10 @@ async def apply_cash_constraint(
     fx_rates = {currency: await engine._currency.get_rate(currency) for currency in currencies}
 
     # Calculate available budget
-    current_cash = await engine._portfolio.total_cash_eur()
+    if state is not None:
+        current_cash = state.cash_eur()
+    else:
+        current_cash = await engine._portfolio.total_cash_eur()
     net_sell_proceeds = sum(
         abs(r.value_delta_eur) - calculate_transaction_cost(abs(r.value_delta_eur), fixed_fee, pct_fee) for r in sells
     )
@@ -179,6 +183,7 @@ async def apply_cash_constraint(
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
+            state=state,
         )
         if funding_sells:
             max_sells = int(await _setting(engine, "strategy_max_funding_sells_per_cycle", 2))
@@ -253,9 +258,10 @@ async def get_deficit_sells(
     current: dict[str, float] | None = None,
     total_value: float | None = None,
     planning_total_value: float | None = None,
+    state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Generate sell recommendations if negative balances can't be covered."""
-    balances = await engine._get_cash_balances_for_context(as_of_date=as_of_date)
+    balances = await engine._get_cash_balances_for_context(as_of_date=as_of_date, state=state)
 
     total_deficit_eur = 0.0
     for currency, amount in balances.items():
@@ -286,6 +292,7 @@ async def get_deficit_sells(
         total_value=total_value,
         planning_total_value=planning_total_value,
         reason_kind="cash_deficit",
+        state=state,
     )
 
 
@@ -304,6 +311,7 @@ async def generate_deficit_sells(
     preloaded_securities_map: dict[str, dict] | None = None,
     preloaded_symbol_scores: dict[str, float] | None = None,
     preloaded_symbol_prices: dict[str, float] | None = None,
+    state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Generate sell recommendations to cover remaining deficit."""
     sells: list[TradeRecommendation] = []
@@ -318,7 +326,11 @@ async def generate_deficit_sells(
     if preloaded_positions is not None:
         positions = preloaded_positions
     else:
-        positions = await engine._get_positions_for_context(as_of_date=as_of_date, securities_map=securities_map)
+        positions = await engine._get_positions_for_context(
+            as_of_date=as_of_date,
+            securities_map=securities_map,
+            state=state,
+        )
     if not positions:
         return sells
 
@@ -427,7 +439,7 @@ async def generate_deficit_sells(
         total_value = float(total_value)
     elif as_of_date is not None:
         total_value = 0.0
-        cash_balances = await engine._get_cash_balances_for_context(as_of_date=as_of_date)
+        cash_balances = await engine._get_cash_balances_for_context(as_of_date=as_of_date, state=state)
         total_value += float(cash_balances.get("EUR", 0.0))
         total_value += sum(float(p["eur_value"]) for p in position_data)
     else:

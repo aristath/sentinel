@@ -18,8 +18,9 @@ from sentinel.settings import Settings
 
 from .allocation import AllocationCalculator
 from .analyzer import PortfolioAnalyzer
-from .models import TradeRecommendation
+from .models import PlannerState, TradeRecommendation
 from .rebalance import RebalanceEngine
+from .rebalance_rules import calculate_transaction_cost
 
 
 class Planner:
@@ -89,6 +90,7 @@ class Planner:
         self,
         min_trade_value: Optional[float] = None,
         as_of_date: Optional[str] = None,
+        state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate trade recommendations to move toward ideal portfolio.
 
@@ -101,8 +103,12 @@ class Planner:
             List of TradeRecommendation, sorted by priority
         """
         ideal = await self.calculate_ideal_portfolio(as_of_date=as_of_date)
-        current = await self.get_current_allocations(as_of_date=as_of_date)
-        total_value = await self._portfolio_analyzer.get_total_value(as_of_date=as_of_date)
+        if state is None:
+            current = await self.get_current_allocations(as_of_date=as_of_date)
+            total_value = await self._portfolio_analyzer.get_total_value(as_of_date=as_of_date)
+        else:
+            total_value = self._total_value_from_state(state)
+            current = self._allocations_from_state(state, total_value)
         signal_bundle = self._allocation_calculator.get_last_signal_bundle(as_of_date=as_of_date) or {}
 
         return await self._rebalance_engine.get_recommendations(
@@ -113,7 +119,32 @@ class Planner:
             as_of_date=as_of_date,
             precomputed_rebalance_signals=signal_bundle.get("rebalance_signals"),
             precomputed_sleeves=signal_bundle.get("sleeves"),
+            state=state,
         )
+
+    @staticmethod
+    def _total_value_from_state(state: PlannerState) -> float:
+        """Calculate total value from planner state values that are already EUR."""
+        positions_value = sum(
+            float(pos.get("value_eur", pos.get("current_value_eur", 0.0)) or 0.0) for pos in state.positions
+        )
+        return positions_value + state.cash_eur()
+
+    @staticmethod
+    def _allocations_from_state(state: PlannerState, total_value: float) -> dict[str, float]:
+        """Calculate symbol allocations from EUR state without FX conversion."""
+        if total_value <= 0:
+            return {}
+        allocations: dict[str, float] = {}
+        for pos in state.positions:
+            symbol = str(pos.get("symbol", ""))
+            if not symbol:
+                continue
+            value_eur = float(pos.get("value_eur", pos.get("current_value_eur", 0.0)) or 0.0)
+            if value_eur <= 0:
+                continue
+            allocations[symbol] = value_eur / total_value
+        return allocations
 
     async def get_rebalance_summary(self) -> dict:
         """Get summary of portfolio alignment with ideal allocations.
@@ -122,3 +153,139 @@ class Planner:
             dict with alignment metrics and status
         """
         return await self._portfolio_analyzer.get_rebalance_summary()
+
+    async def forecast_monthly_plans(
+        self,
+        *,
+        months: int = 6,
+        initial_state: PlannerState | None = None,
+        monthly_deposit_eur: float | None = None,
+        min_trade_value: Optional[float] = None,
+    ) -> list[dict[str, Any]]:
+        """Forecast repeated monthly plans from explicit EUR planner state."""
+        if months <= 0:
+            return []
+
+        state = self._copy_state(initial_state or await self.build_current_state())
+        deposit_eur = (
+            float(monthly_deposit_eur)
+            if monthly_deposit_eur is not None
+            else float(state.avg_monthly_net_deposit_eur or 0.0)
+        )
+        forecast: list[dict[str, Any]] = []
+
+        for month_index in range(1, months + 1):
+            starting_cash = self._cash_eur_from_state(state)
+            starting_total = self._total_value_from_state(state)
+            recommendations = await self.get_recommendations(min_trade_value=min_trade_value, state=state)
+            state = await self._state_after_recommendations(state, recommendations)
+            ending_cash = self._cash_eur_from_state(state)
+            ending_total = self._total_value_from_state(state)
+
+            forecast.append(
+                {
+                    "month": month_index,
+                    "starting_cash_eur": starting_cash,
+                    "starting_total_value_eur": starting_total,
+                    "recommendations": recommendations,
+                    "ending_cash_eur": ending_cash,
+                    "ending_total_value_eur": ending_total,
+                    "next_deposit_eur": deposit_eur if month_index < months else 0.0,
+                }
+            )
+
+            if month_index < months and deposit_eur:
+                state.cash_balances["EUR"] = self._cash_eur_from_state(state) + deposit_eur
+
+        return forecast
+
+    async def build_current_state(self) -> PlannerState:
+        """Build planner state from live portfolio inputs, converted to EUR."""
+        positions: list[dict] = []
+        for pos in await self._portfolio.positions():
+            quantity = float(pos.get("quantity", 0) or 0)
+            price = float(pos.get("current_price", 0) or 0)
+            currency = str(pos.get("currency", "EUR") or "EUR")
+            value_eur = await self._currency.to_eur(quantity * price, currency)
+            positions.append(
+                {
+                    "symbol": pos["symbol"],
+                    "quantity": pos.get("quantity", 0),
+                    "current_price": price,
+                    "currency": currency,
+                    "value_eur": value_eur,
+                }
+            )
+
+        cash_eur = 0.0
+        for currency, amount in (await self._portfolio.get_cash_balances()).items():
+            cash_eur += await self._currency.to_eur(float(amount or 0.0), currency)
+
+        return PlannerState(
+            positions=positions,
+            cash_balances={"EUR": cash_eur},
+            avg_monthly_net_deposit_eur=await self._rebalance_engine._get_avg_monthly_net_deposit(None),
+        )
+
+    @staticmethod
+    def _copy_state(state: PlannerState) -> PlannerState:
+        return PlannerState(
+            positions=[dict(pos) for pos in state.positions],
+            cash_balances=dict(state.cash_balances),
+            avg_monthly_net_deposit_eur=state.avg_monthly_net_deposit_eur,
+        )
+
+    @staticmethod
+    def _cash_eur_from_state(state: PlannerState) -> float:
+        return state.cash_eur()
+
+    async def _state_after_recommendations(
+        self,
+        state: PlannerState,
+        recommendations: list[TradeRecommendation],
+    ) -> PlannerState:
+        next_state = self._copy_state(state)
+        positions = {str(pos.get("symbol", "")): dict(pos) for pos in next_state.positions if pos.get("symbol")}
+        cash_eur = self._cash_eur_from_state(next_state)
+        fixed_fee = float(await self._settings.get("transaction_fee_fixed", 2.0) or 0.0)
+        pct_fee = float(await self._settings.get("transaction_fee_percent", 0.2) or 0.0) / 100.0
+
+        for rec in recommendations:
+            value_eur = abs(float(rec.value_delta_eur))
+            fee_eur = calculate_transaction_cost(value_eur, fixed_fee, pct_fee)
+            position = positions.get(rec.symbol) or {
+                "symbol": rec.symbol,
+                "quantity": 0,
+                "current_price": rec.price,
+                "currency": rec.currency,
+                "value_eur": 0.0,
+            }
+            quantity = float(position.get("quantity", 0) or 0)
+            position_value = float(position.get("value_eur", position.get("current_value_eur", 0.0)) or 0.0)
+
+            if rec.action == "buy":
+                quantity += rec.quantity
+                position_value += value_eur
+                cash_eur -= value_eur + fee_eur
+            else:
+                quantity = max(0.0, quantity - rec.quantity)
+                position_value = max(0.0, position_value - value_eur)
+                cash_eur += value_eur - fee_eur
+
+            position.update(
+                {
+                    "quantity": quantity,
+                    "current_price": rec.price,
+                    "currency": rec.currency,
+                    "value_eur": position_value,
+                }
+            )
+            positions[rec.symbol] = position
+
+        next_state.positions = [
+            pos
+            for pos in positions.values()
+            if float(pos.get("quantity", 0) or 0) > 0 or float(pos.get("value_eur", 0) or 0) > 0
+        ]
+        next_state.cash_balances = {"EUR": cash_eur}
+        return next_state

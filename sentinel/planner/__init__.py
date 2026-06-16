@@ -9,7 +9,7 @@ This package provides components for:
 
 from sentinel.planner.allocation import AllocationCalculator
 from sentinel.planner.analyzer import PortfolioAnalyzer
-from sentinel.planner.models import TradeRecommendation
+from sentinel.planner.models import PlannerState, TradeRecommendation
 from sentinel.planner.planner import Planner
 from sentinel.planner.rebalance import RebalanceEngine
 
@@ -17,6 +17,7 @@ __all__ = [
     "AllocationCalculator",
     "PortfolioAnalyzer",
     "RebalanceEngine",
+    "PlannerState",
     "TradeRecommendation",
     "Planner",
 ]
