@@ -148,6 +148,42 @@ function UnifiedPage() {
     refetchInterval: 60000,
   });
   const forecastMonths = forecastData?.months || [];
+  const forecastMonthTotals = (month) => {
+    const recommendations = month.recommendations || [];
+    const fallbackBuys = recommendations
+      .filter((rec) => rec.action === 'buy')
+      .reduce((sum, rec) => sum + Math.abs(Number(rec.value_delta_eur || 0)), 0);
+    const fallbackSells = recommendations
+      .filter((rec) => rec.action === 'sell')
+      .reduce((sum, rec) => sum + Math.abs(Number(rec.value_delta_eur || 0)), 0);
+    return {
+      buys: Number(month.total_buy_value_eur ?? fallbackBuys),
+      sells: Number(month.total_sell_value_eur ?? fallbackSells),
+      fees: Number(month.total_fees_eur ?? 0),
+    };
+  };
+  const forecastBadgeText = (month) => {
+    const { buys, sells } = forecastMonthTotals(month);
+    const parts = [];
+    if (buys > 0) parts.push(`BUY ${formatEur(buys)}`);
+    if (sells > 0) parts.push(`SELL ${formatEur(sells)}`);
+    return parts.length > 0 ? parts.join(' / ') : 'HOLD';
+  };
+  const forecastTooltip = (month) => {
+    const trades = month.recommendations && month.recommendations.length > 0
+      ? month.recommendations
+        .map((rec) => `${rec.action.toUpperCase()} ${rec.symbol} ${formatEur(Math.abs(rec.value_delta_eur))}`)
+        .join(', ')
+      : 'No trades';
+    const { buys, sells, fees } = forecastMonthTotals(month);
+    return [
+      `Start: cash ${formatEur(month.starting_cash_eur)}, total ${formatEur(month.starting_total_value_eur)}`,
+      `Plan: buys ${formatEur(buys)}, sells ${formatEur(sells)}, fees ${formatEur(fees)}`,
+      `After plan: cash ${formatEur(month.ending_cash_eur)}, total ${formatEur(month.ending_total_value_eur)}`,
+      `Next deposit: ${formatEur(month.next_deposit_eur || 0)}`,
+      `Trades: ${trades}`,
+    ].join('\n');
+  };
   const [editingCash, setEditingCash] = useState(false);
   const [cashValue, setCashValue] = useState('');
 
@@ -502,13 +538,10 @@ function UnifiedPage() {
                         multiline
                         w={320}
                         withArrow
-                        label={`Start ${formatEur(month.starting_cash_eur)} · after plan ${formatEur(month.ending_cash_eur)} · next deposit ${formatEur(month.next_deposit_eur || 0)}`}
+                        label={forecastTooltip(month)}
                       >
                         <Badge size="md" color="blue" variant="light" className="unified__status-forecast-badge">
-                          M{month.month}:{' '}
-                          {month.recommendations && month.recommendations.length > 0
-                            ? month.recommendations.map((rec) => `${rec.action.toUpperCase()} ${rec.symbol}`).join(', ')
-                            : 'HOLD'}
+                          M{month.month}: {forecastBadgeText(month)}
                         </Badge>
                       </Tooltip>
                     ))}

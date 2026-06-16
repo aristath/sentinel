@@ -36,6 +36,12 @@ async def test_forecast_endpoint_serializes_monthly_plans():
                 "starting_cash_eur": 1000.0,
                 "starting_total_value_eur": 10_000.0,
                 "recommendations": [rec],
+                "total_buy_value_eur": 900.0,
+                "total_sell_value_eur": 0.0,
+                "buy_fees_eur": 3.8,
+                "sell_fees_eur": 0.0,
+                "total_fees_eur": 3.8,
+                "net_trade_cash_delta_eur": -903.8,
                 "ending_cash_eur": 100.0,
                 "ending_total_value_eur": 10_000.0,
                 "next_deposit_eur": 3000.0,
@@ -57,6 +63,9 @@ async def test_forecast_endpoint_serializes_monthly_plans():
     mock_planner.forecast_monthly_plans.assert_awaited_once_with(months=6, min_trade_value=100.0)
     assert result["months"][0]["month"] == 1
     assert result["months"][0]["starting_cash_eur"] == 1000.0
+    assert result["months"][0]["total_buy_value_eur"] == 900.0
+    assert result["months"][0]["total_fees_eur"] == 3.8
+    assert result["months"][0]["net_trade_cash_delta_eur"] == -903.8
     assert result["months"][0]["next_deposit_eur"] == 3000.0
     assert result["months"][0]["recommendations"][0]["symbol"] == "AAA"
     assert result["months"][0]["recommendations"][0]["value_delta_eur"] == 900.0

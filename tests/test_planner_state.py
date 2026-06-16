@@ -282,3 +282,75 @@ class TestPlannerForecast:
         assert second_state.cash_balances == {"EUR": 3000.0}
         assert second_state.positions[0]["symbol"] == "AAA"
         assert second_state.positions[0]["value_eur"] == 1000.0
+
+    @pytest.mark.asyncio
+    async def test_forecast_includes_monthly_eur_trade_totals(self):
+        planner = Planner(db=MagicMock(), broker=MagicMock(), portfolio=MagicMock())
+        planner._settings.get = AsyncMock(
+            side_effect=lambda key, default=None: {
+                "transaction_fee_fixed": 2.0,
+                "transaction_fee_percent": 1.0,
+            }.get(key, default)
+        )
+
+        initial_state = PlannerState(
+            positions=[
+                {
+                    "symbol": "AAA",
+                    "quantity": 10,
+                    "current_price": 100.0,
+                    "currency": "EUR",
+                    "value_eur": 1000.0,
+                }
+            ],
+            cash_balances={"EUR": 1000.0},
+            avg_monthly_net_deposit_eur=0.0,
+        )
+        planner.get_recommendations = AsyncMock(
+            return_value=[
+                TradeRecommendation(
+                    symbol="AAA",
+                    action="sell",
+                    current_allocation=0.5,
+                    target_allocation=0.25,
+                    allocation_delta=-0.25,
+                    current_value_eur=1000.0,
+                    target_value_eur=500.0,
+                    value_delta_eur=-500.0,
+                    quantity=5,
+                    price=100.0,
+                    currency="EUR",
+                    lot_size=1,
+                    contrarian_score=0.5,
+                    priority=1000.0,
+                    reason="test",
+                ),
+                TradeRecommendation(
+                    symbol="BBB",
+                    action="buy",
+                    current_allocation=0.0,
+                    target_allocation=0.5,
+                    allocation_delta=0.5,
+                    current_value_eur=0.0,
+                    target_value_eur=1000.0,
+                    value_delta_eur=1000.0,
+                    quantity=10,
+                    price=100.0,
+                    currency="EUR",
+                    lot_size=1,
+                    contrarian_score=0.5,
+                    priority=900.0,
+                    reason="test",
+                ),
+            ]
+        )
+
+        forecast = await planner.forecast_monthly_plans(months=1, initial_state=initial_state)
+
+        assert forecast[0]["total_buy_value_eur"] == 1000.0
+        assert forecast[0]["total_sell_value_eur"] == 500.0
+        assert forecast[0]["buy_fees_eur"] == 12.0
+        assert forecast[0]["sell_fees_eur"] == 7.0
+        assert forecast[0]["total_fees_eur"] == 19.0
+        assert forecast[0]["net_trade_cash_delta_eur"] == -519.0
+        assert forecast[0]["ending_cash_eur"] == 481.0

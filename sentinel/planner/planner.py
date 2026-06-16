@@ -178,6 +178,7 @@ class Planner:
             starting_cash = self._cash_eur_from_state(state)
             starting_total = self._total_value_from_state(state)
             recommendations = await self.get_recommendations(min_trade_value=min_trade_value, state=state)
+            value_summary = await self._recommendation_value_summary(recommendations)
             state = await self._state_after_recommendations(state, recommendations)
             ending_cash = self._cash_eur_from_state(state)
             ending_total = self._total_value_from_state(state)
@@ -188,6 +189,7 @@ class Planner:
                     "starting_cash_eur": starting_cash,
                     "starting_total_value_eur": starting_total,
                     "recommendations": recommendations,
+                    **value_summary,
                     "ending_cash_eur": ending_cash,
                     "ending_total_value_eur": ending_total,
                     "next_deposit_eur": deposit_eur if month_index < months else 0.0,
@@ -238,6 +240,34 @@ class Planner:
     @staticmethod
     def _cash_eur_from_state(state: PlannerState) -> float:
         return state.cash_eur()
+
+    async def _recommendation_value_summary(self, recommendations: list[TradeRecommendation]) -> dict[str, float]:
+        fixed_fee = float(await self._settings.get("transaction_fee_fixed", 2.0) or 0.0)
+        pct_fee = float(await self._settings.get("transaction_fee_percent", 0.2) or 0.0) / 100.0
+        total_buy_value = 0.0
+        total_sell_value = 0.0
+        buy_fees = 0.0
+        sell_fees = 0.0
+
+        for rec in recommendations:
+            value_eur = abs(float(rec.value_delta_eur))
+            fee_eur = calculate_transaction_cost(value_eur, fixed_fee, pct_fee)
+            if rec.action == "buy":
+                total_buy_value += value_eur
+                buy_fees += fee_eur
+            else:
+                total_sell_value += value_eur
+                sell_fees += fee_eur
+
+        total_fees = buy_fees + sell_fees
+        return {
+            "total_buy_value_eur": total_buy_value,
+            "total_sell_value_eur": total_sell_value,
+            "buy_fees_eur": buy_fees,
+            "sell_fees_eur": sell_fees,
+            "total_fees_eur": total_fees,
+            "net_trade_cash_delta_eur": total_sell_value - sell_fees - total_buy_value - buy_fees,
+        }
 
     async def _state_after_recommendations(
         self,
