@@ -341,6 +341,7 @@ function UnifiedPage() {
           <SecurityAllocationCard
             securities={securities}
             recommendations={recommendations}
+            forecastMonths={forecastMonths}
             totalValueEur={portfolio?.total_value_eur || 0}
           />
           <CompositionCard />

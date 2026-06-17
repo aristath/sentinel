@@ -13,7 +13,7 @@ const SORT_OPTIONS = [
   { value: 'ideal', label: 'By ideal' },
 ];
 
-export function SecurityAllocationCard({ securities, recommendations, totalValueEur = 0 }) {
+export function SecurityAllocationCard({ securities, recommendations, forecastMonths = [], totalValueEur = 0 }) {
   const [sortBy, setSortBy] = useState('allocation');
   const [showIdeal, setShowIdeal] = useState(true);
 
@@ -22,9 +22,25 @@ export function SecurityAllocationCard({ securities, recommendations, totalValue
       return { rows: [], maxValue: 0 };
     }
 
+    const futureTradesBySymbol = new Map();
+    forecastMonths.slice(1).forEach((month) => {
+      (month.recommendations || []).forEach((rec) => {
+        const value = Math.abs(Number(rec.value_delta_eur || 0));
+        if (!rec.symbol || value <= 0) return;
+        const existing = futureTradesBySymbol.get(rec.symbol) || { buy: 0, sell: 0 };
+        if (rec.action === 'buy') {
+          existing.buy += value;
+        } else if (rec.action === 'sell') {
+          existing.sell += value;
+        }
+        futureTradesBySymbol.set(rec.symbol, existing);
+      });
+    });
+
     // A row is shown if it's relevant to any of the three series:
     //   - currently held (`value_eur > 0`)
     //   - has a pending recommendation (buy or sell)
+    //   - has a future-month forecasted trade
     //   - has a planner-derived ideal weight > 0 — only when the ideal layer is
     //     turned on (otherwise rows that exist purely because of an ideal would
     //     render as empty bars).
@@ -32,14 +48,19 @@ export function SecurityAllocationCard({ securities, recommendations, totalValue
       .filter((s) => {
         const hasPosition = s.has_position && s.value_eur > 0;
         const hasRecommendation = recommendations?.some((r) => r.symbol === s.symbol);
+        const hasFutureTrade = futureTradesBySymbol.has(s.symbol);
         const hasIdeal = showIdeal && (s.ideal_allocation || 0) > 0;
-        return hasPosition || hasRecommendation || hasIdeal;
+        return hasPosition || hasRecommendation || hasFutureTrade || hasIdeal;
       })
       .map((s) => {
         const rec = recommendations?.find((r) => r.symbol === s.symbol);
         const delta = rec ? rec.value_delta_eur : 0;
+        const futureTrade = futureTradesBySymbol.get(s.symbol) || { buy: 0, sell: 0 };
+        const futureBuy = futureTrade.buy;
+        const futureSell = futureTrade.sell;
         const current = s.value_eur || 0;
         const final = current + delta;
+        const forecastFinal = Math.max(0, final + futureBuy - futureSell);
         // Ideal EUR target. Recommendations carry it directly; for securities
         // without a recommendation we derive it from ideal_allocation (%) ×
         // total portfolio value. Fallback to `current` when neither is known
@@ -54,7 +75,7 @@ export function SecurityAllocationCard({ securities, recommendations, totalValue
         }
 
         // Skip rows that contribute nothing to any of the three series.
-        if (final <= 0 && current <= 0 && ideal <= 0) return null;
+        if (final <= 0 && current <= 0 && ideal <= 0 && futureBuy <= 0 && futureSell <= 0) return null;
 
         const isBuy = delta > 0;
         const isSell = delta < 0;
@@ -65,12 +86,16 @@ export function SecurityAllocationCard({ securities, recommendations, totalValue
           final: Math.max(0, final),
           delta,
           ideal,
+          futureBuy,
+          futureSell,
           isBuy,
           isSell,
           // Bar must extend to whichever of current / final / ideal is largest
           // so the ideal marker always lands inside the bar's range. When the
           // ideal is hidden it doesn't influence the scale.
-          maxBar: showIdeal ? Math.max(current, final, ideal) : Math.max(current, final),
+          maxBar: showIdeal
+            ? Math.max(current, final, forecastFinal, ideal)
+            : Math.max(current, final, forecastFinal),
         };
       })
       .filter(Boolean)
@@ -83,7 +108,7 @@ export function SecurityAllocationCard({ securities, recommendations, totalValue
     const max = Math.max(...data.map((d) => d.maxBar), 0);
 
     return { rows: data, maxValue: max };
-  }, [securities, recommendations, totalValueEur, sortBy, showIdeal]);
+  }, [securities, recommendations, forecastMonths, totalValueEur, sortBy, showIdeal]);
 
   const hasData = rows.length > 0;
 
@@ -119,6 +144,8 @@ export function SecurityAllocationCard({ securities, recommendations, totalValue
                     ? ((row.final - row.delta) / maxValue) * 100
                     : (row.final / maxValue) * 100;
                   const deltaWidth = (Math.abs(row.delta) / maxValue) * 100;
+                  const futureBuyWidth = (row.futureBuy / maxValue) * 100;
+                  const futureSellWidth = (row.futureSell / maxValue) * 100;
                   const idealPct = maxValue > 0 ? (row.ideal / maxValue) * 100 : 0;
 
                   return (
@@ -142,6 +169,18 @@ export function SecurityAllocationCard({ securities, recommendations, totalValue
                             <div
                               className="allocation-bar__segment allocation-bar__segment--red"
                               style={{ width: `${deltaWidth}%` }}
+                            />
+                          )}
+                          {futureBuyWidth > 0 && (
+                            <div
+                              className="allocation-bar__segment allocation-bar__segment--green allocation-bar__segment--future"
+                              style={{ width: `${futureBuyWidth}%` }}
+                            />
+                          )}
+                          {futureSellWidth > 0 && (
+                            <div
+                              className="allocation-bar__segment allocation-bar__segment--red allocation-bar__segment--future"
+                              style={{ width: `${futureSellWidth}%` }}
                             />
                           )}
                           {showIdeal && (
@@ -169,6 +208,7 @@ export function SecurityAllocationCard({ securities, recommendations, totalValue
           <LegendSwatch kind="gray" label="Current holding" />
           <LegendSwatch kind="green" label="Will buy" />
           <LegendSwatch kind="red" label="Will sell" />
+          <LegendSwatch kind="future-green" label="Future buy" />
           {showIdeal && <LegendSwatch kind="ideal" label="Planner's ideal" />}
         </Group>
       </Stack>

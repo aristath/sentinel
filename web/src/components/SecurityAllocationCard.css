@@ -44,6 +44,10 @@
   background-color: var(--mantine-color-red-6);
 }
 
+.allocation-bar__segment--future {
+  opacity: 0.3;
+}
+
 .allocation-bar__ideal {
   position: absolute;
   top: -2px;
@@ -68,6 +72,10 @@
 .allocation-legend__swatch--gray  { background-color: var(--mantine-color-gray-6); }
 .allocation-legend__swatch--green { background-color: var(--mantine-color-green-6); }
 .allocation-legend__swatch--red   { background-color: var(--mantine-color-red-6); }
+.allocation-legend__swatch--future-green {
+  background-color: var(--mantine-color-green-6);
+  opacity: 0.3;
+}
 
 /* The ideal marker in the bar is a thin vertical line, so its legend swatch
    matches that shape rather than the segments' filled blocks. */
