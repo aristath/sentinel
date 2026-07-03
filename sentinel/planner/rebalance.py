@@ -322,6 +322,13 @@ class RebalanceEngine:
             pos = positions_map.get(symbol)
             hist_rows = hist_prices_map.get(symbol, [])
             closes = [float(r["close"]) for r in reversed(hist_rows) if r.get("close") is not None]
+
+            # No price data -> excluded from the planner entirely (no signal,
+            # no valuation, no recommendation). Shown as no-data in the UI.
+            price = self._get_price(symbol, current_quotes, pos, hist_rows)
+            if price <= 0:
+                continue
+
             cached_signal = rebalance_signals_map.get(symbol)
             signal: dict[str, float | int | str]
             if isinstance(cached_signal, dict):
@@ -348,9 +355,6 @@ class RebalanceEngine:
                 signal["opp_score"] = effective_score
                 signal["memory_boosted"] = 1 if effective_score > raw_score else 0
             contrarian_scores[symbol] = effective_score
-
-            # Get price
-            price = self._get_price(symbol, current_quotes, pos, hist_rows)
 
             # Check for price anomaly using already prepared close series.
             trade_blocked, block_reason = self._check_price_anomaly_closes(price, closes, symbol)
@@ -541,10 +545,10 @@ class RebalanceEngine:
     ) -> float:
         """Get current price from available sources."""
         quote = current_quotes.get(symbol)
-        price = quote.get("price", 0) if quote else 0
+        price = (quote.get("price") or 0) if quote else 0
 
         if price <= 0 and pos:
-            price = pos.get("current_price", 0)
+            price = pos.get("current_price") or 0
 
         if price <= 0 and hist_rows:
             price = hist_rows[0]["close"] if hist_rows[0]["close"] else 0

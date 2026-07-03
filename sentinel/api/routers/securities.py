@@ -469,14 +469,14 @@ async def get_unified_view(
 
         # Current price: prefer live quote, fallback to position, then historical
         quote = current_quotes.get(symbol)
-        current_price = quote.get("price", 0) if quote else 0
+        current_price = (quote.get("price") or 0) if quote else 0
         if as_of is not None:
             current_price = latest_prices_map.get(symbol, 0)
             if current_price <= 0 and prices:
                 current_price = prices[0]["close"]
         else:
             if current_price <= 0 and position:
-                current_price = position.get("current_price", 0)
+                current_price = position.get("current_price") or 0
             if current_price <= 0 and prices:
                 current_price = prices[0]["close"]
 
