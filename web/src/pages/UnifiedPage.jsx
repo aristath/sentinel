@@ -354,20 +354,6 @@ function UnifiedPage() {
   return (
     <>
       <div className="unified">
-        {/* Left Sidebar - Allocation Cards */}
-        <Stack gap="md" className="unified__sidebar">
-          <MarketsOpenCard />
-          <PortfolioRatingCard />
-          <SecurityAllocationCard
-            securities={securities}
-            recommendations={recommendations}
-            forecastMonths={forecastMonths}
-            totalValueEur={portfolio?.total_value_eur || 0}
-          />
-          <CompositionCard />
-          <ForwardReturnCard />
-        </Stack>
-
         {/* Main Content */}
         <Stack gap="md" className="unified__main" style={{ minWidth: 0 }}>
           {/* Jobs Card */}
@@ -600,6 +586,20 @@ function UnifiedPage() {
               </Table.ScrollContainer>
             </Card>
           )}
+        </Stack>
+
+        {/* Right Sidebar - Allocation Cards */}
+        <Stack gap="md" className="unified__sidebar">
+          <MarketsOpenCard />
+          <PortfolioRatingCard />
+          <SecurityAllocationCard
+            securities={securities}
+            recommendations={recommendations}
+            forecastMonths={forecastMonths}
+            totalValueEur={portfolio?.total_value_eur || 0}
+          />
+          <CompositionCard />
+          <ForwardReturnCard />
         </Stack>
       </div>
 

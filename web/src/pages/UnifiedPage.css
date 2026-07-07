@@ -94,7 +94,7 @@
 
 @media (min-width: 900px) {
   .unified {
-    grid-template-columns: 1fr 2fr;
+    grid-template-columns: 2fr 1fr;
   }
 }
 
