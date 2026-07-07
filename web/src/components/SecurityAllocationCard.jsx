@@ -6,12 +6,17 @@
  */
 import { useMemo, useState } from 'react';
 import { Card, Group, SegmentedControl, Stack, Switch, Text } from '@mantine/core';
+import { formatEur } from '../utils/formatting';
 import './SecurityAllocationCard.css';
 
 const SORT_OPTIONS = [
   { value: 'allocation', label: 'By allocation' },
   { value: 'ideal', label: 'By ideal' },
 ];
+
+function formatPct(value) {
+  return `${Number(value || 0).toFixed(1)}%`;
+}
 
 export function SecurityAllocationCard({ securities, recommendations, forecastMonths = [], totalValueEur = 0 }) {
   const [sortBy, setSortBy] = useState('allocation');
@@ -86,6 +91,9 @@ export function SecurityAllocationCard({ securities, recommendations, forecastMo
           final: Math.max(0, final),
           delta,
           ideal,
+          currentAllocation: s.current_allocation || 0,
+          postPlanAllocation: s.post_plan_allocation ?? s.current_allocation ?? 0,
+          idealAllocation: s.ideal_allocation || 0,
           futureBuy,
           futureSell,
           isBuy,
@@ -140,12 +148,12 @@ export function SecurityAllocationCard({ securities, recommendations, forecastMo
             <table className="allocation-table">
               <tbody>
                 {rows.map((row) => {
-                  const grayWidth = row.isBuy
-                    ? ((row.final - row.delta) / maxValue) * 100
-                    : (row.final / maxValue) * 100;
-                  const deltaWidth = (Math.abs(row.delta) / maxValue) * 100;
-                  const futureBuyWidth = (row.futureBuy / maxValue) * 100;
-                  const futureSellWidth = (row.futureSell / maxValue) * 100;
+                  const grayWidth = maxValue > 0
+                    ? (row.isBuy ? ((row.final - row.delta) / maxValue) * 100 : (row.final / maxValue) * 100)
+                    : 0;
+                  const deltaWidth = maxValue > 0 ? (Math.abs(row.delta) / maxValue) * 100 : 0;
+                  const futureBuyWidth = maxValue > 0 ? (row.futureBuy / maxValue) * 100 : 0;
+                  const futureSellWidth = maxValue > 0 ? (row.futureSell / maxValue) * 100 : 0;
                   const idealPct = maxValue > 0 ? (row.ideal / maxValue) * 100 : 0;
 
                   return (
@@ -187,10 +195,18 @@ export function SecurityAllocationCard({ securities, recommendations, forecastMo
                             <div
                               className="allocation-bar__ideal"
                               style={{ left: `${idealPct}%` }}
-                              title={`Ideal: €${row.ideal.toLocaleString(undefined, { maximumFractionDigits: 0 })}`}
+                              title={`Ideal: ${formatEur(row.ideal)}`}
                             />
                           )}
                         </div>
+                      </td>
+                      <td className="allocation-table__numbers">
+                        <span>{formatPct(row.currentAllocation)}</span>
+                        <span className="allocation-table__arrow">→</span>
+                        <span className={row.isBuy ? 'allocation-table__buy' : row.isSell ? 'allocation-table__sell' : ''}>
+                          {formatPct(row.postPlanAllocation)}
+                        </span>
+                        <span className="allocation-table__target">/ {formatPct(row.idealAllocation)}</span>
                       </td>
                     </tr>
                   );

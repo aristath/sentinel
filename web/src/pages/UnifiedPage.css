@@ -4,8 +4,108 @@
   gap: var(--mantine-spacing-md);
 }
 
+.unified__status-bar {
+  overflow: hidden;
+}
+
+.unified__status-row--summary,
+.unified__status-row--cashflows {
+  align-items: center;
+}
+
+.unified__status-row--cashflows {
+  padding-top: 2px;
+  color: var(--mantine-color-gray-2);
+}
+
+.planner-tape {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--mantine-color-dark-6);
+}
+
+.planner-tape__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--mantine-color-gray-2);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.planner-tape__meta {
+  color: var(--mantine-color-gray-5);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.planner-tape__pill,
+.planner-tape__empty {
+  display: inline-flex;
+  align-items: center;
+  min-height: 24px;
+  max-width: 100%;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.planner-tape__pill {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 1px solid transparent;
+}
+
+.planner-tape__pill--buy {
+  color: var(--mantine-color-green-6);
+  border-color: color-mix(in srgb, var(--mantine-color-green-6) 42%, transparent);
+  background: color-mix(in srgb, var(--mantine-color-green-6) 14%, transparent);
+}
+
+.planner-tape__pill--sell {
+  color: var(--mantine-color-red-6);
+  border-color: color-mix(in srgb, var(--mantine-color-red-6) 42%, transparent);
+  background: color-mix(in srgb, var(--mantine-color-red-6) 14%, transparent);
+}
+
+.planner-tape__pill--forecast {
+  color: var(--mantine-color-blue-6);
+  border-color: color-mix(in srgb, var(--mantine-color-blue-6) 38%, transparent);
+  background: color-mix(in srgb, var(--mantine-color-blue-6) 12%, transparent);
+}
+
+.planner-tape__pill--quiet,
+.planner-tape__empty {
+  color: var(--mantine-color-gray-5);
+  border-color: var(--mantine-color-dark-5);
+  background: color-mix(in srgb, var(--mantine-color-dark-5) 55%, transparent);
+}
+
+.planner-tape__inline-arrow {
+  color: var(--mantine-color-gray-6);
+  flex: 0 0 auto;
+}
+
 @media (min-width: 900px) {
   .unified {
     grid-template-columns: 1fr 2fr;
+  }
+}
+
+@media (max-width: 700px) {
+  .unified__status-row--summary,
+  .unified__status-row--cashflows {
+    gap: 8px;
+  }
+
+  .planner-tape__pill,
+  .planner-tape__empty {
+    white-space: normal;
   }
 }

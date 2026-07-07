@@ -20,9 +20,8 @@ import {
   Button,
   ActionIcon,
   Table,
-  Tooltip,
 } from '@mantine/core';
-import { IconPlus, IconArrowRight, IconCash, IconWallet, IconListCheck, IconTrendingUp, IconPencil, IconX, IconClockPause } from '@tabler/icons-react';
+import { IconPlus, IconArrowRight, IconCash, IconWallet, IconListCheck, IconTrendingUp, IconPencil, IconX } from '@tabler/icons-react';
 import { SecurityTable } from '../components/SecurityTable';
 import { AddSecurityModal } from '../components/AddSecurityModal';
 import { DeleteSecurityModal } from '../components/DeleteSecurityModal';
@@ -61,6 +60,7 @@ const PERIODS = [
 ];
 
 const FILTERS = [
+  { value: 'review', label: 'Review' },
   { value: 'all', label: 'All Securities' },
   { value: 'positions', label: 'Positions Only' },
   { value: 'buys', label: 'Buy Recommendations' },
@@ -80,7 +80,7 @@ const SORTS = [
 
 function UnifiedPage() {
   const [period, setPeriod] = useState('1Y');
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState('review');
   const [sort, setSort] = useState('priority');
   const [search, setSearch] = useState('');
   const [addModalOpen, setAddModalOpen] = useState(false);
@@ -119,7 +119,6 @@ function UnifiedPage() {
   });
   const recommendations = recommendationsData?.recommendations;
   const planSummary = recommendationsData?.summary;
-  const deferred = recommendationsData?.deferred;
 
   const { data: cashFlows } = useQuery({
     queryKey: ['cashflows'],
@@ -155,6 +154,16 @@ function UnifiedPage() {
       .map((rec) => `${rec.action.toUpperCase()} ${rec.symbol} ${formatEur(Math.abs(rec.value_delta_eur))}`)
       .join(', ');
   };
+
+  const forecastSymbols = useMemo(() => {
+    const symbols = new Set();
+    forecastMonths.slice(1).forEach((month) => {
+      (month.recommendations || []).forEach((rec) => {
+        if (rec.symbol) symbols.add(rec.symbol);
+      });
+    });
+    return symbols;
+  }, [forecastMonths]);
   const [editingCash, setEditingCash] = useState(false);
   const [cashValue, setCashValue] = useState('');
 
@@ -266,6 +275,17 @@ function UnifiedPage() {
 
     // Apply filter
     switch (filter) {
+      case 'review':
+        result = result.filter((s) => {
+          const allocationGap = Math.abs((s.ideal_allocation || 0) - (s.current_allocation || 0));
+          return (
+            Boolean(s.recommendation) ||
+            Boolean(s.price_warning) ||
+            allocationGap > 0.5 ||
+            forecastSymbols.has(s.symbol)
+          );
+        });
+        break;
       case 'positions':
         result = result.filter((s) => s.has_position);
         break;
@@ -310,7 +330,7 @@ function UnifiedPage() {
     });
 
     return result;
-  }, [securities, filter, sort, search]);
+  }, [securities, filter, sort, search, forecastSymbols]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -355,7 +375,7 @@ function UnifiedPage() {
 
           {/* Status Bar */}
           <Card shadow="sm" padding="sm" withBorder className="unified__status-bar">
-            <Stack gap="xs" className="unified__status-content">
+            <Stack gap="sm" className="unified__status-content">
               {/* Top row: Portfolio and Cash */}
               <Group gap="xl" className="unified__status-row unified__status-row--summary">
                 {/* Portfolio Value */}
@@ -451,111 +471,13 @@ function UnifiedPage() {
                 </Group>
               )}
 
-              {/* Bottom row: Plan */}
-              <Group gap="xs" wrap="wrap" className="unified__status-row unified__status-row--plan">
-                <Group gap="xs" className="unified__status-section unified__status-section--plan">
-                  <IconListCheck size={18} style={{ opacity: 0.6 }} className="unified__status-icon" />
-                  <Text size="sm" c="dimmed" className="unified__status-label">Plan:</Text>
-                </Group>
-                {recommendations && recommendations.length > 0 ? (
-                  <Group gap={6} wrap="wrap" className="unified__status-plan-steps">
-                    {recommendations.map((rec, i) => {
-                      const isSell = rec.action === 'sell';
-                      const pctOfPosition = isSell && rec.current_value_eur > 0
-                        ? ` (${Math.round((Math.abs(rec.value_delta_eur) / rec.current_value_eur) * 100)}%)`
-                        : '';
-                      return (
-                        <Group gap={4} key={rec.symbol} className={`unified__status-plan-step unified__status-plan-step--${rec.action}`}>
-                          {i > 0 && <IconArrowRight size={14} style={{ opacity: 0.4 }} className="unified__status-plan-arrow" />}
-                          <Badge
-                            size="md"
-                            color={isSell ? 'red' : 'green'}
-                            variant="light"
-                            className={`unified__status-plan-badge unified__status-plan-badge--${rec.action}`}
-                          >
-                            {rec.action.toUpperCase()} {formatEur(Math.abs(rec.value_delta_eur))}{pctOfPosition} {rec.symbol}
-                          </Badge>
-                        </Group>
-                      );
-                    })}
-                    {/* Cash after plan */}
-                    {planSummary && (
-                      <Text size="sm" c="dimmed" fw={500} className="unified__status-plan-cash-result">
-                        After plan: <span style={{ color: planSummary.cash_after_plan >= 0 ? 'var(--mantine-color-green-6)' : 'var(--mantine-color-red-6)' }}>{formatEur(planSummary.cash_after_plan)}</span>
-                      </Text>
-                    )}
-                    {planSummary && (
-                      <Text size="sm" c="dimmed" fw={500} className="unified__status-plan-assumption">
-                        Projection: {formatEur(planSummary.avg_monthly_net_deposit_6m || 0)}/mo for {Math.round(planSummary.projection_months || 0)} mo, base {formatEur(planSummary.projected_total_value_eur || 0)}
-                      </Text>
-                    )}
-                  </Group>
-                ) : (
-                  <Text size="sm" c="dimmed" fs="italic" className="unified__status-no-plan">No pending actions</Text>
-                )}
-              </Group>
-
-              {forecastMonths.length > 0 && (
-                <Group gap="xs" wrap="wrap" className="unified__status-row unified__status-row--forecast">
-                  <Group gap="xs" className="unified__status-section unified__status-section--forecast">
-                    <IconTrendingUp size={18} style={{ opacity: 0.6 }} className="unified__status-icon" />
-                    <Text size="sm" c="dimmed" className="unified__status-label">
-                      {plannerForecastMonthCount} mo:
-                    </Text>
-                  </Group>
-                  <Group gap={6} wrap="wrap" className="unified__status-forecast-steps">
-                    {forecastMonths.map((month) => (
-                      <Badge
-                        key={month.month}
-                        size="md"
-                        color="blue"
-                        variant="light"
-                        className="unified__status-forecast-badge"
-                      >
-                        M{month.month}: {forecastBadgeText(month)}
-                      </Badge>
-                    ))}
-                  </Group>
-                </Group>
-              )}
-
-              {/* Deferred row: buys we want but can't fund yet without a bad sell — waiting on deposits */}
-              {deferred && deferred.length > 0 && (
-                <Group gap="xs" wrap="wrap" className="unified__status-row unified__status-row--deferred">
-                  <Group gap="xs" className="unified__status-section unified__status-section--deferred">
-                    <IconClockPause size={18} style={{ opacity: 0.6 }} className="unified__status-icon" />
-                    <Text size="sm" c="dimmed" className="unified__status-label">Deferred:</Text>
-                  </Group>
-                  <Group gap={6} wrap="wrap" className="unified__status-deferred-steps">
-                    {deferred.map((d) => {
-                      const daysWaiting = d.created_at
-                        ? Math.floor((Date.now() / 1000 - d.created_at) / 86400)
-                        : null;
-                      const waitLabel = daysWaiting !== null
-                        ? `${daysWaiting === 0 ? 'today' : `${daysWaiting}d`}`
-                        : '';
-                      return (
-                        <Tooltip
-                          key={`${d.symbol}-${d.action}`}
-                          label={`${d.reason}${waitLabel ? ` · waiting ${waitLabel}` : ''}`}
-                          multiline
-                          w={260}
-                          withArrow
-                        >
-                          <Badge
-                            size="md"
-                            color={d.reserved ? 'orange' : 'yellow'}
-                            variant="light"
-                            className="unified__status-deferred-badge"
-                          >
-                            {d.reserved ? 'RESERVE' : 'BUY'} {formatEur(d.target_amount_eur)} {d.symbol}
-                          </Badge>
-                        </Tooltip>
-                      );
-                    })}
-                  </Group>
-                </Group>
-              )}
+              <PlannerTape
+                recommendations={recommendations || []}
+                forecastMonths={forecastMonths}
+                planSummary={planSummary}
+                projectionMonths={plannerForecastMonthCount}
+                forecastBadgeText={forecastBadgeText}
+              />
             </Stack>
           </Card>
 
@@ -696,6 +618,71 @@ function UnifiedPage() {
         onDelete={handleDelete}
         security={securityToDelete}
       />
+    </>
+  );
+}
+
+function PlannerTape({ recommendations, forecastMonths, planSummary, projectionMonths, forecastBadgeText }) {
+  const todayItems = recommendations.map((rec) => {
+    const isSell = rec.action === 'sell';
+    const pctOfPosition = isSell && rec.current_value_eur > 0
+      ? ` ${Math.round((Math.abs(rec.value_delta_eur) / rec.current_value_eur) * 100)}%`
+      : '';
+    return {
+      key: `today-${rec.symbol}-${rec.action}`,
+      tone: rec.action,
+      label: `${rec.action.toUpperCase()} ${formatEur(Math.abs(rec.value_delta_eur))}${pctOfPosition} ${rec.symbol}`,
+    };
+  });
+
+  const forecastItems = forecastMonths.map((month) => ({
+    key: `forecast-${month.month}`,
+    tone: (month.recommendations || []).length > 0 ? 'forecast' : 'quiet',
+    label: `M${month.month}: ${forecastBadgeText(month)}`,
+  }));
+
+  return (
+    <div className="planner-tape">
+      <PlannerTapeGroup
+        icon={<IconListCheck size={15} />}
+        title="Today"
+        items={todayItems}
+        empty="No pending actions"
+      />
+      <IconArrowRight size={15} className="planner-tape__inline-arrow" />
+      <PlannerTapeGroup
+        icon={<IconTrendingUp size={15} />}
+        title={`${projectionMonths} mo`}
+        items={forecastItems}
+        empty="Forecast unavailable"
+      />
+      {planSummary && (
+        <span className="planner-tape__meta">
+          cash {formatEur(planSummary.cash_after_plan || 0)} · {formatEur(planSummary.avg_monthly_net_deposit_6m || 0)}/mo
+        </span>
+      )}
+    </div>
+  );
+}
+
+function PlannerTapeGroup({ icon, title, items, empty }) {
+  return (
+    <>
+      <span className="planner-tape__label">
+        {icon}
+        {title}:
+      </span>
+      {items.length > 0 ? items.map((item) => (
+        <span
+          key={item.key}
+          title={item.title}
+          className={`planner-tape__pill planner-tape__pill--${item.tone}`}
+        >
+          {item.label}
+        </span>
+      )) : (
+        <span className="planner-tape__empty">{empty}</span>
+      )}
     </>
   );
 }

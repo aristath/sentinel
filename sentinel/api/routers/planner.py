@@ -89,7 +89,6 @@ async def get_recommendations(
 
     return {
         "recommendations": [_serialize_recommendation(r) for r in recommendations],
-        "deferred": [],
         "summary": {
             "current_cash": current_cash,
             "total_sell_value": total_sell_value,

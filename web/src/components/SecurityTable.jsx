@@ -14,46 +14,12 @@ import {
   ActionIcon,
   Tooltip,
   Box,
+  Switch,
   UnstyledButton,
 } from '@mantine/core';
-import { IconAlertTriangle, IconChevronUp, IconChevronDown, IconSelector, IconChevronRight, IconStarFilled } from '@tabler/icons-react';
+import { IconAlertTriangle, IconChevronUp, IconChevronDown, IconSelector, IconChevronRight } from '@tabler/icons-react';
 import { SecurityExpandedRow } from './SecurityExpandedRow';
 import { formatCurrencySymbol as formatCurrency, formatPercent } from '../utils/formatting';
-import { usePortfolioStructure } from '../hooks/usePortfolioStructure';
-import { catppuccin } from '../theme';
-
-const MAX_STARS = 7;
-
-/**
- * Build a {ticker -> praamsRatio} map from the structure payload. Tickers in
- * upstream are upper-case (e.g. "AAPL.US"); sentinel symbols match. Falls
- * back to an empty map if the structure endpoint is unavailable.
- */
-function buildPraamsMap(structure) {
-  const map = new Map();
-  const assets = structure?.portfolioAnalysis?.initial?.assets;
-  if (!Array.isArray(assets)) return map;
-  for (const a of assets) {
-    if (a?.ticker && a?.praamsRatio !== undefined) {
-      map.set(String(a.ticker).toUpperCase(), a.praamsRatio);
-    }
-  }
-  return map;
-}
-
-function PraamsCell({ rating }) {
-  if (rating === undefined || rating === null) {
-    return <Text size="sm" c="dimmed">-</Text>;
-  }
-  return (
-    <Tooltip label={`Risk/Return (PRAAMS) rating ${rating}/${MAX_STARS}`}>
-      <Group gap={4} wrap="nowrap">
-        <IconStarFilled size={12} color={catppuccin.yellow} />
-        <Text size="sm" fw={500}>{rating}/{MAX_STARS}</Text>
-      </Group>
-    </Tooltip>
-  );
-}
 
 // Sortable column header component
 function SortableHeader({ children, sorted, reversed, onSort }) {
@@ -70,9 +36,6 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
   const [expandedSymbols, setExpandedSymbols] = useState(new Set());
   const [sortColumn, setSortColumn] = useState(null);
   const [sortReversed, setSortReversed] = useState(false);
-
-  const { data: structure } = usePortfolioStructure();
-  const praamsByTicker = useMemo(() => buildPraamsMap(structure), [structure]);
 
   const toggleExpanded = (symbol) => {
     setExpandedSymbols((prev) => {
@@ -95,6 +58,11 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
     }
   };
 
+  const handleTradeToggle = (event, symbol, field) => {
+    event.stopPropagation();
+    void onUpdate(symbol, { [field]: event.currentTarget.checked ? 1 : 0 });
+  };
+
   // Sort securities based on current sort state
   const sortedSecurities = useMemo(() => {
     if (!sortColumn) return securities;
@@ -111,28 +79,10 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
           aVal = a.value_eur || 0;
           bVal = b.value_eur || 0;
           break;
-        case 'allocation':
-          // Sort by post-plan allocation
-          aVal = a.post_plan_allocation || 0;
-          bVal = b.post_plan_allocation || 0;
-          break;
-        case 'ideal':
-          aVal = a.ideal_allocation || 0;
-          bVal = b.ideal_allocation || 0;
-          break;
-        case 'pnl':
-          aVal = a.profit_pct || 0;
-          bVal = b.profit_pct || 0;
-          break;
         case 'recommendation':
           // Sort by recommendation value (buys positive, sells negative)
           aVal = a.recommendation ? (a.recommendation.action === 'buy' ? 1 : -1) * Math.abs(a.recommendation.value_delta_eur || 0) : 0;
           bVal = b.recommendation ? (b.recommendation.action === 'buy' ? 1 : -1) * Math.abs(b.recommendation.value_delta_eur || 0) : 0;
-          break;
-        case 'praams':
-          // Missing → -1 so it sorts below rated entries.
-          aVal = praamsByTicker.get(String(a.symbol || '').toUpperCase()) ?? -1;
-          bVal = praamsByTicker.get(String(b.symbol || '').toUpperCase()) ?? -1;
           break;
         default:
           return 0;
@@ -144,16 +94,11 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
     });
 
     return sortReversed ? sorted.reverse() : sorted;
-  }, [securities, sortColumn, sortReversed, praamsByTicker]);
+  }, [securities, sortColumn, sortReversed]);
 
-  // PRAAMS column only shows when we actually have a rating for at least one
-  // current holding — keeps the UI honest before credentials are configured
-  // and avoids a column of dashes.
-  const showPraams = praamsByTicker.size > 0;
-  const numColumns = showPraams ? 8 : 7;
+  const numColumns = 5;
 
   const allExpanded = sortedSecurities.length > 0 && sortedSecurities.every((s) => expandedSymbols.has(s.symbol));
-  const noneExpanded = expandedSymbols.size === 0;
 
   const toggleAll = () => {
     if (allExpanded) {
@@ -164,7 +109,7 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
   };
 
   return (
-    <Table.ScrollContainer minWidth={700}>
+    <Table.ScrollContainer minWidth={660}>
       <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
@@ -185,41 +130,22 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
             </Table.Th>
             <Table.Th>
               <SortableHeader sorted={sortColumn === 'symbol'} reversed={sortReversed} onSort={() => handleSort('symbol')}>
-                Symbol
+                Security
               </SortableHeader>
             </Table.Th>
             <Table.Th>
               <SortableHeader sorted={sortColumn === 'value'} reversed={sortReversed} onSort={() => handleSort('value')}>
-                Value
-              </SortableHeader>
-            </Table.Th>
-            <Table.Th>
-              <SortableHeader sorted={sortColumn === 'allocation'} reversed={sortReversed} onSort={() => handleSort('allocation')}>
-                Allocation
-              </SortableHeader>
-            </Table.Th>
-            <Table.Th>
-              <SortableHeader sorted={sortColumn === 'ideal'} reversed={sortReversed} onSort={() => handleSort('ideal')}>
-                Ideal
-              </SortableHeader>
-            </Table.Th>
-            <Table.Th>
-              <SortableHeader sorted={sortColumn === 'pnl'} reversed={sortReversed} onSort={() => handleSort('pnl')}>
-                P/L
+                Value / P/L
               </SortableHeader>
             </Table.Th>
             <Table.Th>
               <SortableHeader sorted={sortColumn === 'recommendation'} reversed={sortReversed} onSort={() => handleSort('recommendation')}>
-                Recommendation
+                Plan
               </SortableHeader>
             </Table.Th>
-            {showPraams && (
-              <Table.Th>
-                <SortableHeader sorted={sortColumn === 'praams'} reversed={sortReversed} onSort={() => handleSort('praams')}>
-                  Risk/Return (PRAAMS)
-                </SortableHeader>
-              </Table.Th>
-            )}
+            <Table.Th>
+              <Text fw={600} size="sm">Trade</Text>
+            </Table.Th>
           </Table.Tr>
         </Table.Thead>
         <Table.Tbody>
@@ -237,6 +163,8 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
               recommendation,
               price_warning,
               active,
+              allow_buy,
+              allow_sell,
             } = security;
 
             const isExpanded = expandedSymbols.has(symbol);
@@ -293,84 +221,88 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
                     </Group>
                   </Table.Td>
 
-                  {/* Value */}
+                  {/* Value / P&L */}
                   <Table.Td>
                     {has_position ? (
-                      <Text size="sm">{formatCurrency(value_eur, 'EUR')}</Text>
+                      <Box>
+                        <Text size="sm">{formatCurrency(value_eur, 'EUR')}</Text>
+                        <Group gap={4} wrap="nowrap">
+                          <Text
+                            size="xs"
+                            fw={500}
+                            c={profit_pct >= 0 ? 'green' : 'red'}
+                          >
+                            {formatPercent(profit_pct)}
+                          </Text>
+                          <Text
+                            size="xs"
+                            c={profit_value_eur >= 0 ? 'green' : 'red'}
+                          >
+                            {formatCurrency(profit_value_eur, 'EUR')}
+                          </Text>
+                        </Group>
+                      </Box>
                     ) : (
                       <Text size="sm" c="dimmed">-</Text>
                     )}
                   </Table.Td>
 
-                  {/* Allocation (current → post-plan) */}
+                  {/* Plan: allocation path + recommendation */}
                   <Table.Td>
-                    <Group gap={4}>
-                      <Text size="sm">{formatPercent(current_allocation, false)}</Text>
-                      <Text size="sm" c="dimmed">{'\u2192'}</Text>
-                      <Text
-                        size="sm"
-                        fw={500}
-                        c={isIncreasing ? 'green' : isDecreasing ? 'red' : undefined}
-                      >
-                        {formatPercent(post_plan_allocation, false)}
-                      </Text>
+                    <Group gap="xs" wrap="wrap">
+                      <Group gap={4} wrap="nowrap">
+                        <Text size="sm">{formatPercent(current_allocation, false)}</Text>
+                        {(isIncreasing || isDecreasing) && (
+                          <>
+                            <Text size="sm" c="dimmed">{'\u2192'}</Text>
+                            <Text
+                              size="sm"
+                              fw={500}
+                              c={isIncreasing ? 'green' : 'red'}
+                            >
+                              {formatPercent(post_plan_allocation, false)}
+                            </Text>
+                          </>
+                        )}
+                        <Text
+                          size="sm"
+                          c={isUnderIdeal || isOverIdeal ? 'yellow' : 'dimmed'}
+                        >
+                          / {formatPercent(ideal_allocation, false)}
+                        </Text>
+                      </Group>
+                      {recommendation ? (
+                        <Badge
+                          color={recommendation.action === 'buy' ? 'green' : 'red'}
+                          variant="light"
+                          size="sm"
+                        >
+                          {recommendation.action.toUpperCase()} {formatCurrency(Math.abs(recommendation.value_delta_eur), 'EUR')}
+                        </Badge>
+                      ) : (
+                        <Text size="sm" c="dimmed">-</Text>
+                      )}
                     </Group>
                   </Table.Td>
 
-                  {/* Ideal Allocation */}
-                  <Table.Td>
-                    <Text
-                      size="sm"
-                      c={isUnderIdeal ? 'yellow' : isOverIdeal ? 'yellow' : 'dimmed'}
-                    >
-                      {formatPercent(ideal_allocation, false)}
-                    </Text>
+                  {/* Trade permissions */}
+                  <Table.Td onClick={(e) => e.stopPropagation()}>
+                    <Group gap="xs" wrap="nowrap">
+                      <Switch
+                        label="B"
+                        size="xs"
+                        checked={allow_buy === 1}
+                        onChange={(e) => handleTradeToggle(e, symbol, 'allow_buy')}
+                      />
+                      <Switch
+                        label="S"
+                        size="xs"
+                        checked={allow_sell === 1}
+                        onChange={(e) => handleTradeToggle(e, symbol, 'allow_sell')}
+                      />
+                    </Group>
                   </Table.Td>
 
-                  {/* P/L */}
-                  <Table.Td>
-                    {has_position ? (
-                      <Group gap={4}>
-                        <Text
-                          size="sm"
-                          fw={500}
-                          c={profit_pct >= 0 ? 'green' : 'red'}
-                        >
-                          {formatPercent(profit_pct)}
-                        </Text>
-                        <Text
-                          size="sm"
-                          c={profit_value_eur >= 0 ? 'green' : 'red'}
-                        >
-                          ({formatCurrency(profit_value_eur, 'EUR')})
-                        </Text>
-                      </Group>
-                    ) : (
-                      <Text size="sm" c="dimmed">-</Text>
-                    )}
-                  </Table.Td>
-
-                  {/* Recommendation */}
-                  <Table.Td>
-                    {recommendation ? (
-                      <Badge
-                        color={recommendation.action === 'buy' ? 'green' : 'red'}
-                        variant="light"
-                        size="sm"
-                      >
-                        {recommendation.action.toUpperCase()} {formatCurrency(Math.abs(recommendation.value_delta_eur), 'EUR')}
-                      </Badge>
-                    ) : (
-                      <Text size="sm" c="dimmed">-</Text>
-                    )}
-                  </Table.Td>
-
-                  {/* PRAAMS rating (only when we have structure data) */}
-                  {showPraams && (
-                    <Table.Td>
-                      <PraamsCell rating={praamsByTicker.get(String(symbol || '').toUpperCase())} />
-                    </Table.Td>
-                  )}
                 </Table.Tr>
 
                 {/* Expanded Row */}

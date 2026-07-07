@@ -724,46 +724,6 @@ class BaseDatabase:
         row = await cursor.fetchone()
         return dict(row) if row else None
 
-    # -------------------------------------------------------------------------
-    # Pending Trades
-    # -------------------------------------------------------------------------
-
-    async def add_pending_trade(
-        self,
-        trade_key: str,
-        symbol: str,
-        action: str,
-        target_amount_eur: float,
-        reason: str | None = None,
-    ) -> None:
-        """Add a new pending trade."""
-        await self.conn.execute(
-            """INSERT INTO pending_trades
-               (trade_key, symbol, action, target_amount_eur, reason, created_at, last_evaluated)
-               VALUES (?, ?, ?, ?, ?, ?, ?)""",
-            (trade_key, symbol, action, target_amount_eur, reason, int(time.time()), int(time.time())),
-        )
-        await self.conn.commit()
-
-    async def get_pending_trades(self) -> list[dict]:
-        """Get all pending trades."""
-        cursor = await self.conn.execute("SELECT * FROM pending_trades")
-        rows = await cursor.fetchall()
-        return [dict(row) for row in rows]
-
-    async def remove_pending_trade(self, trade_key: str) -> None:
-        """Remove a pending trade."""
-        await self.conn.execute("DELETE FROM pending_trades WHERE trade_key = ?", (trade_key,))
-        await self.conn.commit()
-
-    async def update_pending_trade(self, trade_key: str, target_amount_eur: float, reason: str | None) -> None:
-        """Refresh a pending trade's amount/reason and bump last_evaluated (keeps created_at)."""
-        await self.conn.execute(
-            "UPDATE pending_trades SET target_amount_eur = ?, reason = ?, last_evaluated = ? WHERE trade_key = ?",
-            (target_amount_eur, reason, int(time.time()), trade_key),
-        )
-        await self.conn.commit()
-
     async def get_strategy_states(self, symbols: list[str] | None = None) -> dict[str, dict]:
         """Get strategy state rows keyed by symbol."""
         if not symbols:

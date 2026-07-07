@@ -1060,14 +1060,4 @@ CREATE TABLE IF NOT EXISTS fx_rates_history (
     PRIMARY KEY (date, currency)
 );
 
--- Pending trades (deferred trade recommendations)
-CREATE TABLE IF NOT EXISTS pending_trades (
-    trade_key TEXT PRIMARY KEY,
-    symbol TEXT NOT NULL,
-    action TEXT NOT NULL CHECK(action IN ('buy', 'sell')),
-    target_amount_eur REAL NOT NULL,
-    reason TEXT,
-    created_at INTEGER NOT NULL,
-    last_evaluated INTEGER NOT NULL
-);
 """
