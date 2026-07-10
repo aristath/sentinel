@@ -367,6 +367,7 @@ class Broker:
                             "quantity": pos.get("q"),
                             "avg_cost": pos.get("bal_price_a"),  # average cost
                             "current_price": pos.get("mkt_price"),
+                            "close_price": pos.get("close_price"),
                             "currency": pos.get("curr", "EUR"),
                             "name": pos.get("name"),
                             "market_value": pos.get("market_value"),

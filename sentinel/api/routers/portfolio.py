@@ -1,5 +1,6 @@
 """Portfolio API routes."""
 
+import bisect
 import logging
 from datetime import date as date_type
 from datetime import datetime, timedelta
@@ -10,11 +11,370 @@ from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.freedom24_web import Freedom24WebClient
+from sentinel.portfolio import Portfolio
 from sentinel.services.portfolio import PortfolioService
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
+
+PERIOD_WINDOWS = {"1D": 1, "1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365}
+BENCHMARK_MAX_STALENESS_DAYS = 5
+
+
+def _empty_period_stat() -> dict[str, float | None]:
+    return {"portfolio_eur": None, "portfolio_pct": None, "benchmark_pct": None, "alpha_pct": None}
+
+
+def _benchmark_period_return(
+    benchmark_rows: list[dict],
+    start_date: str,
+    end_date: str,
+) -> float | None:
+    """Return benchmark period performance, or None when either edge is stale/missing."""
+    benchmark = sorted(
+        ((row["date"], float(row["close"])) for row in benchmark_rows if row.get("close") is not None),
+        key=lambda point: point[0],
+    )
+    benchmark_dates = [point[0] for point in benchmark]
+    benchmark_values = [point[1] for point in benchmark]
+
+    def value_on_or_before(target: str) -> float | None:
+        index = bisect.bisect_right(benchmark_dates, target) - 1
+        if index < 0:
+            return None
+        found_date = date_type.fromisoformat(benchmark_dates[index])
+        target_date = date_type.fromisoformat(target)
+        if (target_date - found_date).days > BENCHMARK_MAX_STALENESS_DAYS:
+            return None
+        return benchmark_values[index]
+
+    start_value = value_on_or_before(start_date)
+    end_value = value_on_or_before(end_date)
+    if not start_value or end_value is None:
+        return None
+    return round((end_value / start_value - 1) * 100, 2)
+
+
+def _trade_iso_date(trade: dict) -> str:
+    return datetime.fromtimestamp(int(trade["executed_at"])).date().isoformat()
+
+
+def _add_cash_effect(effects: dict[str, float], currency: str, amount: float) -> None:
+    effects[currency] = effects.get(currency, 0.0) + amount
+
+
+def _is_fx_trade(symbol: str) -> bool:
+    return "/" in symbol
+
+
+def _apply_trade_effect(
+    quantities: dict[str, float],
+    cash_effects: dict[str, float],
+    trade: dict,
+    symbol_currencies: dict[str, str],
+) -> None:
+    symbol = trade["symbol"]
+    side = trade["side"]
+    quantity = float(trade["quantity"] or 0.0)
+    price = float(trade["price"] or 0.0)
+    commission = float(trade.get("commission") or 0.0)
+    commission_currency = trade.get("commission_currency") or "EUR"
+
+    if commission:
+        _add_cash_effect(cash_effects, commission_currency, -commission)
+
+    if _is_fx_trade(symbol):
+        base, quote = symbol.split("/", 1)
+        quote_amount = quantity * price
+        if side == "BUY":
+            _add_cash_effect(cash_effects, base, quantity)
+            _add_cash_effect(cash_effects, quote, -quote_amount)
+        else:
+            _add_cash_effect(cash_effects, base, -quantity)
+            _add_cash_effect(cash_effects, quote, quote_amount)
+        return
+
+    currency = symbol_currencies.get(symbol)
+    if currency is None:
+        return
+
+    native_amount = quantity * price
+    if side == "BUY":
+        quantities[symbol] = quantities.get(symbol, 0.0) - quantity
+        _add_cash_effect(cash_effects, currency, -native_amount)
+    else:
+        quantities[symbol] = quantities.get(symbol, 0.0) + quantity
+        _add_cash_effect(cash_effects, currency, native_amount)
+
+
+async def _position_value_on_date(
+    deps: CommonDependencies,
+    symbol: str,
+    quantity: float,
+    currency: str,
+    iso_date: str,
+    fallback_prices: dict[str, float] | None = None,
+) -> float | None:
+    if abs(quantity) < 0.0000001:
+        return 0.0
+    prices = await deps.db.get_prices(symbol, days=1, end_date=iso_date)
+    price = None
+    if prices:
+        price_date = date_type.fromisoformat(prices[0]["date"])
+        target_date = date_type.fromisoformat(iso_date)
+        if (target_date - price_date).days <= BENCHMARK_MAX_STALENESS_DAYS:
+            price = float(prices[0]["close"])
+    if price is None and fallback_prices is not None:
+        price = fallback_prices.get(symbol)
+    if price is None:
+        return None
+    native_value = quantity * price
+    return await deps.currency.to_eur_for_date(native_value, currency, iso_date)
+
+
+async def _cash_value_on_date(deps: CommonDependencies, cash: dict[str, float], iso_date: str) -> float:
+    total = 0.0
+    for currency, amount in cash.items():
+        if abs(amount) < 0.0000001:
+            continue
+        total += await deps.currency.to_eur_for_date(amount, currency, iso_date)
+    return total
+
+
+async def _start_value_from_current_state(
+    deps: CommonDependencies,
+    *,
+    current_positions: list[dict],
+    current_cash: dict[str, float],
+    trades: list[dict],
+    cash_flows: list[dict],
+    symbol_currencies: dict[str, str],
+    start_date: str,
+    allow_price_fallback: bool = False,
+) -> float | None:
+    quantities = {position["symbol"]: float(position.get("quantity") or 0.0) for position in current_positions}
+    fallback_prices = {
+        position["symbol"]: float(position["current_price"])
+        for position in current_positions
+        if position.get("current_price") is not None
+    }
+    cash_effects: dict[str, float] = {}
+
+    for trade in trades:
+        if _trade_iso_date(trade) <= start_date:
+            continue
+        _apply_trade_effect(quantities, cash_effects, trade, symbol_currencies)
+
+    for trade in sorted(trades, key=lambda item: item["executed_at"]):
+        if _trade_iso_date(trade) <= start_date or _is_fx_trade(trade["symbol"]):
+            continue
+        fallback_prices.setdefault(trade["symbol"], float(trade["price"] or 0.0))
+
+    for cf in cash_flows:
+        if cf["date"] <= start_date or cf["type_id"] in ("block", "unblock"):
+            continue
+        _add_cash_effect(cash_effects, cf["currency"], float(cf["amount"] or 0.0))
+
+    start_cash = dict(current_cash)
+    for currency, effect in cash_effects.items():
+        start_cash[currency] = start_cash.get(currency, 0.0) - effect
+
+    total = await _cash_value_on_date(deps, start_cash, start_date)
+    for symbol, quantity in quantities.items():
+        currency = symbol_currencies.get(symbol)
+        if currency is None:
+            continue
+        value = await _position_value_on_date(
+            deps,
+            symbol,
+            quantity,
+            currency,
+            start_date,
+            fallback_prices if allow_price_fallback else None,
+        )
+        if value is None:
+            return None
+        total += value
+    return total
+
+
+async def _cashflow_value_since(
+    deps: CommonDependencies,
+    cash_flows: list[dict],
+    *,
+    start_date: str,
+    external_only: bool,
+) -> float:
+    total = 0.0
+    for cf in cash_flows:
+        if cf["date"] <= start_date:
+            continue
+        if external_only and cf["type_id"] not in ("card", "card_payout"):
+            continue
+        if cf["type_id"] in ("block", "unblock"):
+            continue
+        total += await deps.currency.to_eur_for_date(cf["amount"], cf["currency"], cf["date"])
+    return total
+
+
+async def _period_stats_from_reconstructed_starts(
+    deps: CommonDependencies,
+    benchmark_rows: list[dict],
+    *,
+    current_value: float,
+    current_net_deposits: float,
+    cash_flows: list[dict],
+    as_of_date: date_type,
+) -> dict[str, dict[str, float | None]]:
+    current_positions = await deps.db.get_all_positions()
+    current_cash = await deps.db.get_cash_balances()
+    securities = await deps.db.get_all_securities(active_only=False)
+    symbol_currencies = {security["symbol"]: security.get("currency", "EUR") for security in securities}
+    for position in current_positions:
+        symbol_currencies[position["symbol"]] = position.get("currency") or symbol_currencies.get(
+            position["symbol"], "EUR"
+        )
+
+    earliest_start = min(
+        [as_of_date - timedelta(days=days) for days in PERIOD_WINDOWS.values()] + [as_of_date.replace(month=1, day=1)]
+    )
+    trades = await deps.db.get_trades(start_date=earliest_start.isoformat(), limit=10000)
+
+    result: dict[str, dict[str, float | None]] = {}
+    as_of_iso = as_of_date.isoformat()
+
+    async def calculate(start_date: date_type, *, allow_price_fallback: bool = False) -> dict[str, float | None]:
+        start_iso = start_date.isoformat()
+        start_value = await _start_value_from_current_state(
+            deps,
+            current_positions=current_positions,
+            current_cash=current_cash,
+            trades=trades,
+            cash_flows=cash_flows,
+            symbol_currencies=symbol_currencies,
+            start_date=start_iso,
+            allow_price_fallback=allow_price_fallback,
+        )
+        if start_value is None or start_value <= 0:
+            return _empty_period_stat()
+
+        external_cashflow = await _cashflow_value_since(
+            deps,
+            cash_flows,
+            start_date=start_iso,
+            external_only=True,
+        )
+        portfolio_eur = round(current_value - start_value - external_cashflow, 2)
+        portfolio_pct = round((portfolio_eur / start_value) * 100, 2)
+        benchmark_pct = _benchmark_period_return(benchmark_rows, start_iso, as_of_iso)
+        return {
+            "portfolio_eur": portfolio_eur,
+            "portfolio_pct": portfolio_pct,
+            "benchmark_pct": benchmark_pct,
+            "alpha_pct": round(portfolio_pct - benchmark_pct, 2) if benchmark_pct is not None else None,
+        }
+
+    for label, days in PERIOD_WINDOWS.items():
+        result[label] = await calculate(as_of_date - timedelta(days=days), allow_price_fallback=label in {"1W", "1M"})
+    result["YTD"] = await calculate(as_of_date.replace(month=1, day=1))
+
+    all_portfolio_eur = round(current_value - current_net_deposits, 2)
+    all_portfolio_pct = round((all_portfolio_eur / current_net_deposits) * 100, 2) if current_net_deposits > 0 else None
+    result["All"] = {
+        "portfolio_eur": all_portfolio_eur,
+        "portfolio_pct": all_portfolio_pct,
+        "benchmark_pct": None,
+        "alpha_pct": None,
+    }
+    return result
+
+
+async def _snapshot_adjusted_period_stats(
+    deps: CommonDependencies,
+    benchmark_rows: list[dict],
+    *,
+    current_value: float,
+    current_net_deposits: float,
+    cash_flows: list[dict],
+    as_of_date: date_type,
+) -> dict[str, dict[str, float | None]]:
+    """Long-window stats from snapshots, adjusted to the live endpoint value."""
+    from sentinel.portfolio_composition import build_daily_pnl
+
+    snapshots = await deps.db.get_portfolio_snapshots()
+    if not snapshots:
+        return {}
+
+    deposits_by_date: dict[str, float] = {}
+    running = 0.0
+    for cf in sorted([cf for cf in cash_flows if cf["type_id"] in ("card", "card_payout")], key=lambda cf: cf["date"]):
+        amount_eur = await deps.currency.to_eur_for_date(cf["amount"], cf["currency"], cf["date"])
+        running += amount_eur
+        deposits_by_date[cf["date"]] = running
+
+    daily = build_daily_pnl(snapshots, deposits_by_date)
+    dates = [point["date"] for point in daily]
+    as_of_iso = as_of_date.isoformat()
+
+    def index_on_or_before(target: str) -> int | None:
+        index = bisect.bisect_right(dates, target) - 1
+        return index if index >= 0 else None
+
+    def calculate(label: str, start_date: date_type) -> tuple[str, dict[str, float | None]] | None:
+        start_index = index_on_or_before(start_date.isoformat())
+        if start_index is None:
+            return None
+        start = daily[start_index]
+        start_value = start["total_value_eur"]
+        if start_value <= 0:
+            return None
+
+        portfolio_eur = round(current_value - start_value - (current_net_deposits - start["net_deposits_eur"]), 2)
+        portfolio_pct = round((portfolio_eur / start_value) * 100, 2)
+        benchmark_pct = _benchmark_period_return(benchmark_rows, start["date"], as_of_iso)
+        return label, {
+            "portfolio_eur": portfolio_eur,
+            "portfolio_pct": portfolio_pct,
+            "benchmark_pct": benchmark_pct,
+            "alpha_pct": round(portfolio_pct - benchmark_pct, 2) if benchmark_pct is not None else None,
+        }
+
+    pairs = [
+        calculate("6M", as_of_date - timedelta(days=180)),
+        calculate("1Y", as_of_date - timedelta(days=365)),
+        calculate("YTD", as_of_date.replace(month=1, day=1)),
+    ]
+    return dict(pair for pair in pairs if pair is not None)
+
+
+async def _broker_intraday_stat(deps: CommonDependencies, current_value: float) -> dict[str, float | None] | None:
+    """Tradernet account summary exposes the broker's current-vs-close move per position."""
+    if not await deps.broker.connect():
+        return None
+    portfolio = await deps.broker.get_portfolio()
+    total = 0.0
+    used = 0
+    for position in portfolio.get("positions", []):
+        quantity = position.get("quantity")
+        current_price = position.get("current_price")
+        close_price = position.get("close_price")
+        if quantity is None or current_price is None or close_price is None:
+            continue
+        native = (float(current_price) - float(close_price)) * float(quantity)
+        total += await deps.currency.to_eur(native, position.get("currency") or "EUR")
+        used += 1
+    if used == 0:
+        return None
+    portfolio_eur = round(total, 2)
+    start_value = current_value - portfolio_eur
+    portfolio_pct = round((portfolio_eur / start_value) * 100, 2) if start_value > 0 else None
+    return {
+        "portfolio_eur": portfolio_eur,
+        "portfolio_pct": portfolio_pct,
+        "benchmark_pct": None,
+        "alpha_pct": None,
+    }
 
 
 @router.get("")
@@ -255,3 +615,52 @@ async def get_portfolio_pnl_history(
     }
 
     return {"snapshots": result_snapshots, "summary": summary}
+
+
+@router.get("/period-stats")
+async def get_portfolio_period_stats(
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict[str, Any]:
+    """Table-only portfolio period stats using live current value as the endpoint."""
+    cash_flows = await deps.db.get_cash_flows()
+
+    current_net_deposits = 0.0
+    summary = await deps.db.get_cash_flow_summary()
+    for type_id, currencies in summary.items():
+        if type_id not in ("card", "card_payout"):
+            continue
+        for curr, total in currencies.items():
+            amount_eur = await deps.currency.to_eur(total, curr)
+            current_net_deposits += amount_eur if type_id == "card" else -abs(amount_eur)
+
+    benchmark_symbol = await deps.settings.get("performance_benchmark_symbol", "VWCE.EU")
+    benchmark_rows = await deps.db.get_prices(benchmark_symbol)
+    current_value = await Portfolio(db=deps.db).total_value()
+
+    as_of_date = date_type.today()
+    period_stats = await _period_stats_from_reconstructed_starts(
+        deps,
+        benchmark_rows or [],
+        current_value=current_value,
+        current_net_deposits=current_net_deposits,
+        cash_flows=cash_flows,
+        as_of_date=as_of_date,
+    )
+    period_stats.update(
+        await _snapshot_adjusted_period_stats(
+            deps,
+            benchmark_rows or [],
+            current_value=current_value,
+            current_net_deposits=current_net_deposits,
+            cash_flows=cash_flows,
+            as_of_date=as_of_date,
+        )
+    )
+    intraday_stat = await _broker_intraday_stat(deps, current_value)
+    if intraday_stat is not None:
+        period_stats["1D"] = intraday_stat
+    return {
+        "as_of_date": as_of_date.isoformat(),
+        "benchmark_symbol": benchmark_symbol,
+        "period_stats": period_stats,
+    }

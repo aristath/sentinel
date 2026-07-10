@@ -29,6 +29,7 @@ import { SecurityAllocationCard } from '../components/SecurityAllocationCard';
 import { JobsCard } from '../components/JobsCard';
 import { MarketsOpenCard } from '../components/MarketsOpenCard';
 import { PortfolioPnLChart } from '../components/PortfolioPnLChart';
+import { PeriodStatsTable } from '../components/PeriodStatsTable';
 import { PortfolioRatingCard } from '../components/PortfolioRatingCard';
 import { CompositionCard } from '../components/CompositionCard';
 import { ForwardReturnCard } from '../components/ForwardReturnCard';
@@ -45,6 +46,7 @@ import {
   getPlannerForecast,
   getCashFlows,
   getPortfolioPnLHistory,
+  getPortfolioPeriodStats,
   getSettings,
   updateSetting,
 } from '../api/client';
@@ -129,6 +131,12 @@ function UnifiedPage() {
   const { data: pnlData } = useQuery({
     queryKey: ['portfolio-pnl'],
     queryFn: () => getPortfolioPnLHistory(),
+    refetchInterval: 300000, // Refresh every 5 minutes
+  });
+
+  const { data: periodStats } = useQuery({
+    queryKey: ['portfolio-period-stats'],
+    queryFn: () => getPortfolioPeriodStats(),
     refetchInterval: 300000, // Refresh every 5 minutes
   });
 
@@ -470,6 +478,7 @@ function UnifiedPage() {
           {/* P&L Chart */}
           <Card shadow="sm" padding="sm" withBorder className="unified__pnl-chart">
             <Text size="sm" fw={500} mb="xs">Portfolio P&L</Text>
+            <PeriodStatsTable stats={periodStats?.period_stats} />
             <PortfolioPnLChart
               snapshots={pnlData?.snapshots || []}
               summary={pnlData?.summary}

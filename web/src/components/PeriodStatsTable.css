@@ -1,0 +1,52 @@
+.period-stats-scroll {
+  overflow-x: auto;
+  margin-bottom: 10px;
+}
+
+.period-stats-table {
+  width: 100%;
+  min-width: 520px;
+  border-collapse: collapse;
+  table-layout: fixed;
+  font-variant-numeric: tabular-nums;
+}
+
+.period-stats-table caption {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.period-stats-table th,
+.period-stats-table td {
+  padding: 6px 10px;
+  border-bottom: 1px solid rgba(108, 112, 134, 0.22);
+  text-align: right;
+  font-size: 15px;
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.period-stats-table thead th {
+  color: #a6adc8;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.period-stats-table th:first-child {
+  width: 16%;
+  text-align: left;
+}
+
+.period-stats-table tbody th {
+  color: #cdd6f4;
+  font-weight: 600;
+}
+
+.period-stats-table tbody tr:last-child th,
+.period-stats-table tbody tr:last-child td {
+  border-bottom: 0;
+}
