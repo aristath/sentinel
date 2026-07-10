@@ -51,7 +51,7 @@ function StackedBar({ buckets }) {
           display: 'flex',
           width: '100%',
           height: 10,
-          borderRadius: 4,
+          borderRadius: 0,
           overflow: 'hidden',
           background: 'var(--mantine-color-dark-5)',
         }}
@@ -74,7 +74,7 @@ function StackedBar({ buckets }) {
               style={{
                 width: 8,
                 height: 8,
-                borderRadius: 2,
+                borderRadius: 0,
                 background: PALETTE[i % PALETTE.length],
                 flexShrink: 0,
               }}

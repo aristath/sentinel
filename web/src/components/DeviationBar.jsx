@@ -74,7 +74,7 @@ export function DeviationBar({
           position: 'relative',
           height: 10,
           margin: '4px 0 2px',
-          borderRadius: 4,
+          borderRadius: 0,
           background: 'var(--mantine-color-dark-5)',
           overflow: 'hidden',
         }}

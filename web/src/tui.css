@@ -1,0 +1,356 @@
+/**
+ * TUI (Terminal User Interface) Global Styles
+ *
+ * Transforms Mantine components into a terminal-like aesthetic:
+ * - Sharp edges and high-contrast borders
+ * - Dense, information-rich layouts
+ * - ASCII-style decorations and dividers
+ * - Minimal modern UI effects (no shadows, gradients, etc.)
+ */
+
+/* =============================================================================
+   Global Reset & Base
+   ============================================================================= */
+
+* {
+	box-sizing: border-box;
+}
+
+html,
+body {
+	margin: 0;
+	padding: 0;
+	font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+	background-color: #000000;
+}
+
+#root {
+	background-color: #000000;
+	min-height: 100vh;
+}
+
+/* =============================================================================
+   TUI Borders & Dividers
+   ============================================================================= */
+
+/* ASCII-style horizontal divider */
+.tui-divider {
+	height: 1px;
+	background-color: var(--mantine-color-gray-7);
+	margin: 8px 0;
+	border: none;
+}
+
+/* Double-line divider (like box-drawing characters) */
+.tui-divider--double {
+	height: 2px;
+	background-image: linear-gradient(
+		to bottom,
+		var(--mantine-color-gray-7) 0%,
+		var(--mantine-color-gray-7) 50%,
+		transparent 50%,
+		transparent 100%
+	);
+	background-size: 100% 4px;
+	background-repeat: no-repeat;
+	margin: 8px 0;
+	border: none;
+}
+
+/* Vertical divider (for separating columns) */
+.tui-divider--vertical {
+	width: 1px;
+	background-color: var(--mantine-color-gray-7);
+	margin: 0 8px;
+	border: none;
+	align-self: stretch;
+}
+
+/* =============================================================================
+   TUI Panels & Containers
+   ============================================================================= */
+
+/* Panel with TUI styling */
+.tui-panel {
+	background-color: var(--mantine-color-mantle);
+	border: 1px solid var(--mantine-color-surface1);
+	padding: 12px;
+}
+
+/* Panel header */
+.tui-panel__header {
+	background-color: var(--mantine-color-surface0);
+	border-bottom: 1px solid var(--mantine-color-surface1);
+	padding: 8px 12px;
+	margin: -12px -12px 12px -12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	font-size: 0.75rem;
+	letter-spacing: 0.05em;
+}
+
+/* Panel with title bar (like terminal window) */
+.tui-panel--titled {
+	border: 1px solid var(--mantine-color-surface1);
+}
+
+.tui-panel--titled .tui-panel__title-bar {
+	background-color: var(--mantine-color-surface0);
+	border-bottom: 1px solid var(--mantine-color-surface1);
+	padding: 6px 12px;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	font-weight: 600;
+	text-transform: uppercase;
+	font-size: 0.75rem;
+	letter-spacing: 0.05em;
+}
+
+/* =============================================================================
+   TUI Tables
+   ============================================================================= */
+
+.tui-table {
+	width: 100%;
+	border-collapse: collapse;
+	font-size: 0.8125rem;
+}
+
+.tui-table th {
+	background-color: var(--mantine-color-surface0);
+	border: 1px solid var(--mantine-color-surface1);
+	padding: 8px;
+	font-weight: 600;
+	text-transform: uppercase;
+	font-size: 0.75rem;
+	letter-spacing: 0.05em;
+	text-align: left;
+}
+
+.tui-table td {
+	border: 1px solid var(--mantine-color-surface1);
+	padding: 6px 8px;
+}
+
+/* Striped rows for better readability */
+.tui-table--striped tbody tr:nth-child(even) {
+	background-color: color-mix(
+		in srgb,
+		var(--mantine-color-mantle) 50%,
+		transparent
+	);
+}
+
+/* Hover effect (subtle) */
+.tui-table--hover tbody tr:hover {
+	background-color: color-mix(
+		in srgb,
+		var(--mantine-color-surface0) 30%,
+		transparent
+	);
+}
+
+/* =============================================================================
+   TUI Buttons
+   ============================================================================= */
+
+.tui-button {
+	background-color: var(--mantine-color-surface0);
+	border: 1px solid var(--mantine-color-surface1);
+	color: var(--mantine-color-text);
+	padding: 6px 12px;
+	font-family: inherit;
+	font-size: 0.8125rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: all 0.1s ease;
+}
+
+.tui-button:hover {
+	background-color: var(--mantine-color-surface1);
+	border-color: var(--mantine-color-overlay2);
+}
+
+.tui-button--primary {
+	background-color: var(--mantine-color-blue);
+	border-color: var(--mantine-color-blue);
+	color: var(--mantine-color-base);
+}
+
+.tui-button--primary:hover {
+	background-color: color-mix(in srgb, var(--mantine-color-blue) 85%, white);
+	border-color: var(--mantine-color-blue);
+}
+
+.tui-button--success {
+	background-color: var(--mantine-color-green);
+	border-color: var(--mantine-color-green);
+	color: var(--mantine-color-base);
+}
+
+.tui-button--danger {
+	background-color: var(--mantine-color-red);
+	border-color: var(--mantine-color-red);
+	color: var(--mantine-color-base);
+}
+
+/* =============================================================================
+   TUI Status Indicators
+   ============================================================================= */
+
+/* Status badge */
+.tui-status {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 4px 8px;
+	background-color: var(--mantine-color-surface0);
+	border: 1px solid var(--mantine-color-surface1);
+	font-size: 0.75rem;
+	font-weight: 600;
+	text-transform: uppercase;
+}
+
+.tui-status__indicator {
+	width: 8px;
+	height: 8px;
+	border-radius: 0;
+}
+
+.tui-status__indicator--success {
+	background-color: var(--mantine-color-green);
+}
+
+.tui-status__indicator--error {
+	background-color: var(--mantine-color-red);
+}
+
+.tui-status__indicator--warning {
+	background-color: var(--mantine-color-yellow);
+}
+
+.tui-status__indicator--info {
+	background-color: var(--mantine-color-blue);
+}
+
+/* =============================================================================
+   TUI Code Blocks
+   ============================================================================= */
+
+.tui-code {
+	background-color: var(--mantine-color-crust);
+	border: 1px solid var(--mantine-color-surface1);
+	padding: 12px;
+	font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+	font-size: 0.8125rem;
+	overflow-x: auto;
+}
+
+/* =============================================================================
+   TUI Scrollbar (WebKit)
+   ============================================================================= */
+
+.tui-scroll::-webkit-scrollbar {
+	width: 12px;
+	height: 12px;
+}
+
+.tui-scroll::-webkit-scrollbar-track {
+	background: var(--mantine-color-mantle);
+	border: 1px solid var(--mantine-color-surface1);
+}
+
+.tui-scroll::-webkit-scrollbar-thumb {
+	background: var(--mantine-color-surface1);
+	border: 2px solid var(--mantine-color-mantle);
+}
+
+.tui-scroll::-webkit-scrollbar-thumb:hover {
+	background: var(--mantine-color-overlay2);
+}
+
+/* =============================================================================
+   TUI Utility Classes
+   ============================================================================= */
+
+/* Sharp corners */
+.tui-sharp {
+	border-radius: 0 !important;
+}
+
+/* High contrast border */
+.tui-border {
+	border: 1px solid var(--mantine-color-surface1) !important;
+}
+
+/* Dense spacing */
+.tui-dense {
+	padding: 8px !important;
+}
+
+/* Uppercase labels */
+.tui-label {
+	text-transform: uppercase;
+	font-size: 0.75rem;
+	font-weight: 600;
+	letter-spacing: 0.05em;
+}
+
+/* Monospace text */
+.tui-mono {
+	font-family: "JetBrains Mono", "Fira Code", Consolas, monospace;
+}
+
+/* =============================================================================
+   TUI Animations
+   ============================================================================= */
+
+/* Blink cursor (for loading states) */
+@keyframes tui-blink {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0;
+	}
+}
+
+.tui-blink {
+	animation: tui-blink 1s step-end infinite;
+}
+
+/* Scanline effect (optional, for extra TUI vibes) */
+@keyframes tui-scanline {
+	0% {
+		transform: translateY(-100%);
+	}
+	100% {
+		transform: translateY(100%);
+	}
+}
+
+.tui-scanline {
+	position: relative;
+	overflow: hidden;
+}
+
+.tui-scanline::after {
+	content: "";
+	position: absolute;
+	top: 0;
+	left: 0;
+	right: 0;
+	height: 20px;
+	background: linear-gradient(
+		to bottom,
+		transparent,
+		color-mix(in srgb, var(--mantine-color-text) 5%, transparent),
+		transparent
+	);
+	animation: tui-scanline 3s linear infinite;
+	pointer-events: none;
+}

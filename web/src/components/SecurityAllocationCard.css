@@ -2,132 +2,145 @@
 }
 
 .allocation-table {
-  width: 100%;
-  border-collapse: collapse;
-  table-layout: fixed;
+	width: 100%;
+	border-collapse: collapse;
+	table-layout: fixed;
 }
 
 .allocation-table__symbol {
-  width: 76px;
-  padding: 4px 8px 4px 0;
-  font-size: 12px;
-  font-family: monospace;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+	width: 76px;
+	padding: 4px 8px 4px 0;
+	font-size: 12px;
+	font-family: monospace;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
 .allocation-table__bar-cell {
-  width: 100%;
-  padding: 4px 8px 4px 0;
+	width: 100%;
+	padding: 4px 8px 4px 0;
 }
 
 .allocation-table__numbers {
-  width: 132px;
-  padding: 4px 0;
-  color: var(--mantine-color-gray-4);
-  font-size: 11px;
-  text-align: right;
-  white-space: nowrap;
+	width: 132px;
+	padding: 4px 0;
+	color: var(--mantine-color-overlay1);
+	font-size: 11px;
+	text-align: right;
+	white-space: nowrap;
 }
 
 .allocation-table__arrow {
-  padding: 0 4px;
-  color: var(--mantine-color-gray-6);
+	padding: 0 4px;
+	color: var(--mantine-color-overlay0);
 }
 
 .allocation-table__buy {
-  color: var(--mantine-color-green-6);
-  font-weight: 600;
+	color: var(--mantine-color-green-6);
+	font-weight: 600;
 }
 
 .allocation-table__sell {
-  color: var(--mantine-color-red-6);
-  font-weight: 600;
+	color: var(--mantine-color-red-6);
+	font-weight: 600;
 }
 
 .allocation-table__target {
-  padding-left: 4px;
-  color: var(--mantine-color-blue-5);
+	padding-left: 4px;
+	color: var(--mantine-color-blue-5);
 }
 
 .allocation-bar {
-  position: relative;
-  display: flex;
-  width: 100%;
-  height: 16px;
-  border-radius: 2px;
-  overflow: hidden;
-  background-color: color-mix(in srgb, var(--mantine-color-gray-6) 18%, transparent);
+	position: relative;
+	display: flex;
+	width: 100%;
+	height: 16px;
+	border-radius: 0;
+	overflow: hidden;
+	background-color: color-mix(
+		in srgb,
+		var(--mantine-color-surface1) 18%,
+		transparent
+	);
+	border: 1px solid var(--mantine-color-surface1);
 }
 
 .allocation-bar__segment {
-  height: 100%;
+	height: 100%;
 }
 
 .allocation-bar__segment--gray {
-  background-color: var(--mantine-color-gray-6);
+	background-color: var(--mantine-color-gray-6);
 }
 
 .allocation-bar__segment--green {
-  background-color: var(--mantine-color-green-6);
+	background-color: var(--mantine-color-green-6);
 }
 
 .allocation-bar__segment--red {
-  background-color: var(--mantine-color-red-6);
+	background-color: var(--mantine-color-red-6);
 }
 
 .allocation-bar__segment--future {
-  opacity: 0.3;
+	opacity: 0.3;
 }
 
 .allocation-bar__ideal {
-  position: absolute;
-  top: -2px;
-  bottom: -2px;
-  width: 2px;
-  background-color: var(--mantine-color-blue-5);
-  transform: translateX(-1px);
+	position: absolute;
+	top: -2px;
+	bottom: -2px;
+	width: 2px;
+	background-color: var(--mantine-color-blue-5);
+	transform: translateX(-1px);
 }
 
 .allocation-legend {
-  padding-top: 4px;
+	padding-top: 4px;
 }
 
 .allocation-legend__swatch {
-  display: inline-block;
-  width: 12px;
-  height: 10px;
-  border-radius: 2px;
-  flex-shrink: 0;
+	display: inline-block;
+	width: 12px;
+	height: 10px;
+	border-radius: 0;
+	flex-shrink: 0;
+	border: 1px solid var(--mantine-color-surface1);
 }
 
-.allocation-legend__swatch--gray  { background-color: var(--mantine-color-gray-6); }
-.allocation-legend__swatch--green { background-color: var(--mantine-color-green-6); }
-.allocation-legend__swatch--red   { background-color: var(--mantine-color-red-6); }
+.allocation-legend__swatch--gray {
+	background-color: var(--mantine-color-gray-6);
+}
+.allocation-legend__swatch--green {
+	background-color: var(--mantine-color-green-6);
+}
+.allocation-legend__swatch--red {
+	background-color: var(--mantine-color-red-6);
+}
 .allocation-legend__swatch--future-green {
-  background-color: var(--mantine-color-green-6);
-  opacity: 0.3;
+	background-color: var(--mantine-color-green-6);
+	opacity: 0.3;
 }
 
 /* The ideal marker in the bar is a thin vertical line, so its legend swatch
    matches that shape rather than the segments' filled blocks. */
 .allocation-legend__swatch--ideal {
-  width: 2px;
-  height: 12px;
-  background-color: var(--mantine-color-blue-5);
+	width: 2px;
+	height: 12px;
+	background-color: var(--mantine-color-blue-5);
+	border: none;
 }
 
 @media (max-width: 520px) {
-  .allocation-table {
-    table-layout: auto;
-  }
+	.allocation-table {
+		table-layout: auto;
+	}
 
-  .allocation-table__symbol {
-    width: 62px;
-  }
+	.allocation-table__symbol {
+		width: 62px;
+	}
 
-  .allocation-table__numbers {
-    display: none;
-  }
+	.allocation-table__numbers {
+		display: none;
+	}
 }

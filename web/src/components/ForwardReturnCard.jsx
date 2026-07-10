@@ -37,7 +37,7 @@ function ChartTooltip({ active, payload, label }) {
         background: 'var(--mantine-color-dark-7)',
         border: '1px solid var(--mantine-color-dark-4)',
         padding: '6px 8px',
-        borderRadius: 4,
+        borderRadius: 0,
         fontSize: 11,
       }}
     >
