@@ -24,9 +24,9 @@ from sentinel.strategy import (
 )
 
 # A security only participates in the ideal allocation if the user has actively
-# endorsed it above the configured threshold. The rebalance engine still sees
-# non-qualifying securities so it can plan sells / maintenance on legacy
-# holdings; this threshold only affects what the *ideal* portfolio holds.
+# endorsed it above the configured threshold and it is buyable. The rebalance
+# engine still sees non-qualifying securities so it can plan sells / maintenance
+# on legacy holdings; these gates only affect what the *ideal* portfolio holds.
 
 
 class AllocationCalculator:
@@ -181,6 +181,8 @@ class AllocationCalculator:
             # Signals stay populated above so the rebalance engine can still
             # plan sells / maintenance on legacy holdings.
             if stored_preference < ideal_qualifying_threshold:
+                continue
+            if not int(sec.get("allow_buy", 1) or 0):
                 continue
 
             baseline_weight = max(0.001, float(signal.get("core_rank", 0.0) or 0.0) + 1.0)

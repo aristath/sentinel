@@ -481,6 +481,56 @@ class TestBuildRecommendationPaths:
         assert rec is None
 
     @pytest.mark.asyncio
+    async def test_cannot_buy_security_can_still_sell(self, _make_engine, _settings_ctx):
+        engine = _make_engine()
+        engine._calculate_months_to_self_correct = AsyncMock(return_value=4.0)
+        rec = await engine._build_recommendation(
+            symbol="NO_BUY_HELD",
+            ideal={"NO_BUY_HELD": 0.0, "BUYABLE": 0.2},
+            current={"NO_BUY_HELD": 0.1},
+            total_value=10000.0,
+            security_data={
+                "NO_BUY_HELD": {
+                    "price": 100.0,
+                    "currency": "EUR",
+                    "fx_rate": 1.0,
+                    "lot_size": 1,
+                    "current_qty": 10,
+                    "avg_cost": 90.0,
+                    "allow_buy": 0,
+                    "allow_sell": 1,
+                    "trade_blocked": False,
+                    "lot_class": "standard",
+                    "ticket_pct": 0.0,
+                    "min_ticket_eur": 0,
+                    "state": {},
+                }
+            },
+            contrarian_scores={},
+            signal_data={
+                "NO_BUY_HELD": {
+                    "sleeve": "core",
+                    "opp_score": 0.2,
+                    "user_multiplier": 0.6,
+                },
+                "BUYABLE": {
+                    "sleeve": "core",
+                    "opp_score": 0.8,
+                    "user_multiplier": 0.9,
+                },
+            },
+            min_trade_value=100.0,
+            settings_ctx={
+                **_settings_ctx,
+                "strategy_rotation_threshold": 0.8,
+            },
+            avg_monthly_deposit_6m=500.0,
+        )
+
+        assert rec is not None
+        assert rec.action == "sell"
+
+    @pytest.mark.asyncio
     async def test_cannot_sell_returns_none(self, _make_engine, _settings_ctx):
         engine = _make_engine()
         rec = await engine._build_recommendation(

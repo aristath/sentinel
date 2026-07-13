@@ -153,6 +153,55 @@ async def test_low_preference_security_is_excluded_from_ideal():
 
 
 @pytest.mark.asyncio
+async def test_buy_disabled_security_is_excluded_from_ideal():
+    """A security that cannot be bought must not consume ideal allocation.
+
+    It still has signals computed by the allocator so the rebalance engine can
+    handle existing holdings on the sell side.
+    """
+    now_iso = datetime.now(timezone.utc).isoformat()
+    db = MagicMock()
+    db.cache_get = AsyncMock(return_value=None)
+    db.cache_set = AsyncMock()
+    db.get_all_securities = AsyncMock(
+        return_value=[
+            {
+                "symbol": "NO_BUY",
+                "user_multiplier": 1.0,
+                "user_multiplier_updated_at": now_iso,
+                "allow_buy": 0,
+                "allow_sell": 1,
+            },
+            {
+                "symbol": "BUYABLE",
+                "user_multiplier": 0.7,
+                "user_multiplier_updated_at": now_iso,
+                "allow_buy": 1,
+                "allow_sell": 1,
+            },
+        ]
+    )
+    db.get_prices = AsyncMock(return_value=_flat_prices())
+    db.get_uninvested_dividends = AsyncMock(return_value={})
+
+    calculator = AllocationCalculator(
+        db=db,
+        portfolio=MagicMock(),
+        currency=MagicMock(),
+        settings=_allocation_settings(),
+    )
+
+    allocations = await calculator.calculate_ideal_portfolio()
+    diagnostics = calculator.get_last_signal_bundle()
+
+    assert allocations.get("NO_BUY", 0.0) == 0.0
+    assert abs(allocations["BUYABLE"] - 1.0) < 1e-6
+    assert diagnostics is not None
+    assert "NO_BUY" in diagnostics["rebalance_signals"]
+    assert "NO_BUY" not in diagnostics["allocation_decomposition"]["symbols"]
+
+
+@pytest.mark.asyncio
 async def test_strong_algo_signal_cannot_resurrect_excluded_security():
     """Regression: even a security with a dominant contrarian signal — the
     kind that previously let INTC@0.45 beat OPAP@0.55 — must stay at zero in
