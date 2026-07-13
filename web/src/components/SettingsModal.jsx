@@ -52,6 +52,8 @@ export function SettingsModal({ opened, onClose }) {
       strategy_core_target_pct: Number(settings.strategy_core_target_pct ?? 80),
       strategy_opportunity_target_pct: Number(settings.strategy_opportunity_target_pct ?? 20),
       strategy_min_opp_score: Number(settings.strategy_min_opp_score ?? 0.55),
+      strategy_ideal_qualifying_threshold: Number(settings.strategy_ideal_qualifying_threshold ?? 0.65),
+      strategy_strategic_buy_threshold: Number(settings.strategy_strategic_buy_threshold ?? 0.70),
       strategy_core_floor_pct: Number(settings.strategy_core_floor_pct ?? 0.05),
       strategy_entry_t1_dd: Number(settings.strategy_entry_t1_dd ?? -0.10),
       strategy_entry_t2_dd: Number(settings.strategy_entry_t2_dd ?? -0.16),
@@ -223,6 +225,26 @@ export function SettingsModal({ opened, onClose }) {
                 description="Minimum opp score required to enter opportunity sleeve"
                 value={strategyDraft?.strategy_min_opp_score ?? settings?.strategy_min_opp_score ?? 0.55}
                 onChange={(value) => handleStrategyChange('strategy_min_opp_score', value)}
+                min={0}
+                max={1}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Ideal Qualification Threshold"
+                description="Minimum Clara preference required for a security to receive an ideal target"
+                value={strategyDraft?.strategy_ideal_qualifying_threshold ?? settings?.strategy_ideal_qualifying_threshold ?? 0.65}
+                onChange={(value) => handleStrategyChange('strategy_ideal_qualifying_threshold', value)}
+                min={0}
+                max={1}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Strategic Buy Threshold"
+                description="Minimum Clara preference that counts as strategic buy pressure"
+                value={strategyDraft?.strategy_strategic_buy_threshold ?? settings?.strategy_strategic_buy_threshold ?? 0.70}
+                onChange={(value) => handleStrategyChange('strategy_strategic_buy_threshold', value)}
                 min={0}
                 max={1}
                 decimalScale={3}

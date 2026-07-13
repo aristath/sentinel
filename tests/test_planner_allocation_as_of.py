@@ -59,6 +59,7 @@ def _allocation_settings(settings_values=None):
         "strategy_core_target_pct": 80,
         "strategy_opportunity_target_pct": 20,
         "strategy_min_opp_score": 0.55,
+        "strategy_ideal_qualifying_threshold": 0.65,
         "max_position_pct": 100,
         "clara_preference_strength": 5.0,
         "user_multiplier_blend_pct": 80.0,
@@ -80,9 +81,9 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
     db.cache_set = AsyncMock()
     db.get_all_securities = AsyncMock(
         return_value=[
-            # Both rated above neutral so both participate in the ideal.
+            # Both rated above the configured threshold so both participate in the ideal.
             {"symbol": "AMD", "user_multiplier": 0.9, "user_multiplier_updated_at": now_iso},
-            {"symbol": "BASE", "user_multiplier": 0.6, "user_multiplier_updated_at": now_iso},
+            {"symbol": "BASE", "user_multiplier": 0.65, "user_multiplier_updated_at": now_iso},
         ]
     )
     db.get_prices = AsyncMock(return_value=_flat_prices())
@@ -101,7 +102,7 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
     diagnostics = calculator.get_last_signal_bundle()
 
     assert allocations["AMD"] > allocations["BASE"]
-    # AMD's slider (0.9) is much higher than BASE's (0.6), so AMD's Clara share
+    # AMD's slider (0.9) is much higher than BASE's threshold-level 0.65, so AMD's Clara share
     # dominates. With a non-trivial competitor in the pool it won't reach 100%,
     # but it should clearly exceed 70% of the total ideal.
     assert allocations["AMD"] > 0.7
@@ -111,21 +112,19 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
 
 @pytest.mark.asyncio
 async def test_low_preference_security_is_excluded_from_ideal():
-    """A security at or below the neutral 0.5 slider has expressed no buy
-    interest. It should drop completely out of the ideal — even though the
-    algo's contrarian signal might rank it highly — so capital flows to the
-    actively-endorsed names."""
+    """A security below the configured Clara threshold should drop completely
+    out of the ideal — even though the algo's contrarian signal might rank it
+    highly — so capital flows to the actively-endorsed names."""
     now_iso = datetime.now(timezone.utc).isoformat()
     db = MagicMock()
     db.cache_get = AsyncMock(return_value=None)
     db.cache_set = AsyncMock()
     db.get_all_securities = AsyncMock(
         return_value=[
-            # One excluded (0.02 — strong avoid), one excluded at neutral (0.5),
-            # rest endorsed.
+            # Three excluded below threshold, rest endorsed.
             {"symbol": "AVOID", "user_multiplier": 0.02, "user_multiplier_updated_at": now_iso},
             {"symbol": "NEUTRAL", "user_multiplier": 0.5, "user_multiplier_updated_at": now_iso},
-            {"symbol": "ENDORSED1", "user_multiplier": 0.6, "user_multiplier_updated_at": now_iso},
+            {"symbol": "LOW", "user_multiplier": 0.6, "user_multiplier_updated_at": now_iso},
             {"symbol": "ENDORSED2", "user_multiplier": 0.7, "user_multiplier_updated_at": now_iso},
             {"symbol": "ENDORSED3", "user_multiplier": 0.8, "user_multiplier_updated_at": now_iso},
         ]
@@ -142,14 +141,15 @@ async def test_low_preference_security_is_excluded_from_ideal():
 
     allocations = await calculator.calculate_ideal_portfolio()
 
-    # AVOID (0.02) and NEUTRAL (0.5) excluded entirely.
+    # AVOID (0.02), NEUTRAL (0.5), and LOW (0.6) are below the default 0.65 threshold.
     assert allocations.get("AVOID", 0.0) == 0.0
     assert allocations.get("NEUTRAL", 0.0) == 0.0
+    assert allocations.get("LOW", 0.0) == 0.0
     # The endorsed securities split the full 100%.
-    endorsed_total = allocations["ENDORSED1"] + allocations["ENDORSED2"] + allocations["ENDORSED3"]
+    endorsed_total = allocations["ENDORSED2"] + allocations["ENDORSED3"]
     assert abs(endorsed_total - 1.0) < 1e-6
     # Higher slider gets bigger share.
-    assert allocations["ENDORSED3"] > allocations["ENDORSED2"] > allocations["ENDORSED1"]
+    assert allocations["ENDORSED3"] > allocations["ENDORSED2"]
 
 
 @pytest.mark.asyncio
@@ -165,7 +165,7 @@ async def test_strong_algo_signal_cannot_resurrect_excluded_security():
     db.get_all_securities = AsyncMock(
         return_value=[
             {"symbol": "ALGO_FAV", "user_multiplier": 0.45, "user_multiplier_updated_at": now_iso},
-            {"symbol": "USER_FAV", "user_multiplier": 0.55, "user_multiplier_updated_at": now_iso},
+            {"symbol": "USER_FAV", "user_multiplier": 0.7, "user_multiplier_updated_at": now_iso},
         ]
     )
 

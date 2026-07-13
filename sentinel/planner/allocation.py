@@ -24,12 +24,9 @@ from sentinel.strategy import (
 )
 
 # A security only participates in the ideal allocation if the user has actively
-# endorsed it — slider strictly above neutral. Anything at or below 0.5 is
-# treated as "no buy interest"; capital that would have flowed there is freed
-# up for the securities the user actually wants. Note: the rebalance engine
-# still sees these securities (so it can plan sells / maintenance on legacy
-# holdings) — this threshold only affects what the *ideal* portfolio holds.
-IDEAL_QUALIFYING_THRESHOLD = 0.5
+# endorsed it above the configured threshold. The rebalance engine still sees
+# non-qualifying securities so it can plan sells / maintenance on legacy
+# holdings; this threshold only affects what the *ideal* portfolio holds.
 
 
 class AllocationCalculator:
@@ -75,6 +72,7 @@ class AllocationCalculator:
             "strategy_core_target_pct": DEFAULTS["strategy_core_target_pct"],
             "strategy_opportunity_target_pct": DEFAULTS["strategy_opportunity_target_pct"],
             "strategy_min_opp_score": DEFAULTS["strategy_min_opp_score"],
+            "strategy_ideal_qualifying_threshold": DEFAULTS["strategy_ideal_qualifying_threshold"],
             "max_position_pct": DEFAULTS["max_position_pct"],
             "clara_preference_strength": DEFAULTS["clara_preference_strength"],
             "user_multiplier_blend_pct": DEFAULTS["user_multiplier_blend_pct"],
@@ -115,6 +113,7 @@ class AllocationCalculator:
         entry_memory_days = int(config["strategy_entry_memory_days"])
         memory_max_boost = config["strategy_memory_max_boost"]
         preference_strength = config["clara_preference_strength"]
+        ideal_qualifying_threshold = config["strategy_ideal_qualifying_threshold"]
 
         # `user_multiplier_blend_pct` is the share of a security's score that
         # comes from its stored slider value; the remainder comes from the
@@ -176,13 +175,12 @@ class AllocationCalculator:
             symbol_signals[symbol] = signal
             rebalance_signals[symbol] = dict(signal)
 
-            # Securities the user hasn't explicitly endorsed (slider at or below
-            # the neutral 0.5 mark) are excluded from the ideal entirely — both
-            # the Clara half AND the algo half. The user has said "no" or "no
-            # opinion"; capital flows to the securities they actually want.
+            # Securities below the configured Clara threshold are excluded from
+            # the ideal entirely — both the Clara half AND the algo half. Capital
+            # flows to the securities the user actually wants.
             # Signals stay populated above so the rebalance engine can still
             # plan sells / maintenance on legacy holdings.
-            if stored_preference <= IDEAL_QUALIFYING_THRESHOLD:
+            if stored_preference < ideal_qualifying_threshold:
                 continue
 
             baseline_weight = max(0.001, float(signal.get("core_rank", 0.0) or 0.0) + 1.0)

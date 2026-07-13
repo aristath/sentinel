@@ -8,6 +8,8 @@ This is a facade that delegates to specialized components:
 
 from __future__ import annotations
 
+from calendar import monthrange
+from datetime import date
 from typing import Any, Optional
 
 from sentinel.broker import Broker
@@ -161,12 +163,14 @@ class Planner:
         initial_state: PlannerState | None = None,
         monthly_deposit_eur: float | None = None,
         min_trade_value: Optional[float] = None,
+        start_date: date | None = None,
     ) -> list[dict[str, Any]]:
         """Forecast repeated monthly plans from explicit EUR planner state."""
         if months <= 0:
             return []
 
         state = self._copy_state(initial_state or await self.build_current_state())
+        forecast_start_date = start_date or date.today()
         deposit_eur = (
             float(monthly_deposit_eur)
             if monthly_deposit_eur is not None
@@ -175,9 +179,14 @@ class Planner:
         forecast: list[dict[str, Any]] = []
 
         for month_index in range(1, months + 1):
+            month_as_of_date = self._add_months(forecast_start_date, month_index - 1).isoformat()
             starting_cash = self._cash_eur_from_state(state)
             starting_total = self._total_value_from_state(state)
-            recommendations = await self.get_recommendations(min_trade_value=min_trade_value, state=state)
+            recommendations = await self.get_recommendations(
+                min_trade_value=min_trade_value,
+                as_of_date=month_as_of_date,
+                state=state,
+            )
             value_summary = await self._recommendation_value_summary(recommendations)
             state = await self._state_after_recommendations(state, recommendations)
             ending_cash = self._cash_eur_from_state(state)
@@ -186,6 +195,7 @@ class Planner:
             forecast.append(
                 {
                     "month": month_index,
+                    "as_of_date": month_as_of_date,
                     "starting_cash_eur": starting_cash,
                     "starting_total_value_eur": starting_total,
                     "recommendations": recommendations,
@@ -200,6 +210,14 @@ class Planner:
                 state.cash_balances["EUR"] = self._cash_eur_from_state(state) + deposit_eur
 
         return forecast
+
+    @staticmethod
+    def _add_months(source: date, months: int) -> date:
+        month_index = source.month - 1 + months
+        year = source.year + month_index // 12
+        month = month_index % 12 + 1
+        day = min(source.day, monthrange(year, month)[1])
+        return date(year, month, day)
 
     async def build_current_state(self) -> PlannerState:
         """Build planner state from live portfolio inputs, converted to EUR."""

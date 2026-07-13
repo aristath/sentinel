@@ -113,6 +113,7 @@ class RebalanceEngine:
             "strategy_lot_standard_max_pct": DEFAULTS["strategy_lot_standard_max_pct"],
             "strategy_lot_coarse_max_pct": DEFAULTS["strategy_lot_coarse_max_pct"],
             "strategy_min_opp_score": DEFAULTS["strategy_min_opp_score"],
+            "strategy_strategic_buy_threshold": DEFAULTS["strategy_strategic_buy_threshold"],
             "strategy_entry_t1_dd": DEFAULTS["strategy_entry_t1_dd"],
             "strategy_entry_t2_dd": DEFAULTS["strategy_entry_t2_dd"],
             "strategy_entry_t3_dd": DEFAULTS["strategy_entry_t3_dd"],
@@ -636,6 +637,10 @@ class RebalanceEngine:
         entry_t1_dd = settings_ctx["strategy_entry_t1_dd"]
         entry_t2_dd = settings_ctx["strategy_entry_t2_dd"]
         entry_t3_dd = settings_ctx["strategy_entry_t3_dd"]
+        strategic_buy_threshold = settings_ctx.get(
+            "strategy_strategic_buy_threshold",
+            DEFAULTS["strategy_strategic_buy_threshold"],
+        )
 
         if price <= 0:
             return None
@@ -810,7 +815,7 @@ class RebalanceEngine:
             if sleeve == "core" and current_alloc <= 1e-6 and lot_class == "standard":
                 clara_target = float(signal.get("clara_target_pct", 0.0) or 0.0)
                 user_multiplier = float(signal.get("user_multiplier", 0.5) or 0.5)
-                if clara_target <= 1e-9 or not has_strategic_buy_pressure(user_multiplier):
+                if clara_target <= 1e-9 or not has_strategic_buy_pressure(user_multiplier, strategic_buy_threshold):
                     core_new_min_score = settings_ctx["strategy_core_new_min_score"]
                     core_new_min_dip = settings_ctx["strategy_core_new_min_dip_score"]
                     dip_score = float(signal.get("dip_score", 0.0) or 0.0)
@@ -923,6 +928,7 @@ class RebalanceEngine:
                 target_alloc=target_alloc,
                 signal=signal,
                 lot_class=lot_class,
+                strategic_buy_threshold=strategic_buy_threshold,
             )
         else:
             action = "sell"

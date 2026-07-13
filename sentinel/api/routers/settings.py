@@ -18,6 +18,8 @@ STRATEGY_KEYS = {
     "strategy_core_target_pct",
     "strategy_opportunity_target_pct",
     "strategy_min_opp_score",
+    "strategy_ideal_qualifying_threshold",
+    "strategy_strategic_buy_threshold",
     "strategy_core_floor_pct",
     "strategy_entry_t1_dd",
     "strategy_entry_t2_dd",
@@ -206,6 +208,13 @@ async def set_settings_batch(
         raise HTTPException(status_code=400, detail="Core and opportunity targets must sum to 100")
     if parsed_values["strategy_min_opp_score"] < 0 or parsed_values["strategy_min_opp_score"] > 1:
         raise HTTPException(status_code=400, detail="'strategy_min_opp_score' must be in [0, 1]")
+    if (
+        parsed_values["strategy_ideal_qualifying_threshold"] < 0
+        or parsed_values["strategy_ideal_qualifying_threshold"] > 1
+    ):
+        raise HTTPException(status_code=400, detail="'strategy_ideal_qualifying_threshold' must be in [0, 1]")
+    if parsed_values["strategy_strategic_buy_threshold"] < 0 or parsed_values["strategy_strategic_buy_threshold"] > 1:
+        raise HTTPException(status_code=400, detail="'strategy_strategic_buy_threshold' must be in [0, 1]")
     if parsed_values["strategy_core_floor_pct"] < 0 or parsed_values["strategy_core_floor_pct"] > 1:
         raise HTTPException(status_code=400, detail="'strategy_core_floor_pct' must be in [0, 1]")
     for key in ("strategy_entry_t1_dd", "strategy_entry_t2_dd", "strategy_entry_t3_dd"):

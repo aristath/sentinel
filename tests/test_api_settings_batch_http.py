@@ -22,6 +22,8 @@ def strategy_values(**overrides):
         "strategy_core_target_pct": 70,
         "strategy_opportunity_target_pct": 30,
         "strategy_min_opp_score": 0.6,
+        "strategy_ideal_qualifying_threshold": 0.65,
+        "strategy_strategic_buy_threshold": 0.7,
         "strategy_core_floor_pct": 0.1,
         "strategy_entry_t1_dd": -0.10,
         "strategy_entry_t2_dd": -0.16,

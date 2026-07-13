@@ -1,5 +1,6 @@
 """Tests for input-driven planner state."""
 
+from datetime import date
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -282,6 +283,36 @@ class TestPlannerForecast:
         assert second_state.cash_balances == {"EUR": 3000.0}
         assert second_state.positions[0]["symbol"] == "AAA"
         assert second_state.positions[0]["value_eur"] == 1000.0
+
+    @pytest.mark.asyncio
+    async def test_forecast_advances_as_of_date_each_month(self):
+        planner = Planner(db=MagicMock(), broker=MagicMock(), portfolio=MagicMock())
+        planner._settings.get = AsyncMock(
+            side_effect=lambda key, default=None: {
+                "transaction_fee_fixed": 0.0,
+                "transaction_fee_percent": 0.0,
+            }.get(key, default)
+        )
+        planner.get_recommendations = AsyncMock(return_value=[])
+
+        initial_state = PlannerState(
+            positions=[],
+            cash_balances={"EUR": 1000.0},
+            avg_monthly_net_deposit_eur=0.0,
+        )
+
+        forecast = await planner.forecast_monthly_plans(
+            months=3,
+            initial_state=initial_state,
+            start_date=date(2026, 1, 31),
+        )
+
+        assert [month["as_of_date"] for month in forecast] == ["2026-01-31", "2026-02-28", "2026-03-31"]
+        assert [call.kwargs["as_of_date"] for call in planner.get_recommendations.await_args_list] == [
+            "2026-01-31",
+            "2026-02-28",
+            "2026-03-31",
+        ]
 
     @pytest.mark.asyncio
     async def test_forecast_includes_monthly_eur_trade_totals(self):

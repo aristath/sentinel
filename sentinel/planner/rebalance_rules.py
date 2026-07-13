@@ -111,6 +111,7 @@ def generate_buy_reason(
     target_alloc: float,
     signal: dict[str, float | int | str],
     lot_class: str,
+    strategic_buy_threshold: float = 0.70,
 ) -> str:
     """Generate human-readable reason for a buy recommendation."""
     underweight = (target_alloc - current_alloc) * 100
@@ -120,7 +121,7 @@ def generate_buy_reason(
     clara_target = float(signal.get("clara_target_pct", 0.0) or 0.0) * 100
     user_multiplier = float(signal.get("user_multiplier", 0.5) or 0.5)
 
-    if clara_target > 0 and has_strategic_buy_pressure(user_multiplier):
+    if clara_target > 0 and has_strategic_buy_pressure(user_multiplier, strategic_buy_threshold):
         return (
             f"Strategic preference buy: underweight by {underweight:.1f}%, "
             f"Clara target={clara_target:.1f}%, user multiplier={user_multiplier:.2f}, "

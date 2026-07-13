@@ -18,7 +18,7 @@ from typing import Any
 
 SECONDS_PER_WEEK = 7 * 24 * 60 * 60
 NEUTRAL_USER_MULTIPLIER = 0.5
-STRATEGIC_BUY_PRESSURE_THRESHOLD = 0.55
+STRATEGIC_BUY_PRESSURE_THRESHOLD = 0.70
 
 # Default per-week fade factor. One decay step at this rate leaves 90% of the
 # deviation from neutral; 52 successive steps leave (0.9 ** 52) ≈ 0.0042 of
@@ -118,9 +118,12 @@ def preference_tilt(effective_multiplier: float, strength: float) -> float:
     return math.exp(max(-20.0, min(20.0, exponent)))
 
 
-def has_strategic_buy_pressure(effective_multiplier: object) -> bool:
+def has_strategic_buy_pressure(
+    effective_multiplier: object,
+    threshold: object = STRATEGIC_BUY_PRESSURE_THRESHOLD,
+) -> bool:
     """Return whether a stored preference is meaningfully above neutral."""
-    return normalize_user_multiplier(effective_multiplier) >= STRATEGIC_BUY_PRESSURE_THRESHOLD
+    return normalize_user_multiplier(effective_multiplier) >= normalize_user_multiplier(threshold)
 
 
 def is_explicit_downgrade(security: dict[str, Any]) -> bool:

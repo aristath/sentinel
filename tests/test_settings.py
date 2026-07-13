@@ -85,6 +85,8 @@ class TestSettingsDefaults:
             "strategy_core_target_pct",
             "strategy_opportunity_target_pct",
             "strategy_min_opp_score",
+            "strategy_ideal_qualifying_threshold",
+            "strategy_strategic_buy_threshold",
             "strategy_entry_t1_dd",
             "strategy_entry_t2_dd",
             "strategy_entry_t3_dd",

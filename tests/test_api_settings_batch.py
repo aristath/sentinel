@@ -17,6 +17,8 @@ def strategy_values(**overrides):
         "strategy_core_target_pct": 70,
         "strategy_opportunity_target_pct": 30,
         "strategy_min_opp_score": 0.6,
+        "strategy_ideal_qualifying_threshold": 0.65,
+        "strategy_strategic_buy_threshold": 0.7,
         "strategy_core_floor_pct": 0.1,
         "strategy_entry_t1_dd": -0.10,
         "strategy_entry_t2_dd": -0.16,
@@ -109,6 +111,8 @@ async def test_set_settings_batch_persists_strategy_values(deps):
     assert await deps.db.get_setting("strategy_core_target_pct") == 70
     assert await deps.db.get_setting("strategy_opportunity_target_pct") == 30
     assert await deps.db.get_setting("strategy_min_opp_score") == 0.6
+    assert await deps.db.get_setting("strategy_ideal_qualifying_threshold") == 0.65
+    assert await deps.db.get_setting("strategy_strategic_buy_threshold") == 0.7
     assert await deps.db.get_setting("strategy_core_floor_pct") == 0.1
 
 
@@ -120,6 +124,8 @@ async def test_set_settings_batch_rejects_invalid_value_without_partial_write(de
         "strategy_core_target_pct": await deps.db.get_setting("strategy_core_target_pct"),
         "strategy_opportunity_target_pct": await deps.db.get_setting("strategy_opportunity_target_pct"),
         "strategy_min_opp_score": await deps.db.get_setting("strategy_min_opp_score"),
+        "strategy_ideal_qualifying_threshold": await deps.db.get_setting("strategy_ideal_qualifying_threshold"),
+        "strategy_strategic_buy_threshold": await deps.db.get_setting("strategy_strategic_buy_threshold"),
         "strategy_core_floor_pct": await deps.db.get_setting("strategy_core_floor_pct"),
     }
     payload = {"values": strategy_values(strategy_opportunity_target_pct=20, strategy_min_opp_score=-0.1)}

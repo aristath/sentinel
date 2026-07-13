@@ -102,9 +102,10 @@ def test_low_preference_gets_small_strategic_tilt():
 
 
 def test_strategic_buy_pressure_requires_meaningfully_positive_preference():
-    assert has_strategic_buy_pressure(0.55)
+    assert has_strategic_buy_pressure(0.70)
     assert not has_strategic_buy_pressure(0.5)
-    assert not has_strategic_buy_pressure(0.549)
+    assert not has_strategic_buy_pressure(0.699)
+    assert has_strategic_buy_pressure(0.55, threshold=0.55)
 
 
 def test_default_decay_factor_targets_52_week_convergence():

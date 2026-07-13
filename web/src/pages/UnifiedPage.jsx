@@ -20,8 +20,9 @@ import {
   Button,
   ActionIcon,
   Table,
+  Collapse,
 } from '@mantine/core';
-import { IconPlus, IconArrowRight, IconCash, IconWallet, IconListCheck, IconTrendingUp, IconPencil, IconX } from '@tabler/icons-react';
+import { IconPlus, IconArrowRight, IconCash, IconWallet, IconListCheck, IconTrendingUp, IconPencil, IconX, IconChevronDown } from '@tabler/icons-react';
 import { SecurityTable } from '../components/SecurityTable';
 import { AddSecurityModal } from '../components/AddSecurityModal';
 import { DeleteSecurityModal } from '../components/DeleteSecurityModal';
@@ -80,6 +81,32 @@ const SORTS = [
   { value: 'symbol', label: 'Symbol (A-Z)' },
 ];
 
+const COLLAPSED_WIDGETS_STORAGE_KEY = 'sentinel.collapsedWidgets';
+const DEFAULT_COLLAPSED_WIDGETS = {
+  'inactive-securities': true,
+  composition: true,
+  'forward-return': true,
+};
+
+function readCollapsedWidgets() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const stored = window.localStorage?.getItem(COLLAPSED_WIDGETS_STORAGE_KEY);
+    return stored ? { ...DEFAULT_COLLAPSED_WIDGETS, ...JSON.parse(stored) } : DEFAULT_COLLAPSED_WIDGETS;
+  } catch {
+    return DEFAULT_COLLAPSED_WIDGETS;
+  }
+}
+
+function writeCollapsedWidgets(collapsedWidgets) {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage?.setItem(COLLAPSED_WIDGETS_STORAGE_KEY, JSON.stringify(collapsedWidgets));
+  } catch {
+    // Ignore storage failures. The UI remains fully usable without persistence.
+  }
+}
+
 function UnifiedPage() {
   const [period, setPeriod] = useState('1Y');
   const [filter, setFilter] = useState('review');
@@ -88,6 +115,7 @@ function UnifiedPage() {
   const [addModalOpen, setAddModalOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [securityToDelete, setSecurityToDelete] = useState(null);
+  const [collapsedWidgets, setCollapsedWidgets] = useState(readCollapsedWidgets);
 
   const queryClient = useQueryClient();
 
@@ -186,6 +214,10 @@ function UnifiedPage() {
     },
   });
 
+  useEffect(() => {
+    writeCollapsedWidgets(collapsedWidgets);
+  }, [collapsedWidgets]);
+
   const updateMutation = useMutation({
     mutationFn: ({ symbol, data }) => updateSecurity(symbol, data),
     onMutate: async ({ symbol, data }) => {
@@ -261,6 +293,13 @@ function UnifiedPage() {
 
   const handleDelete = async (symbol, sellPosition) => {
     await deleteMutation.mutateAsync({ symbol, sellPosition });
+  };
+
+  const toggleWidget = (widgetId) => {
+    setCollapsedWidgets((current) => ({
+      ...current,
+      [widgetId]: !current[widgetId],
+    }));
   };
 
   // Filter and sort securities
@@ -364,251 +403,329 @@ function UnifiedPage() {
       <div className="unified">
         {/* Main Content */}
         <Stack gap="md" className="unified__main" style={{ minWidth: 0 }}>
+          <CollapsibleWidget
+            id="markets"
+            title="Markets"
+            collapsed={collapsedWidgets.markets}
+            onToggle={toggleWidget}
+          >
+            <MarketsOpenCard />
+          </CollapsibleWidget>
+
           {/* Jobs Card */}
-          <JobsCard />
+          <CollapsibleWidget
+            id="jobs"
+            title="Jobs"
+            collapsed={collapsedWidgets.jobs}
+            onToggle={toggleWidget}
+          >
+            <JobsCard />
+          </CollapsibleWidget>
 
           {/* Status Bar */}
-          <Card shadow="sm" padding="sm" withBorder className="unified__status-bar">
-            <Stack gap="sm" className="unified__status-content">
-              {/* Top row: Portfolio and Cash */}
-              <Group gap="xl" className="unified__status-row unified__status-row--summary">
-                {/* Portfolio Value */}
-                <Group gap="xs" className="unified__status-section unified__status-section--portfolio">
-                  <IconWallet size={22} style={{ opacity: 0.6 }} className="unified__status-icon" />
-                  <Text size="lg" c="dimmed" className="unified__status-label">Portfolio:</Text>
-                  <Text size="lg" fw={600} className="unified__status-value unified__status-value--portfolio">
-                    {formatEur(portfolio?.total_value_eur || 0)}
-                  </Text>
-                </Group>
+          <CollapsibleWidget
+            id="status"
+            title="Portfolio Status"
+            collapsed={collapsedWidgets.status}
+            onToggle={toggleWidget}
+          >
+            <Card shadow="sm" padding="sm" withBorder className="unified__status-bar">
+              <Stack gap="sm" className="unified__status-content">
+                {/* Top row: Portfolio and Cash */}
+                <Group gap="xl" className="unified__status-row unified__status-row--summary">
+                  {/* Portfolio Value */}
+                  <Group gap="xs" className="unified__status-section unified__status-section--portfolio">
+                    <IconWallet size={22} style={{ opacity: 0.6 }} className="unified__status-icon" />
+                    <Text size="lg" c="dimmed" className="unified__status-label">Portfolio:</Text>
+                    <Text size="lg" fw={600} className="unified__status-value unified__status-value--portfolio">
+                      {formatEur(portfolio?.total_value_eur || 0)}
+                    </Text>
+                  </Group>
 
-                {/* Cash */}
-                <Group gap="xs" className="unified__status-section unified__status-section--cash">
-                  <IconCash size={22} style={{ opacity: 0.6 }} className="unified__status-icon" />
-                  <Text size="lg" c="dimmed" className="unified__status-label">Cash:</Text>
-                  {editingCash ? (
-                    <NumberInput
-                      size="sm"
-                      value={cashValue}
-                      onChange={setCashValue}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') cashMutation.mutate(cashValue === '' ? null : cashValue);
-                        if (e.key === 'Escape') setEditingCash(false);
-                      }}
-                      suffix=" €"
-                      decimalScale={2}
-                      autoFocus
-                      style={{ width: 150 }}
-                    />
-                  ) : (
-                    <>
-                      <Text size="lg" fw={600} className="unified__status-value unified__status-value--cash-total">
-                        {formatEur(portfolio?.total_cash_eur || 0)}
-                      </Text>
-                      {simulatedCash != null && (
-                        <>
-                          <Badge size="sm" variant="light" color="yellow">simulated</Badge>
+                  {/* Cash */}
+                  <Group gap="xs" className="unified__status-section unified__status-section--cash">
+                    <IconCash size={22} style={{ opacity: 0.6 }} className="unified__status-icon" />
+                    <Text size="lg" c="dimmed" className="unified__status-label">Cash:</Text>
+                    {editingCash ? (
+                      <NumberInput
+                        size="sm"
+                        value={cashValue}
+                        onChange={setCashValue}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') cashMutation.mutate(cashValue === '' ? null : cashValue);
+                          if (e.key === 'Escape') setEditingCash(false);
+                        }}
+                        suffix=" €"
+                        decimalScale={2}
+                        autoFocus
+                        style={{ width: 150 }}
+                      />
+                    ) : (
+                      <>
+                        <Text size="lg" fw={600} className="unified__status-value unified__status-value--cash-total">
+                          {formatEur(portfolio?.total_cash_eur || 0)}
+                        </Text>
+                        {simulatedCash != null && (
+                          <>
+                            <Badge size="sm" variant="light" color="yellow">simulated</Badge>
+                            <ActionIcon
+                              size="sm"
+                              variant="subtle"
+                              color="red"
+                              onClick={() => cashMutation.mutate(null)}
+                              title="Clear simulated cash"
+                            >
+                              <IconX size={14} />
+                            </ActionIcon>
+                          </>
+                        )}
+                        {isResearchMode && (
                           <ActionIcon
                             size="sm"
                             variant="subtle"
-                            color="red"
-                            onClick={() => cashMutation.mutate(null)}
-                            title="Clear simulated cash"
+                            onClick={() => { setCashValue(portfolio?.total_cash_eur || 0); setEditingCash(true); }}
+                            title="Edit simulated cash"
                           >
-                            <IconX size={14} />
+                            <IconPencil size={14} />
                           </ActionIcon>
-                        </>
-                      )}
-                      {isResearchMode && (
-                        <ActionIcon
-                          size="sm"
-                          variant="subtle"
-                          onClick={() => { setCashValue(portfolio?.total_cash_eur || 0); setEditingCash(true); }}
-                          title="Edit simulated cash"
-                        >
-                          <IconPencil size={14} />
-                        </ActionIcon>
-                      )}
-                    </>
-                  )}
-                  {!editingCash && portfolio?.cash && Object.keys(portfolio.cash).length > 0 && simulatedCash == null && (
-                    <Text size="lg" c="dimmed" className="unified__status-cash-breakdown">
-                      ({Object.entries(portfolio.cash).map(([curr, amt], i) => (
-                        <span key={curr} className={`unified__status-cash-item unified__status-cash-item--${curr.toLowerCase()}`}>
-                          {i > 0 && ', '}
-                          {formatCurrency(amt, curr)}
-                        </span>
-                      ))})
-                    </Text>
-                  )}
-                </Group>
-              </Group>
-
-              {/* Middle row: Cash Flows */}
-              {cashFlows && (
-                <Group gap="xl" className="unified__status-row unified__status-row--cashflows">
-                  <Group gap="xs" className="unified__status-section unified__status-section--cashflows">
-                    <IconTrendingUp size={18} style={{ opacity: 0.6 }} className="unified__status-icon" />
-                    <Text size="sm" c="dimmed">Deposits:</Text>
-                    <Text size="sm" fw={500} c="green">{formatEur(cashFlows.deposits || 0)}</Text>
-                    <Text size="sm" c="dimmed">Withdrawals:</Text>
-                    <Text size="sm" fw={500} c="red">{formatEur(cashFlows.withdrawals || 0)}</Text>
-                    <Text size="sm" c="dimmed">Dividends:</Text>
-                    <Text size="sm" fw={500} c="green">{formatEur(cashFlows.dividends || 0)}</Text>
-                    <Text size="sm" c="dimmed">Fees:</Text>
-                    <Text size="sm" fw={500} c="red">{formatEur((cashFlows.fees || 0) + (cashFlows.taxes || 0))}</Text>
-                    <Text size="sm" c="dimmed">—</Text>
-                    <Text size="sm" c="dimmed">Total Profit:</Text>
-                    <Text size="sm" fw={600} c={(cashFlows.total_profit || 0) >= 0 ? 'green' : 'red'}>
-                      {formatEur(cashFlows.total_profit || 0)}
-                    </Text>
+                        )}
+                      </>
+                    )}
+                    {!editingCash && portfolio?.cash && Object.keys(portfolio.cash).length > 0 && simulatedCash == null && (
+                      <Text size="lg" c="dimmed" className="unified__status-cash-breakdown">
+                        ({Object.entries(portfolio.cash).map(([curr, amt], i) => (
+                          <span key={curr} className={`unified__status-cash-item unified__status-cash-item--${curr.toLowerCase()}`}>
+                            {i > 0 && ', '}
+                            {formatCurrency(amt, curr)}
+                          </span>
+                        ))})
+                      </Text>
+                    )}
                   </Group>
                 </Group>
-              )}
 
-              <PlannerTape
-                recommendations={recommendations || []}
-                forecastMonths={forecastMonths}
-                planSummary={planSummary}
-                projectionMonths={plannerForecastMonthCount}
-                forecastBadgeText={forecastBadgeText}
-              />
-            </Stack>
-          </Card>
+                {/* Middle row: Cash Flows */}
+                {cashFlows && (
+                  <Group gap="xl" className="unified__status-row unified__status-row--cashflows">
+                    <Group gap="xs" className="unified__status-section unified__status-section--cashflows">
+                      <IconTrendingUp size={18} style={{ opacity: 0.6 }} className="unified__status-icon" />
+                      <Text size="sm" c="dimmed">Deposits:</Text>
+                      <Text size="sm" fw={500} c="green">{formatEur(cashFlows.deposits || 0)}</Text>
+                      <Text size="sm" c="dimmed">Withdrawals:</Text>
+                      <Text size="sm" fw={500} c="red">{formatEur(cashFlows.withdrawals || 0)}</Text>
+                      <Text size="sm" c="dimmed">Dividends:</Text>
+                      <Text size="sm" fw={500} c="green">{formatEur(cashFlows.dividends || 0)}</Text>
+                      <Text size="sm" c="dimmed">Fees:</Text>
+                      <Text size="sm" fw={500} c="red">{formatEur((cashFlows.fees || 0) + (cashFlows.taxes || 0))}</Text>
+                      <Text size="sm" c="dimmed">—</Text>
+                      <Text size="sm" c="dimmed">Total Profit:</Text>
+                      <Text size="sm" fw={600} c={(cashFlows.total_profit || 0) >= 0 ? 'green' : 'red'}>
+                        {formatEur(cashFlows.total_profit || 0)}
+                      </Text>
+                    </Group>
+                  </Group>
+                )}
+
+                <PlannerTape
+                  recommendations={recommendations || []}
+                  forecastMonths={forecastMonths}
+                  planSummary={planSummary}
+                  projectionMonths={plannerForecastMonthCount}
+                  forecastBadgeText={forecastBadgeText}
+                />
+              </Stack>
+            </Card>
+          </CollapsibleWidget>
 
           {/* P&L Chart */}
-          <Card shadow="sm" padding="sm" withBorder className="unified__pnl-chart">
-            <Text size="sm" fw={500} mb="xs">Portfolio P&L</Text>
-            <PeriodStatsTable stats={periodStats?.period_stats} />
-            <PortfolioPnLChart
-              snapshots={pnlData?.snapshots || []}
-              summary={pnlData?.summary}
-              height={300}
-            />
-          </Card>
+          <CollapsibleWidget
+            id="pnl"
+            title="Portfolio P&L"
+            collapsed={collapsedWidgets.pnl}
+            onToggle={toggleWidget}
+          >
+            <Card shadow="sm" padding="sm" withBorder className="unified__pnl-chart">
+              <Text size="sm" fw={500} mb="xs">Portfolio P&L</Text>
+              <PeriodStatsTable stats={periodStats?.period_stats} />
+              <PortfolioPnLChart
+                snapshots={pnlData?.snapshots || []}
+                summary={pnlData?.summary}
+                height={300}
+              />
+            </Card>
+          </CollapsibleWidget>
 
           {/* Global Controls */}
-          <Card shadow="sm" padding="md" withBorder className="unified__controls">
-            <Group justify="space-between" wrap="wrap" gap="md" className="unified__controls-row">
-              {/* Period Selector */}
-              <Group gap="sm" className="unified__period">
-                <Text size="sm" fw={500} className="unified__period-label">Period:</Text>
-                <SegmentedControl
-                  value={period}
-                  onChange={setPeriod}
-                  data={PERIODS}
+          <CollapsibleWidget
+            id="controls"
+            title="Controls"
+            collapsed={collapsedWidgets.controls}
+            onToggle={toggleWidget}
+          >
+            <Card shadow="sm" padding="md" withBorder className="unified__controls">
+              <Group justify="space-between" wrap="wrap" gap="md" className="unified__controls-row">
+                {/* Period Selector */}
+                <Group gap="sm" className="unified__period">
+                  <Text size="sm" fw={500} className="unified__period-label">Period:</Text>
+                  <SegmentedControl
+                    value={period}
+                    onChange={setPeriod}
+                    data={PERIODS}
+                    size="sm"
+                    className="unified__period-selector"
+                  />
+                </Group>
+
+                {/* Search */}
+                <TextInput
+                  placeholder="Search..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
                   size="sm"
-                  className="unified__period-selector"
+                  w={200}
+                  className="unified__search"
                 />
+
+                {/* Filter */}
+                <Select
+                  value={filter}
+                  onChange={setFilter}
+                  data={FILTERS}
+                  size="sm"
+                  w={180}
+                  className="unified__filter"
+                />
+
+                {/* Sort */}
+                <Select
+                  value={sort}
+                  onChange={setSort}
+                  data={SORTS}
+                  size="sm"
+                  w={200}
+                  className="unified__sort"
+                />
+
+                {/* Add Security Button */}
+                <Button
+                  leftSection={<IconPlus size={16} />}
+                  size="sm"
+                  variant="light"
+                  onClick={() => setAddModalOpen(true)}
+                  className="unified__add-btn"
+                >
+                  Add Security
+                </Button>
               </Group>
 
-              {/* Search */}
-              <TextInput
-                placeholder="Search..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                size="sm"
-                w={200}
-                className="unified__search"
-              />
-
-              {/* Filter */}
-              <Select
-                value={filter}
-                onChange={setFilter}
-                data={FILTERS}
-                size="sm"
-                w={180}
-                className="unified__filter"
-              />
-
-              {/* Sort */}
-              <Select
-                value={sort}
-                onChange={setSort}
-                data={SORTS}
-                size="sm"
-                w={200}
-                className="unified__sort"
-              />
-
-              {/* Add Security Button */}
-              <Button
-                leftSection={<IconPlus size={16} />}
-                size="sm"
-                variant="light"
-                onClick={() => setAddModalOpen(true)}
-                className="unified__add-btn"
-              >
-                Add Security
-              </Button>
-            </Group>
-
-            {/* Stats */}
-            <Group gap="md" mt="sm" className="unified__stats">
-              <Badge variant="light" color="gray" className="unified__stat unified__stat--total">{stats.total} securities</Badge>
-              <Badge variant="light" color="blue" className="unified__stat unified__stat--positions">{stats.positions} positions</Badge>
-              <Badge variant="light" color="green" className="unified__stat unified__stat--buys">{stats.buys} buy signals</Badge>
-              <Badge variant="light" color="red" className="unified__stat unified__stat--sells">{stats.sells} sell signals</Badge>
-              <Badge variant="light" color="gray" className="unified__stat unified__stat--shown">{filteredSecurities.length} shown</Badge>
-            </Group>
-          </Card>
+              {/* Stats */}
+              <Group gap="md" mt="sm" className="unified__stats">
+                <Badge variant="light" color="gray" className="unified__stat unified__stat--total">{stats.total} securities</Badge>
+                <Badge variant="light" color="blue" className="unified__stat unified__stat--positions">{stats.positions} positions</Badge>
+                <Badge variant="light" color="green" className="unified__stat unified__stat--buys">{stats.buys} buy signals</Badge>
+                <Badge variant="light" color="red" className="unified__stat unified__stat--sells">{stats.sells} sell signals</Badge>
+                <Badge variant="light" color="gray" className="unified__stat unified__stat--shown">{filteredSecurities.length} shown</Badge>
+              </Group>
+            </Card>
+          </CollapsibleWidget>
 
           {/* Securities Table */}
-          {filteredSecurities.length === 0 ? (
-            <Card shadow="sm" padding="lg" withBorder className="unified__empty-state">
-              <Text c="dimmed" ta="center" className="unified__empty-text">No securities match your filters</Text>
-            </Card>
-          ) : (
-            <Card shadow="sm" padding="md" withBorder className="unified__securities-table">
-              <SecurityTable
-                securities={filteredSecurities}
-                onUpdate={handleUpdate}
-                onDelete={handleDeleteClick}
-              />
-            </Card>
-          )}
+          <CollapsibleWidget
+            id="securities"
+            title="Securities"
+            collapsed={collapsedWidgets.securities}
+            onToggle={toggleWidget}
+          >
+            {filteredSecurities.length === 0 ? (
+              <Card shadow="sm" padding="lg" withBorder className="unified__empty-state">
+                <Text c="dimmed" ta="center" className="unified__empty-text">No securities match your filters</Text>
+              </Card>
+            ) : (
+              <Card shadow="sm" padding="md" withBorder className="unified__securities-table">
+                <SecurityTable
+                  securities={filteredSecurities}
+                  onUpdate={handleUpdate}
+                  onDelete={handleDeleteClick}
+                />
+              </Card>
+            )}
+          </CollapsibleWidget>
 
           {/* Inactive Securities Table */}
           {inactiveSecurities.length > 0 && (
-            <Card shadow="sm" padding="md" withBorder className="unified__inactive-table">
-              <Text size="sm" fw={500} mb="sm">
-                Inactive Securities
-                <Badge variant="light" color="gray" size="sm" ml="xs">{inactiveSecurities.length}</Badge>
-              </Text>
-              <Table.ScrollContainer minWidth={400}>
-                <Table highlightOnHover>
-                  <Table.Thead>
-                    <Table.Tr>
-                      <Table.Th><Text fw={600} size="sm">Symbol</Text></Table.Th>
-                      <Table.Th><Text fw={600} size="sm">Name</Text></Table.Th>
-                    </Table.Tr>
-                  </Table.Thead>
-                  <Table.Tbody>
-                    {inactiveSecurities.map((sec) => (
-                      <Table.Tr key={sec.symbol}>
-                        <Table.Td><Text size="sm" fw={500}>{sec.symbol}</Text></Table.Td>
-                        <Table.Td><Text size="sm" c="dimmed">{sec.name || '-'}</Text></Table.Td>
+            <CollapsibleWidget
+              id="inactive-securities"
+              title="Inactive Securities"
+              collapsed={collapsedWidgets['inactive-securities']}
+              onToggle={toggleWidget}
+            >
+              <Card shadow="sm" padding="md" withBorder className="unified__inactive-table">
+                <Text component="div" size="sm" fw={500} mb="sm">
+                  Inactive Securities
+                  <Badge variant="light" color="gray" size="sm" ml="xs">{inactiveSecurities.length}</Badge>
+                </Text>
+                <Table.ScrollContainer minWidth={400}>
+                  <Table highlightOnHover>
+                    <Table.Thead>
+                      <Table.Tr>
+                        <Table.Th><Text fw={600} size="sm">Symbol</Text></Table.Th>
+                        <Table.Th><Text fw={600} size="sm">Name</Text></Table.Th>
                       </Table.Tr>
-                    ))}
-                  </Table.Tbody>
-                </Table>
-              </Table.ScrollContainer>
-            </Card>
+                    </Table.Thead>
+                    <Table.Tbody>
+                      {inactiveSecurities.map((sec) => (
+                        <Table.Tr key={sec.symbol}>
+                          <Table.Td><Text size="sm" fw={500}>{sec.symbol}</Text></Table.Td>
+                          <Table.Td><Text size="sm" c="dimmed">{sec.name || '-'}</Text></Table.Td>
+                        </Table.Tr>
+                      ))}
+                    </Table.Tbody>
+                  </Table>
+                </Table.ScrollContainer>
+              </Card>
+            </CollapsibleWidget>
           )}
         </Stack>
 
         {/* Right Sidebar - Allocation Cards */}
         <Stack gap="md" className="unified__sidebar">
-          <MarketsOpenCard />
-          <PortfolioRatingCard />
-          <SecurityAllocationCard
-            securities={securities}
-            recommendations={recommendations}
-            forecastMonths={forecastMonths}
-            totalValueEur={portfolio?.total_value_eur || 0}
-          />
-          <CompositionCard />
-          <ForwardReturnCard />
+          <CollapsibleWidget
+            id="risk-return"
+            title="Risk / Return"
+            collapsed={collapsedWidgets['risk-return']}
+            onToggle={toggleWidget}
+          >
+            <PortfolioRatingCard />
+          </CollapsibleWidget>
+          <CollapsibleWidget
+            id="security-allocation"
+            title="Security Allocation"
+            collapsed={collapsedWidgets['security-allocation']}
+            onToggle={toggleWidget}
+          >
+            <SecurityAllocationCard
+              securities={securities}
+              recommendations={recommendations}
+              forecastMonths={forecastMonths}
+              totalValueEur={portfolio?.total_value_eur || 0}
+            />
+          </CollapsibleWidget>
+          <CollapsibleWidget
+            id="composition"
+            title="Composition"
+            collapsed={collapsedWidgets.composition}
+            onToggle={toggleWidget}
+          >
+            <CompositionCard />
+          </CollapsibleWidget>
+          <CollapsibleWidget
+            id="forward-return"
+            title="Forward Return Projection"
+            collapsed={collapsedWidgets['forward-return']}
+            onToggle={toggleWidget}
+          >
+            <ForwardReturnCard />
+          </CollapsibleWidget>
         </Stack>
       </div>
 
@@ -628,6 +745,30 @@ function UnifiedPage() {
         security={securityToDelete}
       />
     </>
+  );
+}
+
+function CollapsibleWidget({ id, title, collapsed, onToggle, children }) {
+  const isCollapsed = Boolean(collapsed);
+
+  return (
+    <section className={`collapsible-widget ${isCollapsed ? 'collapsible-widget--collapsed' : ''}`}>
+      <button
+        type="button"
+        className="collapsible-widget__toggle"
+        aria-expanded={!isCollapsed}
+        aria-controls={`widget-${id}`}
+        onClick={() => onToggle(id)}
+      >
+        <span className="collapsible-widget__title">{title}</span>
+        <IconChevronDown size={16} className="collapsible-widget__icon" aria-hidden="true" />
+      </button>
+      <Collapse expanded={!isCollapsed} transitionDuration={120}>
+        <div id={`widget-${id}`} className="collapsible-widget__content">
+          {children}
+        </div>
+      </Collapse>
+    </section>
   );
 }
 
