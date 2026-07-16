@@ -132,6 +132,7 @@ class TestSyncPrices:
         args = mock_broker.get_historical_prices_bulk.call_args
         assert "AAPL.US" in args[0][0]
         assert "MSFT.US" in args[0][0]
+        assert args.kwargs["raise_on_error"] is True
 
     @pytest.mark.asyncio
     async def test_sync_prices_updates_db(self, mock_db, mock_broker, mock_cache):
@@ -141,6 +142,48 @@ class TestSyncPrices:
         await sync_prices(mock_db, mock_broker, mock_cache)
 
         assert mock_db.save_prices.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_sync_prices_fetches_in_chunks(self, mock_db, mock_broker, mock_cache):
+        """Avoid one huge Tradernet history request for the whole active universe."""
+        from sentinel.jobs.tasks import HISTORICAL_PRICE_SYNC_CHUNK_SIZE, sync_prices
+
+        symbols = [f"SYM{i}.EU" for i in range(HISTORICAL_PRICE_SYNC_CHUNK_SIZE + 1)]
+        mock_db.get_all_securities = AsyncMock(return_value=[{"symbol": symbol} for symbol in symbols])
+
+        async def fetch_chunk(chunk, **kwargs):
+            return {symbol: [{"date": "2026-07-16", "close": 100.0}] for symbol in chunk}
+
+        mock_broker.get_historical_prices_bulk = AsyncMock(side_effect=fetch_chunk)
+
+        await sync_prices(mock_db, mock_broker, mock_cache)
+
+        assert mock_broker.get_historical_prices_bulk.await_count == 2
+        fetched_chunks = [call.args[0] for call in mock_broker.get_historical_prices_bulk.await_args_list]
+        assert fetched_chunks == [
+            symbols[:HISTORICAL_PRICE_SYNC_CHUNK_SIZE],
+            symbols[HISTORICAL_PRICE_SYNC_CHUNK_SIZE:],
+        ]
+
+    @pytest.mark.asyncio
+    async def test_sync_prices_fails_when_broker_history_fetch_fails(self, mock_db, mock_broker, mock_cache):
+        from sentinel.jobs.tasks import sync_prices
+
+        mock_broker.get_historical_prices_bulk = AsyncMock(side_effect=RuntimeError("gateway timeout"))
+
+        with pytest.raises(RuntimeError, match="gateway timeout"):
+            await sync_prices(mock_db, mock_broker, mock_cache)
+
+        mock_db.save_prices.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_sync_prices_fails_when_no_symbols_update(self, mock_db, mock_broker, mock_cache):
+        from sentinel.jobs.tasks import sync_prices
+
+        mock_broker.get_historical_prices_bulk = AsyncMock(return_value={})
+
+        with pytest.raises(RuntimeError, match="returned no usable prices"):
+            await sync_prices(mock_db, mock_broker, mock_cache)
 
 
 class TestSyncQuotes:
@@ -493,6 +536,40 @@ class TestSyncBenchmarks:
         assert mock_db_benchmarks.save_benchmark_prices.await_count == 2
         saved_symbols = {call.args[0] for call in mock_db_benchmarks.save_benchmark_prices.await_args_list}
         assert saved_symbols == {"SP500.IDX", "DAX.IDX"}
+
+    @pytest.mark.asyncio
+    async def test_fetches_benchmark_prices_in_chunks(self, mock_db_benchmarks, mock_broker_indices):
+        from sentinel.jobs.tasks import HISTORICAL_PRICE_SYNC_CHUNK_SIZE, sync_benchmarks
+
+        symbols = [f"BM{i}.IDX" for i in range(HISTORICAL_PRICE_SYNC_CHUNK_SIZE + 1)]
+        mock_db_benchmarks.get_benchmarks = AsyncMock(return_value=[{"symbol": symbol} for symbol in symbols])
+
+        async def fetch_chunk(chunk, **kwargs):
+            return {symbol: [{"date": "2026-07-16", "close": 100.0}] for symbol in chunk}
+
+        mock_broker_indices.get_historical_prices_bulk = AsyncMock(side_effect=fetch_chunk)
+
+        await sync_benchmarks(mock_db_benchmarks, mock_broker_indices)
+
+        assert mock_broker_indices.get_historical_prices_bulk.await_count == 2
+        fetched_chunks = [call.args[0] for call in mock_broker_indices.get_historical_prices_bulk.await_args_list]
+        assert fetched_chunks == [
+            symbols[:HISTORICAL_PRICE_SYNC_CHUNK_SIZE],
+            symbols[HISTORICAL_PRICE_SYNC_CHUNK_SIZE:],
+        ]
+
+    @pytest.mark.asyncio
+    async def test_benchmark_price_sync_fails_when_broker_history_fetch_fails(
+        self, mock_db_benchmarks, mock_broker_indices
+    ):
+        from sentinel.jobs.tasks import sync_benchmarks
+
+        mock_broker_indices.get_historical_prices_bulk = AsyncMock(side_effect=RuntimeError("gateway timeout"))
+
+        with pytest.raises(RuntimeError, match="gateway timeout"):
+            await sync_benchmarks(mock_db_benchmarks, mock_broker_indices)
+
+        mock_db_benchmarks.save_benchmark_prices.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_broker_offline_skips_metadata_refresh_but_syncs_known_prices(

@@ -21,11 +21,56 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 SUBMITTED_TRADE_STATE_KEY = "submitted_trade"
+HISTORICAL_PRICE_SYNC_CHUNK_SIZE = 8
 
 
 # -----------------------------------------------------------------------------
 # Sync Tasks
 # -----------------------------------------------------------------------------
+
+
+def _chunks(items: list[str], size: int) -> list[list[str]]:
+    return [items[i : i + size] for i in range(0, len(items), size)]
+
+
+async def _fetch_historical_prices_in_chunks(
+    broker,
+    symbols: list[str],
+    *,
+    years: int,
+    chunk_size: int = HISTORICAL_PRICE_SYNC_CHUNK_SIZE,
+    label: str,
+) -> dict[str, list[dict]]:
+    prices_by_symbol: dict[str, list[dict]] = {}
+    if not symbols:
+        return prices_by_symbol
+
+    chunks = _chunks(symbols, chunk_size)
+    for index, chunk in enumerate(chunks, start=1):
+        logger.info(
+            "%s history chunk %s/%s: fetching %s symbols",
+            label,
+            index,
+            len(chunks),
+            len(chunk),
+        )
+        chunk_prices = await broker.get_historical_prices_bulk(chunk, years=years, raise_on_error=True)
+        prices_by_symbol.update(chunk_prices)
+
+        updated = [symbol for symbol in chunk if chunk_prices.get(symbol)]
+        missing = [symbol for symbol in chunk if not chunk_prices.get(symbol)]
+        if missing:
+            logger.warning("%s history chunk %s/%s returned no prices for: %s", label, index, len(chunks), missing)
+        logger.info(
+            "%s history chunk %s/%s returned prices for %s/%s symbols",
+            label,
+            index,
+            len(chunks),
+            len(updated),
+            len(chunk),
+        )
+
+    return prices_by_symbol
 
 
 async def sync_portfolio(portfolio) -> None:
@@ -43,13 +88,17 @@ async def sync_prices(db, broker, cache) -> None:
     securities = await db.get_all_securities(active_only=True)
     symbols = [s["symbol"] for s in securities]
 
-    prices = await broker.get_historical_prices_bulk(symbols, years=20)
+    prices = await _fetch_historical_prices_in_chunks(broker, symbols, years=20, label="security")
     synced = 0
 
-    for symbol, data in prices.items():
+    for symbol in symbols:
+        data = prices.get(symbol) or []
         if data:
             await db.save_prices(symbol, data)
             synced += 1
+
+    if symbols and synced == 0:
+        raise RuntimeError(f"Price sync returned no usable prices for {len(symbols)} securities")
 
     logger.info(f"Price sync complete: {synced}/{len(symbols)} securities updated")
 
@@ -173,7 +222,7 @@ async def sync_benchmarks(db, broker) -> None:
         return
 
     symbols = [b["symbol"] for b in known]
-    prices_by_symbol = await broker.get_historical_prices_bulk(symbols, years=5)
+    prices_by_symbol = await _fetch_historical_prices_in_chunks(broker, symbols, years=5, label="benchmark")
     saved = 0
     for symbol in symbols:
         prices = prices_by_symbol.get(symbol) or []
@@ -181,6 +230,8 @@ async def sync_benchmarks(db, broker) -> None:
             continue
         await db.save_benchmark_prices(symbol, prices)
         saved += 1
+    if symbols and saved == 0:
+        raise RuntimeError(f"Benchmark price sync returned no usable prices for {len(symbols)} benchmarks")
     logger.info(f"Benchmark prices synced: {saved}/{len(symbols)}")
 
 

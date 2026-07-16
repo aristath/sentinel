@@ -79,6 +79,10 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
           aVal = a.value_eur || 0;
           bVal = b.value_eur || 0;
           break;
+        case 'ideal':
+          aVal = a.ideal_allocation || 0;
+          bVal = b.ideal_allocation || 0;
+          break;
         case 'recommendation':
           // Sort by recommendation value (buys positive, sells negative)
           aVal = a.recommendation ? (a.recommendation.action === 'buy' ? 1 : -1) * Math.abs(a.recommendation.value_delta_eur || 0) : 0;
@@ -96,7 +100,7 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
     return sortReversed ? sorted.reverse() : sorted;
   }, [securities, sortColumn, sortReversed]);
 
-  const numColumns = 5;
+  const numColumns = 6;
 
   const allExpanded = sortedSecurities.length > 0 && sortedSecurities.every((s) => expandedSymbols.has(s.symbol));
 
@@ -109,7 +113,7 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
   };
 
   return (
-    <Table.ScrollContainer minWidth={660}>
+    <Table.ScrollContainer minWidth={720}>
       <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
@@ -136,6 +140,11 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
             <Table.Th>
               <SortableHeader sorted={sortColumn === 'value'} reversed={sortReversed} onSort={() => handleSort('value')}>
                 Value / P/L
+              </SortableHeader>
+            </Table.Th>
+            <Table.Th>
+              <SortableHeader sorted={sortColumn === 'ideal'} reversed={sortReversed} onSort={() => handleSort('ideal')}>
+                Ideal
               </SortableHeader>
             </Table.Th>
             <Table.Th>
@@ -247,6 +256,16 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
                     )}
                   </Table.Td>
 
+                  {/* Ideal Allocation */}
+                  <Table.Td>
+                    <Text
+                      size="sm"
+                      c={isUnderIdeal || isOverIdeal ? 'yellow' : 'dimmed'}
+                    >
+                      {formatPercent(ideal_allocation, false)}
+                    </Text>
+                  </Table.Td>
+
                   {/* Plan: allocation path + recommendation */}
                   <Table.Td>
                     <Group gap="xs" wrap="wrap">
@@ -264,12 +283,6 @@ export function SecurityTable({ securities, onUpdate, onDelete }) {
                             </Text>
                           </>
                         )}
-                        <Text
-                          size="sm"
-                          c={isUnderIdeal || isOverIdeal ? 'yellow' : 'dimmed'}
-                        >
-                          / {formatPercent(ideal_allocation, false)}
-                        </Text>
                       </Group>
                       {recommendation ? (
                         <Badge
