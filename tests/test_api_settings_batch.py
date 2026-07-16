@@ -14,19 +14,17 @@ from sentinel.settings import Settings
 
 def strategy_values(**overrides):
     values = {
-        "strategy_core_target_pct": 70,
-        "strategy_opportunity_target_pct": 30,
         "strategy_min_opp_score": 0.6,
         "strategy_ideal_qualifying_threshold": 0.65,
-        "strategy_strategic_buy_threshold": 0.7,
-        "strategy_core_floor_pct": 0.1,
+        "strategy_core_timing_min_score": 0.3,
+        "strategy_core_timing_min_dip_score": 0.2,
+        "strategy_fallback_wait_days": 30,
         "strategy_entry_t1_dd": -0.10,
         "strategy_entry_t2_dd": -0.16,
         "strategy_entry_t3_dd": -0.22,
         "strategy_entry_memory_days": 45,
         "strategy_memory_max_boost": 0.12,
         "strategy_opportunity_addon_threshold": 0.75,
-        "strategy_priority_contrarian_weight_pct": 25.0,
         "strategy_max_opportunity_buys_per_cycle": 1,
         "strategy_max_new_opportunity_buys_per_cycle": 1,
     }
@@ -76,15 +74,15 @@ async def test_set_setting_rejects_removed_strategy_knobs(deps):
     [
         ("transaction_fee_fixed", 3.0),
         ("transaction_fee_percent", 0.35),
-        ("strategy_core_new_min_score", 0.4),
-        ("strategy_core_new_min_dip_score", 0.25),
+        ("strategy_core_timing_min_score", 0.4),
+        ("strategy_core_timing_min_dip_score", 0.25),
         ("strategy_max_funding_sells_per_cycle", 3),
         ("strategy_max_funding_turnover_pct", 0.18),
         ("strategy_funding_conviction_bias", 1.2),
-        ("strategy_projection_months", 18),
-        ("strategy_priority_contrarian_weight_pct", 30.0),
-        ("user_multiplier_blend_pct", 75.0),
+        ("strategy_fallback_wait_days", 45),
         ("user_multiplier_decay_factor", 0.85),
+        ("min_cash_buffer", 0.01),
+        ("target_cash_pct", 5),
     ],
 )
 async def test_set_setting_invalidates_planner_cache_for_recommendation_settings(deps, key, value):
@@ -108,12 +106,10 @@ async def test_set_settings_batch_persists_strategy_values(deps):
     result = await set_settings_batch(payload, deps)
     assert result == {"status": "ok"}
 
-    assert await deps.db.get_setting("strategy_core_target_pct") == 70
-    assert await deps.db.get_setting("strategy_opportunity_target_pct") == 30
     assert await deps.db.get_setting("strategy_min_opp_score") == 0.6
     assert await deps.db.get_setting("strategy_ideal_qualifying_threshold") == 0.65
-    assert await deps.db.get_setting("strategy_strategic_buy_threshold") == 0.7
-    assert await deps.db.get_setting("strategy_core_floor_pct") == 0.1
+    assert await deps.db.get_setting("strategy_core_timing_min_score") == 0.3
+    assert await deps.db.get_setting("strategy_fallback_wait_days") == 30.0
 
 
 @pytest.mark.asyncio
@@ -121,14 +117,12 @@ async def test_set_settings_batch_rejects_invalid_value_without_partial_write(de
     from sentinel.api.routers.settings import set_settings_batch
 
     original = {
-        "strategy_core_target_pct": await deps.db.get_setting("strategy_core_target_pct"),
-        "strategy_opportunity_target_pct": await deps.db.get_setting("strategy_opportunity_target_pct"),
         "strategy_min_opp_score": await deps.db.get_setting("strategy_min_opp_score"),
         "strategy_ideal_qualifying_threshold": await deps.db.get_setting("strategy_ideal_qualifying_threshold"),
-        "strategy_strategic_buy_threshold": await deps.db.get_setting("strategy_strategic_buy_threshold"),
-        "strategy_core_floor_pct": await deps.db.get_setting("strategy_core_floor_pct"),
+        "strategy_core_timing_min_score": await deps.db.get_setting("strategy_core_timing_min_score"),
+        "strategy_fallback_wait_days": await deps.db.get_setting("strategy_fallback_wait_days"),
     }
-    payload = {"values": strategy_values(strategy_opportunity_target_pct=20, strategy_min_opp_score=-0.1)}
+    payload = {"values": strategy_values(strategy_min_opp_score=-0.1)}
 
     with pytest.raises(HTTPException):
         await set_settings_batch(payload, deps)
@@ -138,10 +132,21 @@ async def test_set_settings_batch_rejects_invalid_value_without_partial_write(de
 
 
 @pytest.mark.asyncio
-async def test_set_settings_batch_rejects_targets_not_summing_to_hundred(deps):
-    from sentinel.api.routers.settings import set_settings_batch
-
-    payload = {"values": strategy_values(strategy_core_target_pct=80, strategy_opportunity_target_pct=30)}
+@pytest.mark.parametrize(
+    "key",
+    [
+        "planner_forecast_months",
+        "strategy_core_target_pct",
+        "strategy_opportunity_target_pct",
+        "strategy_projection_months",
+        "strategy_priority_contrarian_weight_pct",
+        "strategy_strategic_buy_threshold",
+        "strategy_core_floor_pct",
+        "user_multiplier_blend_pct",
+    ],
+)
+async def test_removed_plan_model_settings_are_rejected(deps, key):
+    from sentinel.api.routers.settings import set_setting
 
     with pytest.raises(HTTPException):
-        await set_settings_batch(payload, deps)
+        await set_setting(key, {"value": 50}, deps)

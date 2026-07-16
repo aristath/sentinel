@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock
 
@@ -32,8 +33,6 @@ async def test_allocation_as_of_uses_historical_prices_and_skips_live_cache():
 
     settings_values = {
         "max_dividend_reinvestment_boost": 0.15,
-        "strategy_core_target_pct": 70,
-        "strategy_opportunity_target_pct": 30,
         "strategy_min_opp_score": 0.55,
         "max_position_pct": 35,
         "min_position_pct": 1,
@@ -56,13 +55,10 @@ def _flat_prices():
 def _allocation_settings(settings_values=None):
     values = {
         "max_dividend_reinvestment_boost": 0,
-        "strategy_core_target_pct": 80,
-        "strategy_opportunity_target_pct": 20,
         "strategy_min_opp_score": 0.55,
         "strategy_ideal_qualifying_threshold": 0.65,
         "max_position_pct": 100,
         "clara_preference_strength": 5.0,
-        "user_multiplier_blend_pct": 80.0,
         "user_multiplier_decay_factor": 0.90,
         "user_multiplier_decay_interval_days": 7,
     }
@@ -71,6 +67,73 @@ def _allocation_settings(settings_values=None):
     settings = MagicMock()
     settings.get = AsyncMock(side_effect=lambda key, default=None: values.get(key, default))
     return settings
+
+
+@pytest.mark.asyncio
+async def test_atomic_allocation_cache_restores_matching_signal_bundle():
+    snapshot = {
+        "ideal": {"AAA": 1.0},
+        "signal_bundle": {
+            "as_of_date": None,
+            "rebalance_signals": {"AAA": {"user_multiplier": 0.91, "opp_score": 0.73}},
+            "sleeves": {"AAA": "opportunity"},
+            "allocation_decomposition": {"global": {}, "symbols": {}},
+        },
+    }
+    db = MagicMock()
+    db.cache_get = AsyncMock(
+        side_effect=lambda key: json.dumps(snapshot) if key == "planner:allocation_snapshot" else None
+    )
+    db.get_all_securities = AsyncMock(side_effect=AssertionError("atomic cache should satisfy the request"))
+    calculator = AllocationCalculator(db=db, settings=_allocation_settings())
+
+    ideal = await calculator.calculate_ideal_portfolio()
+    signals = calculator.get_last_signal_bundle()
+
+    assert ideal == {"AAA": 1.0}
+    assert signals["rebalance_signals"]["AAA"] == {"user_multiplier": 0.91, "opp_score": 0.73}
+
+
+@pytest.mark.asyncio
+async def test_legacy_split_weight_cache_is_not_reused_without_matching_atomic_signals():
+    db = MagicMock()
+    db.cache_get = AsyncMock(
+        side_effect=lambda key: json.dumps({"STALE": 1.0}) if key == "planner:ideal_portfolio" else None
+    )
+    db.cache_set = AsyncMock()
+    db.get_all_securities = AsyncMock(return_value=[{"symbol": "AAA", "user_multiplier": 0.9, "allow_buy": 1}])
+    db.get_prices = AsyncMock(return_value=_flat_prices())
+    db.get_uninvested_dividends = AsyncMock(return_value={})
+    calculator = AllocationCalculator(db=db, settings=_allocation_settings())
+
+    ideal = await calculator.calculate_ideal_portfolio()
+
+    assert ideal == {"AAA": 1.0}
+    assert db.cache_get.await_args_list[0].args == ("planner:allocation_snapshot",)
+    assert all(call.args != ("planner:ideal_portfolio",) for call in db.cache_get.await_args_list)
+
+
+@pytest.mark.asyncio
+async def test_infeasible_position_caps_become_an_explicit_cash_target():
+    db = MagicMock()
+    db.cache_get = AsyncMock(return_value=None)
+    db.cache_set = AsyncMock()
+    db.get_all_securities = AsyncMock(
+        return_value=[{"symbol": symbol, "user_multiplier": 0.8, "allow_buy": 1} for symbol in ("A", "B", "C")]
+    )
+    db.get_prices = AsyncMock(return_value=_flat_prices())
+    db.get_uninvested_dividends = AsyncMock(return_value={})
+    calculator = AllocationCalculator(
+        db=db,
+        settings=_allocation_settings({"max_position_pct": 30.0, "target_cash_pct": 0.0}),
+    )
+
+    ideal = await calculator.calculate_ideal_portfolio()
+    diagnostics = calculator.get_last_signal_bundle()
+
+    assert sum(ideal.values()) == pytest.approx(0.9)
+    assert all(weight == pytest.approx(0.3) for weight in ideal.values())
+    assert diagnostics["allocation_decomposition"]["global"]["effective_cash_target_pct"] == pytest.approx(0.1)
 
 
 @pytest.mark.asyncio
@@ -108,6 +171,39 @@ async def test_high_preference_zero_opportunity_creates_strategic_target():
     assert allocations["AMD"] > 0.7
     assert diagnostics is not None
     assert diagnostics["allocation_decomposition"]["symbols"]["AMD"]["final_target_pct"] == allocations["AMD"]
+    assert diagnostics["allocation_decomposition"]["global"]["target_model"] == "clara_risk"
+    assert diagnostics["allocation_decomposition"]["symbols"]["AMD"]["opportunity_target_pct"] == 0.0
+
+
+@pytest.mark.asyncio
+async def test_opportunity_changes_do_not_change_long_term_target_weights():
+    now_iso = datetime.now(timezone.utc).isoformat()
+    securities = [
+        {"symbol": "A", "user_multiplier": 0.9, "user_multiplier_updated_at": now_iso},
+        {"symbol": "B", "user_multiplier": 0.7, "user_multiplier_updated_at": now_iso},
+    ]
+
+    async def calculate(price_rows):
+        db = MagicMock()
+        db.cache_get = AsyncMock(return_value=None)
+        db.cache_set = AsyncMock()
+        db.get_all_securities = AsyncMock(return_value=securities)
+        db.get_prices_for_symbols = AsyncMock(return_value=price_rows)
+        db.get_uninvested_dividends = AsyncMock(return_value={})
+        calculator = AllocationCalculator(
+            db=db,
+            portfolio=MagicMock(),
+            currency=MagicMock(),
+            settings=_allocation_settings(),
+        )
+        return await calculator.calculate_ideal_portfolio()
+
+    flat = _flat_prices()
+    falling = [{"date": row["date"], "close": 100.0 - (index * 0.2)} for index, row in enumerate(flat)]
+    first = await calculate({"A": flat, "B": falling})
+    second = await calculate({"A": falling, "B": flat})
+
+    assert first == second
 
 
 @pytest.mark.asyncio

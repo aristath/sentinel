@@ -82,11 +82,11 @@ class TestSettingsDefaults:
     def test_defaults_strategy_settings_exist(self):
         """Strategy-related settings should have defaults."""
         strategy_keys = [
-            "strategy_core_target_pct",
-            "strategy_opportunity_target_pct",
             "strategy_min_opp_score",
             "strategy_ideal_qualifying_threshold",
-            "strategy_strategic_buy_threshold",
+            "strategy_core_timing_min_score",
+            "strategy_core_timing_min_dip_score",
+            "strategy_fallback_wait_days",
             "strategy_entry_t1_dd",
             "strategy_entry_t2_dd",
             "strategy_entry_t3_dd",
@@ -98,28 +98,30 @@ class TestSettingsDefaults:
             "strategy_lot_standard_max_pct",
             "strategy_lot_coarse_max_pct",
             "strategy_coarse_max_new_lots_per_cycle",
-            "strategy_core_floor_pct",
             "strategy_same_side_cooloff_days",
-            "strategy_core_new_min_score",
-            "strategy_core_new_min_dip_score",
+            "strategy_core_timing_min_score",
+            "strategy_core_timing_min_dip_score",
             "strategy_max_funding_sells_per_cycle",
             "strategy_max_funding_turnover_pct",
             "strategy_funding_conviction_bias",
-            "strategy_projection_months",
-            "strategy_priority_contrarian_weight_pct",
-            "planner_forecast_months",
             "clara_preference_strength",
-            "user_multiplier_blend_pct",
             "user_multiplier_decay_factor",
             "user_multiplier_decay_interval_days",
         ]
         for key in strategy_keys:
             assert key in DEFAULTS, f"Missing strategy default: {key}"
 
-    def test_defaults_strategy_targets_sum_to_hundred(self):
-        """Core + opportunity sleeves should target full investment."""
-        total = DEFAULTS["strategy_core_target_pct"] + DEFAULTS["strategy_opportunity_target_pct"]
-        assert abs(total - 100.0) < 0.01
+    def test_obsolete_plan_model_settings_are_marked_removed(self):
+        """Old blended targets and simulated forecast controls must not return."""
+        from sentinel.settings import REMOVED_SETTINGS
+
+        assert {
+            "planner_forecast_months",
+            "strategy_core_target_pct",
+            "strategy_opportunity_target_pct",
+            "strategy_projection_months",
+            "user_multiplier_blend_pct",
+        } <= REMOVED_SETTINGS
 
 
 class TestSettingsGet:

@@ -44,7 +44,6 @@ import {
   deleteSecurity,
   getPortfolio,
   getRecommendations,
-  getPlannerForecast,
   getCashFlows,
   getPortfolioPnLHistory,
   getPortfolioPeriodStats,
@@ -73,7 +72,7 @@ const FILTERS = [
 ];
 
 const SORTS = [
-  { value: 'priority', label: 'Priority (Recommendation)' },
+  { value: 'priority', label: 'Execution Order' },
   { value: 'allocation_delta', label: 'Allocation Deviation' },
   { value: 'profit_pct', label: 'P/L %' },
   { value: 'value', label: 'Position Value' },
@@ -149,6 +148,7 @@ function UnifiedPage() {
   });
   const recommendations = recommendationsData?.recommendations;
   const planSummary = recommendationsData?.summary;
+  const longTermPlan = recommendationsData?.plan;
 
   const { data: cashFlows } = useQuery({
     queryKey: ['cashflows'],
@@ -175,31 +175,6 @@ function UnifiedPage() {
   });
   const isResearchMode = settings?.trading_mode === 'research';
   const simulatedCash = settings?.simulated_cash_eur;
-  const plannerForecastMonthCount = Number(settings?.planner_forecast_months ?? 6);
-  const { data: forecastData } = useQuery({
-    queryKey: ['planner-forecast', plannerForecastMonthCount],
-    queryFn: () => getPlannerForecast(plannerForecastMonthCount),
-    enabled: Number.isFinite(plannerForecastMonthCount),
-    refetchInterval: 60000,
-  });
-  const forecastMonths = forecastData?.months || [];
-  const forecastBadgeText = (month) => {
-    const recommendations = month.recommendations || [];
-    if (recommendations.length === 0) return 'HOLD';
-    return recommendations
-      .map((rec) => `${rec.action.toUpperCase()} ${rec.symbol} ${formatEur(Math.abs(rec.value_delta_eur))}`)
-      .join(', ');
-  };
-
-  const forecastSymbols = useMemo(() => {
-    const symbols = new Set();
-    forecastMonths.slice(1).forEach((month) => {
-      (month.recommendations || []).forEach((rec) => {
-        if (rec.symbol) symbols.add(rec.symbol);
-      });
-    });
-    return symbols;
-  }, [forecastMonths]);
   const [editingCash, setEditingCash] = useState(false);
   const [cashValue, setCashValue] = useState('');
 
@@ -209,7 +184,6 @@ function UnifiedPage() {
       queryClient.invalidateQueries({ queryKey: ['settings'] });
       queryClient.invalidateQueries({ queryKey: ['portfolio'] });
       queryClient.invalidateQueries({ queryKey: ['recommendations'] });
-      queryClient.invalidateQueries({ queryKey: ['planner-forecast'] });
       setEditingCash(false);
     },
   });
@@ -328,8 +302,7 @@ function UnifiedPage() {
           return (
             Boolean(s.recommendation) ||
             Boolean(s.price_warning) ||
-            allocationGap > 0.5 ||
-            forecastSymbols.has(s.symbol)
+            allocationGap > 0.5
           );
         });
         break;
@@ -354,10 +327,10 @@ function UnifiedPage() {
     result.sort((a, b) => {
       switch (sort) {
         case 'priority':
-          // Higher priority first, then by symbol
-          const aPriority = a.recommendation?.priority || 0;
-          const bPriority = b.recommendation?.priority || 0;
-          return bPriority - aPriority || a.symbol.localeCompare(b.symbol);
+          // Planner execution rank is the same order used by the executor.
+          const aRank = a.recommendation?.execution_rank ?? Number.POSITIVE_INFINITY;
+          const bRank = b.recommendation?.execution_rank ?? Number.POSITIVE_INFINITY;
+          return aRank - bRank || a.symbol.localeCompare(b.symbol);
         case 'allocation_delta':
           // Largest absolute deviation first
           const aDelta = Math.abs(a.ideal_allocation - a.current_allocation);
@@ -377,7 +350,7 @@ function UnifiedPage() {
     });
 
     return result;
-  }, [securities, filter, sort, search, forecastSymbols]);
+  }, [securities, filter, sort, search]);
 
   // Summary stats
   const stats = useMemo(() => {
@@ -528,10 +501,8 @@ function UnifiedPage() {
 
                 <PlannerTape
                   recommendations={recommendations || []}
-                  forecastMonths={forecastMonths}
+                  longTermPlan={longTermPlan}
                   planSummary={planSummary}
-                  projectionMonths={plannerForecastMonthCount}
-                  forecastBadgeText={forecastBadgeText}
                 />
               </Stack>
             </Card>
@@ -706,8 +677,8 @@ function UnifiedPage() {
             <SecurityAllocationCard
               securities={securities}
               recommendations={recommendations}
-              forecastMonths={forecastMonths}
-              totalValueEur={portfolio?.total_value_eur || 0}
+              longTermPlan={longTermPlan}
+              cashAfterPlan={planSummary?.cash_after_plan}
             />
           </CollapsibleWidget>
           <CollapsibleWidget
@@ -772,7 +743,7 @@ function CollapsibleWidget({ id, title, collapsed, onToggle, children }) {
   );
 }
 
-function PlannerTape({ recommendations, forecastMonths, planSummary, projectionMonths, forecastBadgeText }) {
+function PlannerTape({ recommendations, longTermPlan, planSummary }) {
   const todayItems = recommendations.map((rec) => {
     const isSell = rec.action === 'sell';
     const pctOfPosition = isSell && rec.current_value_eur > 0
@@ -782,33 +753,60 @@ function PlannerTape({ recommendations, forecastMonths, planSummary, projectionM
       key: `today-${rec.symbol}-${rec.action}`,
       tone: rec.action,
       label: `${rec.action.toUpperCase()} ${formatEur(Math.abs(rec.value_delta_eur))}${pctOfPosition} ${rec.symbol}`,
+      title: rec.is_fallback ? 'Convergence fallback after the configured patience window' : rec.reason,
     };
   });
 
-  const forecastItems = forecastMonths.map((month) => ({
-    key: `forecast-${month.month}`,
-    tone: (month.recommendations || []).length > 0 ? 'forecast' : 'quiet',
-    label: `M${month.month}: ${forecastBadgeText(month)}`,
-  }));
+  const securityTargets = longTermPlan?.targets || [];
+  const cashTarget = longTermPlan ? {
+    symbol: 'CASH',
+    clara_score: null,
+    opportunity_score: null,
+    target_value_eur: Number(longTermPlan.target_cash_value_eur || 0),
+    gap_eur: Number(longTermPlan.cash_gap_eur || 0),
+    isCash: true,
+  } : null;
+  const allTargets = cashTarget && (cashTarget.target_value_eur > 0 || Number(longTermPlan?.current_cash_eur || 0) > 0)
+    ? [...securityTargets, cashTarget]
+    : securityTargets;
+  const targetItems = [...allTargets]
+    .sort((a, b) => Math.abs(Number(b.gap_eur || 0)) - Math.abs(Number(a.gap_eur || 0)))
+    .slice(0, 6)
+    .map((target) => {
+      const gap = Number(target.gap_eur || 0);
+      const gapText = target.sell_locked ? 'locked' : `${gap >= 0 ? '+' : '-'}${formatEur(Math.abs(gap))}`;
+      return {
+        key: `target-${target.symbol}`,
+        tone: 'target',
+        label: `${target.symbol} ${formatEur(target.target_value_eur)} (${gapText})`,
+        title: target.isCash
+          ? 'Explicit cash allocation required by the target and position constraints'
+          : target.sell_locked
+            ? `No-sell floor; model target ${formatEur(target.model_target_value_eur || 0)}`
+          : `Clara ${Number(target.clara_score || 0).toFixed(2)}, opportunity ${Number(target.opportunity_score || 0).toFixed(2)}`,
+      };
+    });
 
   return (
     <div className="planner-tape">
       <PlannerTapeGroup
         icon={<IconListCheck size={15} />}
-        title="Today"
+        title={planSummary?.valid_for_minutes ? `Next ${planSummary.valid_for_minutes} min` : 'Next cycle'}
         items={todayItems}
         empty="No pending actions"
       />
       <IconArrowRight size={15} className="planner-tape__inline-arrow" />
       <PlannerTapeGroup
         icon={<IconTrendingUp size={15} />}
-        title={`${projectionMonths} mo`}
-        items={forecastItems}
-        empty="Forecast unavailable"
+        title={`${longTermPlan?.horizon_months || 12} mo gaps`}
+        items={targetItems}
+        empty="Target unavailable"
       />
-      {planSummary && (
+      {longTermPlan && (
         <span className="planner-tape__meta">
-          cash {formatEur(planSummary.cash_after_plan || 0)} · {formatEur(planSummary.avg_monthly_net_deposit_6m || 0)}/mo
+          {formatEur(longTermPlan.terminal_portfolio_value_eur || 0)} by {longTermPlan.horizon_end_date} · {formatEur(longTermPlan.avg_monthly_net_deposit_eur || 0)}/mo
+          {` · ${securityTargets.length} securities`}
+          {planSummary ? ` · cash after today ${formatEur(planSummary.cash_after_plan || 0)}` : ''}
         </span>
       )}
     </div>

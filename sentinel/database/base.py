@@ -737,6 +737,42 @@ class BaseDatabase:
         rows = await cursor.fetchall()
         return {row["symbol"]: dict(row) for row in rows}
 
+    # -------------------------------------------------------------------------
+    # Planner State
+    # -------------------------------------------------------------------------
+
+    async def get_planner_state(self, key: str, default=None):
+        """Get a durable planner coordination value."""
+        import json
+
+        cursor = await self.conn.execute("SELECT value FROM planner_state WHERE key = ?", (key,))
+        row = await cursor.fetchone()
+        if not row:
+            return default
+        try:
+            return json.loads(row["value"])
+        except (TypeError, ValueError):
+            return default
+
+    async def set_planner_state(self, key: str, value) -> None:
+        """Persist a planner coordination value."""
+        import json
+
+        await self.conn.execute(
+            """INSERT INTO planner_state (key, value, updated_at)
+               VALUES (?, ?, strftime('%s', 'now'))
+               ON CONFLICT(key) DO UPDATE SET
+                   value = excluded.value,
+                   updated_at = excluded.updated_at""",
+            (key, json.dumps(value)),
+        )
+        await self.conn.commit()
+
+    async def delete_planner_state(self, key: str) -> None:
+        """Delete a durable planner coordination value."""
+        await self.conn.execute("DELETE FROM planner_state WHERE key = ?", (key,))
+        await self.conn.commit()
+
     async def upsert_strategy_state(self, symbol: str, **fields) -> None:
         """Insert or update strategy state for a symbol."""
         existing = await self.get_strategy_state(symbol)

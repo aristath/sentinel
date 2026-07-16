@@ -6,7 +6,7 @@ import asyncio
 import inspect
 import json
 import logging
-from dataclasses import asdict
+from dataclasses import asdict, replace
 from datetime import datetime, timezone
 from typing import Any
 
@@ -24,14 +24,14 @@ from sentinel.strategy import (
 )
 
 from .deposit_history import DepositHistoryHelper
-from .models import PlannerState, TradeRecommendation
-from .preferences import has_strategic_buy_pressure, is_explicit_downgrade
+from .models import PLANNING_HORIZON_MONTHS, PlannerState, TradeRecommendation
+from .preferences import is_explicit_downgrade
 from .rebalance_cash import apply_cash_constraint, generate_deficit_sells, get_deficit_sells
 from .rebalance_rules import (
+    buy_rank_key,
     calculate_priority,
     desired_tranche_stage,
     generate_buy_reason,
-    generate_sell_reason,
     get_forced_opportunity_exit,
 )
 
@@ -43,11 +43,12 @@ class RebalanceEngine:
 
     # Buffer to maintain above zero when calculating deficit (avoid oscillating)
     BALANCE_BUFFER_EUR = 10.0
+    FALLBACK_WAIT_STARTED_KEY = "fallback_wait_started_at"
 
     @staticmethod
     def _recommendation_cache_key(min_trade_value: float) -> str:
         """Build stable cache key for recommendation payloads."""
-        return f"planner:recommendations:{float(min_trade_value):.2f}"
+        return f"planner:recommendations:v3:{float(min_trade_value):.2f}"
 
     @staticmethod
     def _normalize_conviction(value: Any) -> float:
@@ -113,7 +114,6 @@ class RebalanceEngine:
             "strategy_lot_standard_max_pct": DEFAULTS["strategy_lot_standard_max_pct"],
             "strategy_lot_coarse_max_pct": DEFAULTS["strategy_lot_coarse_max_pct"],
             "strategy_min_opp_score": DEFAULTS["strategy_min_opp_score"],
-            "strategy_strategic_buy_threshold": DEFAULTS["strategy_strategic_buy_threshold"],
             "strategy_entry_t1_dd": DEFAULTS["strategy_entry_t1_dd"],
             "strategy_entry_t2_dd": DEFAULTS["strategy_entry_t2_dd"],
             "strategy_entry_t3_dd": DEFAULTS["strategy_entry_t3_dd"],
@@ -125,15 +125,12 @@ class RebalanceEngine:
             "strategy_opportunity_cooloff_days": DEFAULTS["strategy_opportunity_cooloff_days"],
             "strategy_core_cooloff_days": DEFAULTS["strategy_core_cooloff_days"],
             "strategy_same_side_cooloff_days": DEFAULTS["strategy_same_side_cooloff_days"],
-            "strategy_core_floor_pct": DEFAULTS["strategy_core_floor_pct"],
             "strategy_max_opportunity_buys_per_cycle": DEFAULTS["strategy_max_opportunity_buys_per_cycle"],
             "strategy_max_new_opportunity_buys_per_cycle": DEFAULTS["strategy_max_new_opportunity_buys_per_cycle"],
-            "strategy_rotation_threshold": DEFAULTS["strategy_rotation_threshold"],
-            "strategy_core_new_min_score": DEFAULTS["strategy_core_new_min_score"],
-            "strategy_core_new_min_dip_score": DEFAULTS["strategy_core_new_min_dip_score"],
+            "strategy_core_timing_min_score": DEFAULTS["strategy_core_timing_min_score"],
+            "strategy_core_timing_min_dip_score": DEFAULTS["strategy_core_timing_min_dip_score"],
+            "strategy_fallback_wait_days": DEFAULTS["strategy_fallback_wait_days"],
             "strategy_coarse_max_new_lots_per_cycle": DEFAULTS["strategy_coarse_max_new_lots_per_cycle"],
-            "strategy_projection_months": DEFAULTS["strategy_projection_months"],
-            "strategy_priority_contrarian_weight_pct": DEFAULTS["strategy_priority_contrarian_weight_pct"],
         }
         keys = list(defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, defaults[k]) for k in keys])
@@ -173,6 +170,9 @@ class RebalanceEngine:
         as_of_date: str | None = None,
         precomputed_rebalance_signals: dict[str, dict[str, float | int | str]] | None = None,
         precomputed_sleeves: dict[str, str] | None = None,
+        avg_monthly_net_deposit_eur: float | None = None,
+        eligible_symbols: set[str] | None = None,
+        track_fallback_state: bool = False,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate trade recommendations to move toward ideal portfolio.
@@ -194,7 +194,7 @@ class RebalanceEngine:
             min_trade_value = float(setting_value) if setting_value is not None else 100.0
 
         # Skip cache when as_of_date is set (e.g. backtest) or explicit state is supplied.
-        if as_of_date is None and state is None:
+        if as_of_date is None and state is None and eligible_symbols is None and not track_fallback_state:
             cache_key = self._recommendation_cache_key(min_trade_value)
             cache_getter = getattr(self._db, "cache_get", None)
             if callable(cache_getter):
@@ -403,21 +403,24 @@ class RebalanceEngine:
 
         # Net contribution rate drives retirement-fund planning: target EUR
         # values are sized against the portfolio we expect after contributions.
-        avg_monthly_net_deposit_6m = (
-            float(state.avg_monthly_net_deposit_eur)
-            if state is not None and state.avg_monthly_net_deposit_eur is not None
-            else await self._get_avg_monthly_net_deposit(as_of_date)
-        )
+        if avg_monthly_net_deposit_eur is not None:
+            avg_monthly_net_deposit_6m = float(avg_monthly_net_deposit_eur)
+        elif state is not None and state.avg_monthly_net_deposit_eur is not None:
+            avg_monthly_net_deposit_6m = float(state.avg_monthly_net_deposit_eur)
+        else:
+            avg_monthly_net_deposit_6m = await self._get_avg_monthly_net_deposit(as_of_date)
         planning_total_value = self._projected_total_value(
             total_value,
             avg_monthly_net_deposit_6m,
-            settings_ctx["strategy_projection_months"],
+            PLANNING_HORIZON_MONTHS,
         )
 
         # Generate recommendations
         recommendations = []
 
         for symbol in all_symbols:
+            if eligible_symbols is not None and symbol not in eligible_symbols:
+                continue
             rec = await self._build_recommendation(
                 symbol,
                 ideal,
@@ -436,9 +439,6 @@ class RebalanceEngine:
             if rec:
                 recommendations.append(rec)
 
-        # Sort: SELL first, then by priority
-        recommendations.sort(key=lambda x: (0 if x.action == "sell" else 1, -x.priority))
-
         # Add deficit-fix sells at the front
         deficit_sells = await self._get_deficit_sells(
             as_of_date=as_of_date,
@@ -446,6 +446,7 @@ class RebalanceEngine:
             current=current,
             total_value=total_value,
             planning_total_value=planning_total_value,
+            eligible_symbols=eligible_symbols,
             state=state,
         )
         if deficit_sells:
@@ -460,10 +461,7 @@ class RebalanceEngine:
             max_new_opp_buys=int(settings_ctx["strategy_max_new_opportunity_buys_per_cycle"]),
         )
 
-        # Apply cash constraint (including optional funding sells)
-        recommendations = await self._apply_cash_constraint(
-            recommendations,
-            min_trade_value,
+        cash_context = dict(
             as_of_date=as_of_date,
             ideal=ideal,
             current=current,
@@ -482,11 +480,20 @@ class RebalanceEngine:
             preloaded_symbol_prices={
                 symbol: float(sec.get("price", 0.0) or 0.0) for symbol, sec in security_data.items()
             },
+            eligible_symbols=eligible_symbols,
             state=state,
+        )
+        recommendations = await self._select_executable_plan(
+            recommendations,
+            min_trade_value=float(min_trade_value),
+            fallback_wait_days=float(settings_ctx["strategy_fallback_wait_days"]),
+            as_of_date=as_of_date,
+            track_fallback_state=track_fallback_state,
+            cash_context=cash_context,
         )
 
         # Cache result only when live and DB-backed (not as_of_date / explicit state).
-        if as_of_date is None and state is None:
+        if as_of_date is None and state is None and eligible_symbols is None and not track_fallback_state:
             cache_key = self._recommendation_cache_key(min_trade_value)
             cache_setter = getattr(self._db, "cache_set", None)
             if callable(cache_setter):
@@ -498,6 +505,116 @@ class RebalanceEngine:
                 if inspect.isawaitable(maybe_set):
                     await maybe_set
         return recommendations
+
+    async def _select_executable_plan(
+        self,
+        recommendations: list[TradeRecommendation],
+        *,
+        min_trade_value: float,
+        fallback_wait_days: float,
+        as_of_date: str | None,
+        track_fallback_state: bool,
+        cash_context: dict[str, Any],
+    ) -> list[TradeRecommendation]:
+        """Choose executable timely buys, then one due convergence fallback."""
+        sells = sorted((r for r in recommendations if r.action == "sell"), key=lambda rec: -rec.priority)
+        buys = sorted((r for r in recommendations if r.action == "buy"), key=buy_rank_key)
+        timely = [rec for rec in buys if rec.timing_eligible]
+
+        if timely:
+            timely_plan = await self._apply_cash_constraint(
+                sells + timely,
+                min_trade_value,
+                **cash_context,
+            )
+            if any(rec.action == "buy" for rec in timely_plan):
+                if track_fallback_state:
+                    await self._delete_planner_state(self.FALLBACK_WAIT_STARTED_KEY)
+                return self._assign_execution_ranks(timely_plan)
+
+        fallback_candidates = [rec for rec in buys if not rec.timing_eligible]
+        if not fallback_candidates:
+            return self._assign_execution_ranks(sells)
+
+        fallback_due = await self._fallback_is_due(
+            wait_days=fallback_wait_days,
+            as_of_date=as_of_date,
+            start_wait=track_fallback_state,
+        )
+        if not fallback_due:
+            return self._assign_execution_ranks(sells)
+
+        # Try candidates in opportunity/gap order. A candidate that cannot be
+        # funded in a valid lot does not block the next executable target.
+        for candidate in fallback_candidates:
+            marked = replace(
+                candidate,
+                is_fallback=True,
+                reason_code="convergence_fallback",
+                reason=(
+                    f"Convergence buy after {int(max(0, fallback_wait_days))} days without an executable "
+                    f"opportunity: opportunity={candidate.contrarian_score:.2f}, "
+                    f"target missing={candidate.target_gap_ratio:.0%}"
+                ),
+            )
+            fallback_plan = await self._apply_cash_constraint(
+                sells + [marked],
+                min_trade_value,
+                **cash_context,
+            )
+            if any(rec.action == "buy" for rec in fallback_plan):
+                return self._assign_execution_ranks(fallback_plan)
+
+        return self._assign_execution_ranks(sells)
+
+    @staticmethod
+    def _assign_execution_ranks(recommendations: list[TradeRecommendation]) -> list[TradeRecommendation]:
+        sells = sorted((rec for rec in recommendations if rec.action == "sell"), key=lambda rec: -rec.priority)
+        buys = sorted((rec for rec in recommendations if rec.action == "buy"), key=buy_rank_key)
+        return [replace(rec, execution_rank=index) for index, rec in enumerate(sells + buys, start=1)]
+
+    async def _fallback_is_due(self, *, wait_days: float, as_of_date: str | None, start_wait: bool) -> bool:
+        wait_seconds = max(0, int(wait_days * 86400))
+        if wait_seconds == 0:
+            return True
+
+        now_ts = self._planning_timestamp(as_of_date)
+        wait_started = await self._get_planner_state(self.FALLBACK_WAIT_STARTED_KEY)
+        if not isinstance(wait_started, int | float):
+            if start_wait:
+                await self._set_planner_state(self.FALLBACK_WAIT_STARTED_KEY, now_ts)
+            return False
+        return now_ts - int(wait_started) >= wait_seconds
+
+    @staticmethod
+    def _planning_timestamp(as_of_date: str | None) -> int:
+        if not as_of_date:
+            return int(datetime.now(timezone.utc).timestamp())
+        parsed = datetime.fromisoformat(as_of_date)
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return int(parsed.timestamp())
+
+    async def _get_planner_state(self, key: str):
+        getter = getattr(self._db, "get_planner_state", None)
+        if not callable(getter):
+            return None
+        value = getter(key)
+        return await value if inspect.isawaitable(value) else value
+
+    async def _set_planner_state(self, key: str, value: Any) -> None:
+        setter = getattr(self._db, "set_planner_state", None)
+        if callable(setter):
+            result = setter(key, value)
+            if inspect.isawaitable(result):
+                await result
+
+    async def _delete_planner_state(self, key: str) -> None:
+        deleter = getattr(self._db, "delete_planner_state", None)
+        if callable(deleter):
+            result = deleter(key)
+            if inspect.isawaitable(result):
+                await result
 
     async def _apply_opportunity_buy_throttle(
         self,
@@ -521,20 +638,17 @@ class RebalanceEngine:
         if not opp_buys:
             return recommendations
 
-        def rank_key(rec: TradeRecommendation) -> tuple[float, float, float]:
-            return (float(rec.priority), float(rec.contrarian_score), float(rec.value_delta_eur))
-
         new_opp = [r for r in opp_buys if float(r.current_allocation) <= 1e-6]
         add_opp = [r for r in opp_buys if float(r.current_allocation) > 1e-6]
-        new_opp.sort(key=rank_key, reverse=True)
-        add_opp.sort(key=rank_key, reverse=True)
+        new_opp.sort(key=buy_rank_key)
+        add_opp.sort(key=buy_rank_key)
 
         kept_new = new_opp[:max_new_opp_buys]
         remaining = max(0, max_opp_buys - len(kept_new))
         kept_add = add_opp[:remaining]
 
         buys = non_opp_buys + kept_new + kept_add
-        buys.sort(key=lambda r: float(r.priority), reverse=True)
+        buys.sort(key=buy_rank_key)
         return sells + buys
 
     def _get_price(
@@ -624,23 +738,19 @@ class RebalanceEngine:
         allow_sell = sec_data.get("allow_sell", 1)
         lot_class = sec_data.get("lot_class", "standard")
         ticket_pct = float(sec_data.get("ticket_pct", 0.0) or 0.0)
-        is_downgrade = bool(sec_data.get("is_downgrade", False))
         signal = signal_data.get(symbol, {})
         sleeve = str(signal.get("sleeve", "core"))
         state = sec_data.get("state", {}) or {}
         opp_score = float(signal.get("opp_score", 0.0) or 0.0)
         raw_opp_score = float(signal.get("opp_score_raw", opp_score) or 0.0)
         memory_boosted = bool(int(signal.get("memory_boosted", 0) or 0) == 1)
+        timing_eligible = True
         min_opp_score = settings_ctx["strategy_min_opp_score"]
         max_position_pct = settings_ctx["max_position_pct"] / 100.0
         addon_threshold = settings_ctx["strategy_opportunity_addon_threshold"]
         entry_t1_dd = settings_ctx["strategy_entry_t1_dd"]
         entry_t2_dd = settings_ctx["strategy_entry_t2_dd"]
         entry_t3_dd = settings_ctx["strategy_entry_t3_dd"]
-        strategic_buy_threshold = settings_ctx.get(
-            "strategy_strategic_buy_threshold",
-            DEFAULTS["strategy_strategic_buy_threshold"],
-        )
 
         if price <= 0:
             return None
@@ -667,6 +777,12 @@ class RebalanceEngine:
             forced_reason_code = forced_exit["reason_code"]
 
         if abs(delta) < 0.0001 and forced_sell_qty <= 0:  # No significant change needed
+            return None
+
+        # Ordinary overweight positions are not standalone sell instructions.
+        # They remain eligible funding sources and are sold only after an
+        # executable buy has been selected. Lifecycle exits are independent.
+        if delta < 0 and forced_sell_qty <= 0:
             return None
 
         # Pre-compute opportunity-sleeve tranche intent. The contrarian sleeve is
@@ -739,91 +855,16 @@ class RebalanceEngine:
         if rounded_qty < lot_size:
             return None
 
-        if delta < 0 or forced_sell_qty > 0:
-            # Calculate months to self-correct for sell recommendations
-            if avg_monthly_deposit_6m is None:
-                avg_monthly_deposit_6m = await self._get_avg_monthly_net_deposit(as_of_date)
-
-            excess_above_target_eur = max(0, -raw_value_delta)
-            months_to_self_correct = await self._calculate_months_to_self_correct(
-                excess_above_target_eur,
-                as_of_date,
-                avg_monthly_net_deposit_6m=avg_monthly_deposit_6m,
-            )
-
-            # Profit amount (EUR) drives the profits-first sell cap. The position's
-            # unrealized gain is in the security's local currency; convert to EUR so
-            # the min() below compares like with like (excess_above_target_eur is EUR).
-            profit_amount_local = (price - avg_cost) * current_qty
-            if currency != "EUR":
-                profit_amount_eur = profit_amount_local * fx_rate if fx_rate > 0 else profit_amount_local
-            else:
-                profit_amount_eur = profit_amount_local
-
-            # Don't proactively trim an overweight position if monthly deposits will dilute it
-            # back to target within ~3 months. This is a "don't churn" gate, not a
-            # deferral — deposits do the work.
-            if months_to_self_correct <= 3:
-                return None
-
-            # For rotation trades (selling A to buy B), check opportunity and conviction
-            if not forced_sell_qty > 0:
-                rotation_threshold = settings_ctx["strategy_rotation_threshold"]
-                has_rotation_candidate = False
-
-                for other_symbol, other_delta in ideal.items():
-                    if other_symbol == symbol:
-                        continue
-                    if other_delta > 0:  # Potential buy candidate
-                        other_signal = signal_data.get(other_symbol, {})
-                        opportunity_A = opp_score  # dip_score of A (how cheap is it?)
-                        opportunity_B = float(other_signal.get("opp_score", 0.0) or 0.0)  # dip_score of B
-                        conviction_A = float(signal.get("user_multiplier", 0.5) or 0.5)  # Clara score of A
-                        conviction_B = float(other_signal.get("user_multiplier", 0.5) or 0.5)  # Clara score of B
-
-                        # Skip sell if B's conviction is too low relative to A
-                        if conviction_B < conviction_A * rotation_threshold:
-                            continue
-
-                        # Recommend rotation if B is a better opportunity AND has higher conviction
-                        if opportunity_B > opportunity_A and conviction_B > conviction_A:
-                            has_rotation_candidate = True
-                            break
-
-                # If no suitable rotation candidate found, skip this drift-driven sell.
-                # (Real cash deficits are covered separately via the deficit-sell path.)
-                if not has_rotation_candidate:
-                    return None
-
-                # Cap the sell at the position's unrealized profit (in EUR), so a
-                # routine drift-rebalance never realizes a loss on a name we still hold.
-                max_sell_eur = min(max(0, profit_amount_eur), excess_above_target_eur)
-                if currency != "EUR":
-                    max_sell_local = max_sell_eur / fx_rate if fx_rate > 0 else max_sell_eur
-                else:
-                    max_sell_local = max_sell_eur
-                max_sell_qty = (int(max_sell_local / price) // lot_size) * lot_size
-
-                # Ensure we don't sell more than available quantity
-                rounded_qty = min(rounded_qty, current_qty, max_sell_qty)
-                if rounded_qty < lot_size:
-                    return None
-
         if delta > 0 and forced_sell_qty <= 0:
-            # For new core names without strategic preference pressure, require
-            # minimum contrarian quality to avoid pure drift-driven churn.
-            if sleeve == "core" and current_alloc <= 1e-6 and lot_class == "standard":
-                clara_target = float(signal.get("clara_target_pct", 0.0) or 0.0)
-                user_multiplier = float(signal.get("user_multiplier", 0.5) or 0.5)
-                if clara_target <= 1e-9 or not has_strategic_buy_pressure(user_multiplier, strategic_buy_threshold):
-                    core_new_min_score = settings_ctx["strategy_core_new_min_score"]
-                    core_new_min_dip = settings_ctx["strategy_core_new_min_dip_score"]
-                    dip_score = float(signal.get("dip_score", 0.0) or 0.0)
-                    cycle_turn = int(signal.get("cycle_turn", 0) or 0)
-                    if opp_score < core_new_min_score:
-                        return None
-                    if dip_score < core_new_min_dip and cycle_turn == 0:
-                        return None
+            # Core target gaps are always candidates, but price quality decides
+            # whether they should be bought ahead of the remaining gaps today.
+            # A poor candidate survives only as the convergence fallback.
+            if sleeve == "core":
+                core_min_score = settings_ctx["strategy_core_timing_min_score"]
+                core_min_dip = settings_ctx["strategy_core_timing_min_dip_score"]
+                dip_score = float(signal.get("dip_score", 0.0) or 0.0)
+                cycle_turn = int(signal.get("cycle_turn", 0) or 0)
+                timing_eligible = opp_score >= core_min_score and (dip_score >= core_min_dip or cycle_turn == 1)
 
             # Tranche entry control for opportunity sleeve. desired_stage /
             # current_stage were computed up front (for the cool-off exemption).
@@ -841,32 +882,6 @@ class RebalanceEngine:
                 if opp_score < 0.8:
                     max_new_lots = int(settings_ctx["strategy_coarse_max_new_lots_per_cycle"])
                     rounded_qty = min(rounded_qty, max_new_lots * lot_size)
-                    if rounded_qty < lot_size:
-                        return None
-
-        core_floor_active = False
-        if delta < 0 or forced_sell_qty > 0:
-            # Protect core holdings from over-trimming — but NOT names we've
-            # deliberately written off (slider <= 0.5). For those the target is
-            # zero and a full exit is the whole point, so the floor is bypassed.
-            floor_pct = settings_ctx["strategy_core_floor_pct"]
-            if sleeve == "core" and not is_downgrade:
-                current_value = current_value_eur
-                # Only apply floor protection if position is ABOVE the floor
-                if current_alloc > floor_pct:
-                    max_sell_value_eur = max(0.0, current_value - (floor_pct * planning_value))
-                    core_floor_active = True
-                    if max_sell_value_eur <= 0:
-                        return None
-                    if currency != "EUR":
-                        max_sell_local = max_sell_value_eur / fx_rate if fx_rate > 0 else max_sell_value_eur
-                    else:
-                        max_sell_local = max_sell_value_eur
-                    max_sell_qty = (int(max_sell_local / price) // lot_size) * lot_size
-                    # Keep at least one lot for held core positions.
-                    if current_qty >= lot_size:
-                        max_sell_qty = min(max_sell_qty, max(0, current_qty - lot_size))
-                    rounded_qty = min(rounded_qty, max_sell_qty)
                     if rounded_qty < lot_size:
                         return None
 
@@ -928,27 +943,12 @@ class RebalanceEngine:
                 target_alloc=target_alloc,
                 signal=signal,
                 lot_class=lot_class,
-                strategic_buy_threshold=strategic_buy_threshold,
-            )
-        else:
-            action = "sell"
-            reason_code = "rebalance_sell"
-            reason = generate_sell_reason(
-                symbol=symbol,
-                contrarian_score=contrarian_score,
-                current_alloc=planning_current_alloc,
-                target_alloc=target_alloc,
-                signal=signal,
             )
 
-        contrarian_weight_pct = settings_ctx.get("strategy_priority_contrarian_weight_pct")
-        if contrarian_weight_pct is None:
-            contrarian_weight_pct = DEFAULTS["strategy_priority_contrarian_weight_pct"]
         priority = calculate_priority(
             action=action,
             value_delta_eur=raw_value_delta,
             contrarian_score=contrarian_score,
-            contrarian_weight_pct=float(contrarian_weight_pct),
         )
 
         return TradeRecommendation(
@@ -959,7 +959,7 @@ class RebalanceEngine:
             allocation_delta=delta,
             current_value_eur=current_value_eur,
             target_value_eur=target_value_eur,
-            value_delta_eur=actual_value_eur if delta > 0 else -actual_value_eur,
+            value_delta_eur=actual_value_eur if action == "buy" else -actual_value_eur,
             quantity=rounded_qty,
             price=price,
             currency=currency,
@@ -971,14 +971,17 @@ class RebalanceEngine:
             sleeve=sleeve,
             lot_class=lot_class,
             ticket_pct=ticket_pct,
-            core_floor_active=core_floor_active,
             memory_entry=memory_entry,
             user_multiplier=float(signal.get("user_multiplier", 0.5) or 0.5),
             clara_target_pct=float(signal.get("clara_target_pct", 0.0) or 0.0),
             baseline_target_pct=float(signal.get("baseline_target_pct", 0.0) or 0.0),
             opportunity_target_pct=float(signal.get("opportunity_target_pct", 0.0) or 0.0),
-            profit_amount_eur=profit_amount_eur if action == "sell" else None,
-            profits_first=action == "sell" and profit_amount_eur > 0,
+            timing_eligible=timing_eligible,
+            target_gap_ratio=(
+                max(0.0, min(1.0, raw_value_delta / target_value_eur))
+                if action == "buy" and target_value_eur > 0
+                else 0.0
+            ),
         )
 
     async def _check_cooloff_violation(
@@ -1060,6 +1063,7 @@ class RebalanceEngine:
         preloaded_securities_map: dict[str, dict] | None = None,
         preloaded_symbol_scores: dict[str, float] | None = None,
         preloaded_symbol_prices: dict[str, float] | None = None,
+        eligible_symbols: set[str] | None = None,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Scale down buy recommendations to fit within available cash."""
@@ -1077,6 +1081,7 @@ class RebalanceEngine:
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
+            eligible_symbols=eligible_symbols,
             state=state,
         )
 
@@ -1087,6 +1092,7 @@ class RebalanceEngine:
         current: dict[str, float] | None = None,
         total_value: float | None = None,
         planning_total_value: float | None = None,
+        eligible_symbols: set[str] | None = None,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate sell recommendations if negative balances can't be covered."""
@@ -1097,6 +1103,7 @@ class RebalanceEngine:
             current=current,
             total_value=total_value,
             planning_total_value=planning_total_value,
+            eligible_symbols=eligible_symbols,
             state=state,
         )
 
@@ -1114,6 +1121,7 @@ class RebalanceEngine:
         preloaded_securities_map: dict[str, dict] | None = None,
         preloaded_symbol_scores: dict[str, float] | None = None,
         preloaded_symbol_prices: dict[str, float] | None = None,
+        eligible_symbols: set[str] | None = None,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate sell recommendations to cover remaining deficit."""
@@ -1131,6 +1139,7 @@ class RebalanceEngine:
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
+            eligible_symbols=eligible_symbols,
             state=state,
         )
 

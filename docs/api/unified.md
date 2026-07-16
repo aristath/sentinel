@@ -47,13 +47,14 @@ Returns a single merged view of all active securities, combining position data, 
     "post_plan_allocation": 4.10,
     "ideal_allocation": 4.50,
     "allocation_sleeve": "core",
-    "baseline_target_pct": 1.10,
-    "clara_target_pct": 3.40,
+    "baseline_target_pct": 0.00,
+    "clara_target_pct": 4.50,
     "opportunity_target_pct": 0.00,
     "final_target_pct": 4.50,
 
     "contrarian_score": 0.61,
     "opp_score": 0.63,
+    "opp_score_raw": 0.61,
     "dip_score": 0.45,
     "capitulation_score": 0.21,
     "cycle_turn": false,
@@ -61,7 +62,6 @@ Returns a single merged view of all active securities, combining position data, 
     "ticket_pct": 0.06,
     "lot_class": "standard",
     "sleeve": "core",
-    "core_floor_active": false,
 
     "prices": [
       { "date": "2025-04-27", "close": 185.50 }
@@ -71,8 +71,13 @@ Returns a single merged view of all active securities, combining position data, 
       "action": "buy",
       "quantity": 2,
       "value_delta_eur": 344.00,
-      "reason": "Underweight core position — adding standard lot",
-      "reason_code": "CORE_UNDERWEIGHT",
+      "reason": "Opportunity 0.61; Clara 0.90; dip 0.45; adding standard lot",
+      "reason_code": "rebalance_buy",
+      "execution_rank": 1,
+      "contrarian_score": 0.61,
+      "target_gap_ratio": 0.62,
+      "timing_eligible": true,
+      "is_fallback": false,
       "priority": 0.72
     }
   }
@@ -107,18 +112,19 @@ Returns a single merged view of all active securities, combining position data, 
 | `current_allocation` | Current position as % of total portfolio |
 | `post_plan_allocation` | Allocation after applying all recommendations |
 | `ideal_allocation` | Target allocation from the Planner |
-| `allocation_sleeve` | Primary algo half driver for the target, `core` (baseline rank) or `opportunity` (contrarian signal) |
-| `baseline_target_pct` | Algo half — baseline-rank contribution to the final target |
-| `clara_target_pct` | User-multiplier half — slider-driven contribution to the final target |
-| `opportunity_target_pct` | Algo half — tactical opportunity contribution to the final target |
-| `final_target_pct` | Final target after normalization and position caps. Equals `clara_target_pct + baseline_target_pct + opportunity_target_pct`. |
+| `allocation_sleeve` | Timing classification, `core` or `opportunity`; it does not change the long-term weight |
+| `baseline_target_pct` | Compatibility field; currently `0` because targets are Clara-defined |
+| `clara_target_pct` | Clara-defined long-term target after normalization and position caps |
+| `opportunity_target_pct` | Compatibility field; currently `0` because opportunity affects timing, not destination |
+| `final_target_pct` | Final long-term security target after normalization and position caps |
 
 **Contrarian signals**
 
 | Field | Description |
 |---|---|
 | `contrarian_score` | Tactical opportunity score used for display and opportunity rules |
-| `opp_score` | Raw opportunity score (0–1) |
+| `opp_score` | Effective opportunity score after recent-dip memory (0–1) |
+| `opp_score_raw` | Raw opportunity score before recent-dip memory is applied |
 | `dip_score` | Dip detection score |
 | `capitulation_score` | Capitulation/oversold score |
 | `cycle_turn` | `true` if a cyclical turn signal is detected |
@@ -126,7 +132,6 @@ Returns a single merged view of all active securities, combining position data, 
 | `ticket_pct` | Lot cost as fraction of portfolio value |
 | `lot_class` | `standard` or `coarse` |
 | `sleeve` | `core` or `opportunity` |
-| `core_floor_active` | `true` if position is at or below the core floor threshold |
 
 **Prices**
 
@@ -142,5 +147,10 @@ Ordered oldest-first within the requested `period`. Each entry: `{ "date": "YYYY
 | `quantity` | Shares/units to trade |
 | `value_delta_eur` | EUR value impact (positive = buy, negative = sell) |
 | `reason` | Human-readable explanation |
-| `reason_code` | Machine-readable code (e.g. `CORE_UNDERWEIGHT`) |
-| `priority` | Higher = more urgent (used for ordering) |
+| `reason_code` | Machine-readable reason such as `entry_t1` or `convergence_fallback` |
+| `execution_rank` | Order in the complete executable recommendation set |
+| `contrarian_score` | Opportunity score used to rank buy timing |
+| `target_gap_ratio` | Fraction of the twelve-month target value still missing |
+| `timing_eligible` | Whether the buy meets its normal opportunity timing gate |
+| `is_fallback` | `true` only for a convergence buy released after the patience window |
+| `priority` | Legacy numeric urgency value; execution order is authoritative |

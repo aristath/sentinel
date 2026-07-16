@@ -47,11 +47,8 @@ DEFAULTS = {
     "freedom24_login": "",
     "freedom24_password": "",
     # Contrarian strategy
-    "strategy_core_target_pct": 80,
-    "strategy_opportunity_target_pct": 20,
     "strategy_min_opp_score": 0.55,
     "strategy_ideal_qualifying_threshold": 0.65,
-    "strategy_strategic_buy_threshold": 0.70,
     "strategy_entry_t1_dd": -0.10,
     "strategy_entry_t2_dd": -0.16,
     "strategy_entry_t3_dd": -0.22,
@@ -63,33 +60,24 @@ DEFAULTS = {
     "strategy_lot_standard_max_pct": 0.08,
     "strategy_lot_coarse_max_pct": 0.30,
     "strategy_coarse_max_new_lots_per_cycle": 1,
-    "strategy_core_floor_pct": 0.05,
     "strategy_opportunity_cooloff_days": 7,
     "strategy_core_cooloff_days": 21,
     "strategy_same_side_cooloff_days": 15,
     "strategy_rotation_time_stop_days": 90,
-    "strategy_rotation_threshold": 0.9,
-    # Target EUR amounts are planned against current portfolio value plus the
-    # trailing 6-month net monthly contribution projected this many months.
-    "strategy_projection_months": 12,
-    # Number of future monthly plans to show in the planner forecast.
-    "planner_forecast_months": 6,
-    # Contrarian timing influence on trade priority, as +/- percent around the
-    # projected EUR gap. 25 means score 0.0 -> 75%, 0.5 -> 100%, 1.0 -> 125%.
-    "strategy_priority_contrarian_weight_pct": 25.0,
-    "strategy_core_new_min_score": 0.30,
-    "strategy_core_new_min_dip_score": 0.20,
+    "strategy_core_timing_min_score": 0.30,
+    "strategy_core_timing_min_dip_score": 0.20,
+    # When every executable target is poorly timed, wait this long before one
+    # convergence buy. The clock persists across restarts and resets after a buy.
+    "strategy_fallback_wait_days": 30,
     "strategy_max_funding_sells_per_cycle": 2,
     "strategy_max_funding_turnover_pct": 0.12,
     "strategy_funding_conviction_bias": 1.0,
-    # User-conviction blend. The stored `user_multiplier` slider value
-    # contributes `user_multiplier_blend_pct` percent of each security's score
-    # (the rest comes from the deterministic algos). The value decays toward
-    # neutral (0.5) by `user_multiplier_decay_factor` every
+    # User-conviction target. The stored `user_multiplier` slider value defines
+    # long-term relative weights and decays toward neutral (0.5) by
+    # `user_multiplier_decay_factor` every
     # `user_multiplier_decay_interval_days` days via a scheduled job, so an
     # untouched rating gracefully fades out over ~52 weeks at defaults.
     "clara_preference_strength": 5.0,
-    "user_multiplier_blend_pct": 80.0,
     "user_multiplier_decay_factor": 0.90,
     "user_multiplier_decay_interval_days": 7,
     # LED Display (Arduino UNO Q orbital visualization)
@@ -104,11 +92,22 @@ DEFAULTS = {
 }
 
 REMOVED_SETTINGS = {
+    "planner_forecast_months",
+    "strategy_core_target_pct",
+    "strategy_core_floor_pct",
+    "strategy_core_new_min_dip_score",
+    "strategy_core_new_min_score",
     "strategy_opportunity_target_max_pct",
+    "strategy_opportunity_target_pct",
+    "strategy_projection_months",
+    "strategy_priority_contrarian_weight_pct",
     "strategy_reserve_margin_pct",
     "strategy_reserve_max_months",
     "strategy_reserve_great_opp_score",
     "strategy_reserve_great_conviction_pct",
+    "strategy_rotation_threshold",
+    "strategy_strategic_buy_threshold",
+    "user_multiplier_blend_pct",
 }
 
 

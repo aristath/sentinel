@@ -43,10 +43,8 @@ def _settings_ctx():
         "strategy_opportunity_cooloff_days": 15,
         "strategy_same_side_cooloff_days": 10,
         "strategy_core_floor_pct": 0.05,
-        "strategy_core_new_min_score": 0.0,
+        "strategy_core_timing_min_score": 0.0,
         "min_trade_value": 250.0,
-        "strategy_core_target_pct": 80.0,
-        "strategy_opportunity_target_pct": 20.0,
     }
 
 

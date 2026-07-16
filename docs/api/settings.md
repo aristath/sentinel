@@ -25,9 +25,11 @@ Returns all application settings, merging stored values with defaults. Runtime s
   "max_dividend_reinvestment_boost": 0.15,
   "tradernet_api_key": "...",
   "tradernet_api_secret": "...",
-  "strategy_core_target_pct": 80,
-  "strategy_opportunity_target_pct": 20,
   "strategy_min_opp_score": 0.55,
+  "strategy_ideal_qualifying_threshold": 0.65,
+  "strategy_core_timing_min_score": 0.3,
+  "strategy_core_timing_min_dip_score": 0.2,
+  "strategy_fallback_wait_days": 30,
   "strategy_entry_t1_dd": -0.1,
   "strategy_entry_t2_dd": -0.16,
   "strategy_entry_t3_dd": -0.22,
@@ -39,18 +41,14 @@ Returns all application settings, merging stored values with defaults. Runtime s
   "strategy_lot_standard_max_pct": 0.08,
   "strategy_lot_coarse_max_pct": 0.3,
   "strategy_coarse_max_new_lots_per_cycle": 1,
-  "strategy_core_floor_pct": 0.05,
   "strategy_opportunity_cooloff_days": 7,
   "strategy_core_cooloff_days": 21,
   "strategy_same_side_cooloff_days": 15,
   "strategy_rotation_time_stop_days": 90,
-  "strategy_core_new_min_score": 0.3,
-  "strategy_core_new_min_dip_score": 0.2,
   "strategy_max_funding_sells_per_cycle": 2,
   "strategy_max_funding_turnover_pct": 0.12,
   "strategy_funding_conviction_bias": 1.0,
   "clara_preference_strength": 5.0,
-  "user_multiplier_blend_pct": 80.0,
   "user_multiplier_decay_factor": 0.9,
   "user_multiplier_decay_interval_days": 7,
   "led_display_enabled": true,
@@ -86,6 +84,8 @@ Returns all application settings, merging stored values with defaults. Runtime s
 |---|---|
 | `exchange_rates` | Current FX rates to EUR, embedded as a convenience (same data as `GET /api/exchange-rates`) |
 | `led_bridge_health` | Latest bridge health snapshot (same data as `GET /api/led/bridge/health`) |
+| `target_cash_pct` | Long-term cash allocation target; the remaining target weight is allocated to securities |
+| `min_cash_buffer` | Cash reserve ratio kept out of buy budgets during trade sizing |
 
 ---
 
@@ -106,17 +106,20 @@ Set a single setting value.
 { "status": "ok" }
 ```
 
+Planner-affecting settings such as cash targets, transaction fees, position caps, and timing thresholds invalidate planner caches when updated through this endpoint.
+
 ---
 
 ## `PUT /api/settings`
 
-Atomically update the strategy-tuning settings shown in the Strategy tab. All keys must be present; partial updates are rejected.
+Atomically update the strategy-tuning settings shown in the Strategy tab. All keys must be present; partial updates are rejected. Other planner settings, including cash reserve and target cash, are updated individually through `PUT /api/settings/{key}`.
 
 **Required keys**
-- `strategy_core_target_pct` — Within the deterministic-algo half of the per-security score (the 20% that doesn't come from the slider), this is the share that flows through the baseline contrarian rank (0–100). Must sum to 100 with `strategy_opportunity_target_pct`.
-- `strategy_opportunity_target_pct` — The remainder of the algo half, applied via the opportunity-score-driven contribution (0–100).
 - `strategy_min_opp_score` — Minimum score to classify a security as opportunity (0–1).
-- `strategy_core_floor_pct` — Core floor fraction (0–1).
+- `strategy_ideal_qualifying_threshold` — Minimum Clara score required for a positive long-term target (0–1).
+- `strategy_core_timing_min_score` — Minimum opportunity score for a normally timed core buy (0–1).
+- `strategy_core_timing_min_dip_score` — Minimum dip score for a normally timed core buy (0–1); a cycle turn also qualifies.
+- `strategy_fallback_wait_days` — Persistent wait before one poorly timed convergence buy may execute (0–365).
 - `strategy_entry_t1_dd`, `strategy_entry_t2_dd`, `strategy_entry_t3_dd` — Drawdown tranche thresholds (-0.9–0).
 - `strategy_entry_memory_days` — Recent-dip memory window (1–252).
 - `strategy_memory_max_boost` — Maximum recent-dip opportunity boost (0–0.5).
@@ -128,10 +131,11 @@ Atomically update the strategy-tuning settings shown in the Strategy tab. All ke
 ```json
 {
   "values": {
-    "strategy_core_target_pct": 80,
-    "strategy_opportunity_target_pct": 20,
     "strategy_min_opp_score": 0.55,
-    "strategy_core_floor_pct": 0.05,
+    "strategy_ideal_qualifying_threshold": 0.65,
+    "strategy_core_timing_min_score": 0.3,
+    "strategy_core_timing_min_dip_score": 0.2,
+    "strategy_fallback_wait_days": 30,
     "strategy_entry_t1_dd": -0.1,
     "strategy_entry_t2_dd": -0.16,
     "strategy_entry_t3_dd": -0.22,
@@ -150,4 +154,4 @@ Atomically update the strategy-tuning settings shown in the Strategy tab. All ke
 ```
 
 **Errors**
-- `400` — Missing keys, wrong types, out-of-range values, or core + opportunity targets don't sum to 100.
+- `400` — Missing keys, wrong types, or out-of-range values.

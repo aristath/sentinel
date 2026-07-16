@@ -31,12 +31,9 @@ def _make_allocator():
                 "strategy_entry_memory_days": 90,
                 "strategy_memory_max_boost": 0.20,
                 "max_dividend_reinvestment_boost": 0.10,
-                "strategy_core_target_pct": 80.0,
-                "strategy_opportunity_target_pct": 20.0,
                 "strategy_min_opp_score": 0.55,
                 "max_position_pct": 25.0,
                 "clara_preference_strength": 1.0,
-                "user_multiplier_blend_pct": 80.0,
             }.get(key, default)
         )
 
@@ -126,15 +123,12 @@ class TestAllocationRemainingCoverage:
         assert "TSM.US" in result
 
     @pytest.mark.asyncio
-    async def test_calculate_ideal_portfolio_sleeve_normalization(self, _make_allocator):
-        """Test sleeve target normalization."""
+    async def test_calculate_ideal_portfolio_clara_normalization(self, _make_allocator):
+        """Test Clara target normalization."""
         allocator = _make_allocator()
 
-        # Mock settings with valid sleeve targets
         allocator._settings.get = AsyncMock(
             side_effect=lambda key, default: {
-                "strategy_core_target_pct": 70.0,
-                "strategy_opportunity_target_pct": 30.0,
                 "strategy_min_opp_score": 0.55,
                 "max_position_pct": 25.0,
                 "strategy_entry_t1_dd": -0.12,
@@ -143,14 +137,12 @@ class TestAllocationRemainingCoverage:
                 "strategy_memory_max_boost": 0.20,
                 "max_dividend_reinvestment_boost": 0.10,
                 "clara_preference_strength": 1.0,
-                "user_multiplier_blend_pct": 80.0,
             }.get(key, default)
         )
 
         # Mock price data
         allocator._db.get_prices = AsyncMock(return_value=[{"close": 100.0}])
 
-        # Test with valid sleeve targets
         result = await allocator.calculate_ideal_portfolio()
 
         assert result is not None

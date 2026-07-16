@@ -1039,6 +1039,14 @@ CREATE TABLE IF NOT EXISTS strategy_state (
 );
 CREATE INDEX IF NOT EXISTS idx_strategy_state_sleeve ON strategy_state(sleeve);
 
+-- Durable portfolio-level planner coordination state. Unlike cache entries,
+-- these values survive planner cache refreshes and app restarts.
+CREATE TABLE IF NOT EXISTS planner_state (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+);
+
 -- Dividends (synced from broker corporate actions)
 CREATE TABLE IF NOT EXISTS dividends (
     id TEXT PRIMARY KEY,  -- corporate_action_id from broker API

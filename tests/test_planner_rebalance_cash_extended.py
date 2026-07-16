@@ -114,6 +114,96 @@ class TestApplyCashConstraintEdgeCases:
         assert result[0].quantity == 2  # 200 / 100 = 2
 
     @pytest.mark.asyncio
+    async def test_min_cash_buffer_is_not_spent_on_buys(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(
+            side_effect=lambda key, default=None: {
+                "transaction_fee_fixed": 0.0,
+                "transaction_fee_percent": 0.0,
+                "min_cash_buffer": 0.05,
+            }.get(key, default)
+        )
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=1000.0)
+        engine._currency = MagicMock()
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._generate_deficit_sells = AsyncMock(return_value=[])
+
+        buy = TradeRecommendation(
+            symbol="B",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.1,
+            allocation_delta=0.1,
+            current_value_eur=0.0,
+            target_value_eur=1000.0,
+            value_delta_eur=1000.0,
+            quantity=10,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.8,
+            priority=2.0,
+            reason="buy",
+        )
+
+        result = await engine._apply_cash_constraint(
+            [buy],
+            min_trade_value=100.0,
+            total_value=10_000.0,
+            symbol_convictions={"B": 0.8},
+        )
+
+        assert [(r.symbol, r.quantity) for r in result] == [("B", 5)]
+
+    @pytest.mark.asyncio
+    async def test_cash_reserve_shortfall_is_included_in_funding_request(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(
+            side_effect=lambda key, default=None: {
+                "transaction_fee_fixed": 0.0,
+                "transaction_fee_percent": 0.0,
+                "min_cash_buffer": 0.05,
+            }.get(key, default)
+        )
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=100.0)
+        engine._currency = MagicMock()
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt)
+        engine._generate_deficit_sells = AsyncMock(return_value=[])
+
+        buy = TradeRecommendation(
+            symbol="B",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.1,
+            allocation_delta=0.1,
+            current_value_eur=0.0,
+            target_value_eur=1000.0,
+            value_delta_eur=1000.0,
+            quantity=10,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.8,
+            priority=2.0,
+            reason="buy",
+        )
+
+        await engine._apply_cash_constraint(
+            [buy],
+            min_trade_value=100.0,
+            total_value=10_000.0,
+            symbol_convictions={"B": 0.8},
+        )
+
+        assert engine._generate_deficit_sells.await_args.args[0] == 1410.0
+
+    @pytest.mark.asyncio
     async def test_scaled_buy_preserves_metadata(self):
         engine = RebalanceEngine(db=MagicMock())
         engine._settings = MagicMock()
@@ -212,6 +302,53 @@ class TestApplyCashConstraintEdgeCases:
         assert by_symbol["B2"].quantity == 5
 
     @pytest.mark.asyncio
+    async def test_funding_sells_cover_only_the_next_ranked_buy(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(
+            side_effect=lambda key, default=None: {
+                "transaction_fee_fixed": 0.0,
+                "transaction_fee_percent": 0.0,
+            }.get(key, default)
+        )
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=0.0)
+        engine._currency = MagicMock()
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._generate_deficit_sells = AsyncMock(return_value=[])
+
+        buys = [
+            TradeRecommendation(
+                symbol=symbol,
+                action="buy",
+                current_allocation=0.0,
+                target_allocation=0.1,
+                allocation_delta=0.1,
+                current_value_eur=0.0,
+                target_value_eur=1000.0,
+                value_delta_eur=1000.0,
+                quantity=10,
+                price=100.0,
+                currency="EUR",
+                lot_size=1,
+                contrarian_score=score,
+                priority=1000.0,
+                reason="buy",
+                user_multiplier=0.8,
+                target_gap_ratio=1.0,
+            )
+            for symbol, score in [("FIRST", 0.9), ("LATER", 0.8)]
+        ]
+
+        await engine._apply_cash_constraint(
+            buys,
+            min_trade_value=100.0,
+            symbol_convictions={"FIRST": 0.8, "LATER": 0.8},
+        )
+
+        assert engine._generate_deficit_sells.await_args.args[0] == 1010.0
+
+    @pytest.mark.asyncio
     async def test_partial_budget_stays_on_top_priority_buy(self):
         engine = RebalanceEngine(db=MagicMock())
         engine._settings = MagicMock()
@@ -303,6 +440,61 @@ class TestApplyCashConstraintEdgeCases:
         result = await engine._apply_cash_constraint([buy], min_trade_value=100.0, symbol_convictions={"B": 0.8})
         # Budget 50 < min_trade_value 100, so buy should be dropped
         assert len(result) == 0
+
+    @pytest.mark.asyncio
+    async def test_generated_funding_sell_is_dropped_when_no_buy_lot_is_executable(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(return_value=0.0)
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=0.0)
+        engine._currency = MagicMock()
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amount, _currency: amount)
+
+        funding_sell = TradeRecommendation(
+            symbol="SOURCE",
+            action="sell",
+            current_allocation=0.2,
+            target_allocation=0.1,
+            allocation_delta=-0.1,
+            current_value_eur=2_000.0,
+            target_value_eur=1_000.0,
+            value_delta_eur=-500.0,
+            quantity=5,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.1,
+            priority=10.0,
+            reason="funding",
+        )
+        engine._generate_deficit_sells = AsyncMock(return_value=[funding_sell])
+        coarse_buy = TradeRecommendation(
+            symbol="COARSE",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.2,
+            allocation_delta=0.2,
+            current_value_eur=0.0,
+            target_value_eur=2_000.0,
+            value_delta_eur=2_000.0,
+            quantity=10,
+            price=200.0,
+            currency="EUR",
+            lot_size=10,
+            contrarian_score=0.9,
+            priority=10.0,
+            reason="buy",
+        )
+
+        result = await engine._apply_cash_constraint(
+            [coarse_buy],
+            min_trade_value=100.0,
+            total_value=10_000.0,
+        )
+
+        assert result == []
 
     @pytest.mark.asyncio
     async def test_equal_priority_waterfall_keeps_first_buy_first(self):

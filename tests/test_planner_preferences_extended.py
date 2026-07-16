@@ -165,12 +165,12 @@ class TestApplyMaxCap:
     def test_all_exceed_cap(self):
         weights = {"A": 0.4, "B": 0.4, "C": 0.2}
         result = apply_max_cap(weights, 0.3)
-        # len(normalized) * cap = 3 * 0.3 = 0.9 < 1.0, so no redistribution
-        # Each symbol is capped at 0.3, sum = 0.8
+        # The full target is infeasible, so every eligible name is filled to the
+        # safe cap and the planner represents the remaining 10% as cash.
         assert result["A"] == 0.3
         assert result["B"] == 0.3
-        assert result["C"] == 0.2
-        assert sum(result.values()) == 0.8
+        assert result["C"] == 0.3
+        assert sum(result.values()) == pytest.approx(0.9)
 
     def test_empty_dict(self):
         result = apply_max_cap({}, 0.5)

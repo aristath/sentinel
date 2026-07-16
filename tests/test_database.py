@@ -129,6 +129,18 @@ class TestSettings:
         result = await temp_db.get_setting("float_key")
         assert abs(result - 3.14159) < 0.00001
 
+
+class TestPlannerState:
+    @pytest.mark.asyncio
+    async def test_planner_state_round_trip_and_delete(self, temp_db):
+        assert await temp_db.get_planner_state("fallback_wait_started_at") is None
+
+        await temp_db.set_planner_state("fallback_wait_started_at", 123456)
+        assert await temp_db.get_planner_state("fallback_wait_started_at") == 123456
+
+        await temp_db.delete_planner_state("fallback_wait_started_at")
+        assert await temp_db.get_planner_state("fallback_wait_started_at", "missing") == "missing"
+
     @pytest.mark.asyncio
     async def test_set_and_get_bool(self, temp_db):
         """Set and get boolean setting."""

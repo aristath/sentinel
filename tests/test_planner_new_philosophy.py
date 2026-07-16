@@ -29,11 +29,8 @@ def _make_engine():
                 "strategy_core_cooloff_days": 21,
                 "strategy_opportunity_cooloff_days": 15,
                 "strategy_same_side_cooloff_days": 10,
-                "strategy_core_floor_pct": 0.05,
-                "strategy_core_new_min_score": 0.0,
+                "strategy_core_timing_min_score": 0.0,
                 "min_trade_value": 250.0,
-                "strategy_core_target_pct": 80.0,
-                "strategy_opportunity_target_pct": 20.0,
             }.get(key, default)
         )
         engine._portfolio = MagicMock()
@@ -51,8 +48,8 @@ class TestNewRebalancePhilosophy:
     """Tests for the new patience-first rebalance philosophy."""
 
     @pytest.mark.asyncio
-    async def test_core_floor_protection(self, _make_engine):
-        """Test that core floor only blocks sells when position is ABOVE floor."""
+    async def test_overweight_core_is_not_sold_without_a_selected_buy(self, _make_engine):
+        """An overweight target holding is funding inventory, not a standalone order."""
         engine = _make_engine()
 
         # Mock all dependencies
@@ -75,8 +72,6 @@ class TestNewRebalancePhilosophy:
             }
         }
 
-        # Test core floor protection with position ABOVE floor (20% > 5%)
-        # excess = 1700 EUR, deposits = 500/mo → months_to_self_correct = 3.4 > 3
         rec = await engine._build_recommendation(
             symbol="ASML.EU",
             ideal={"ASML.EU": 0.03, "BUYME": 0.10},
@@ -90,11 +85,10 @@ class TestNewRebalancePhilosophy:
             },
             min_trade_value=100.0,
             settings_ctx={
-                "strategy_core_floor_pct": 0.05,
                 "strategy_core_cooloff_days": 21,
                 "strategy_same_side_cooloff_days": 10,
                 "strategy_opportunity_cooloff_days": 15,
-                "strategy_core_new_min_score": 0.0,
+                "strategy_core_timing_min_score": 0.0,
                 "max_position_pct": 25.0,
                 "min_trade_value": 100.0,
                 "strategy_min_opp_score": 0.55,
@@ -103,22 +97,16 @@ class TestNewRebalancePhilosophy:
                 "strategy_entry_t2_dd": -0.20,
                 "strategy_entry_t3_dd": -0.28,
                 "strategy_rotation_time_stop_days": 30,
-                "strategy_rotation_threshold": 0.8,
             },
             latest_trade=None,
             as_of_date=datetime.now(timezone.utc).isoformat(),
         )
 
-        # Should recommend sell since position is above floor and excess takes > 3 months to self-correct
-        assert rec is not None
-        assert rec.action == "sell"
-        # 20 shares at 100 EUR = 2000 EUR (20%), target 300 EUR (3%), excess 1700 EUR
-        # max_sell = min(profit, excess) = min(400, 1700) = 400 EUR → 4 shares
-        assert rec.quantity == 4
+        assert rec is None
 
     @pytest.mark.asyncio
-    async def test_deficit_sell_calculation(self, _make_engine):
-        """Test that deficit sells only liquidate excess above target."""
+    async def test_overweight_position_does_not_create_an_orphan_sell(self, _make_engine):
+        """Funding sells are produced by cash planning only after a buy is selected."""
         engine = _make_engine()
 
         # Mock all dependencies
@@ -141,9 +129,6 @@ class TestNewRebalancePhilosophy:
             }
         }
 
-        # Test with position that has excess above target
-        # Total value: 10000 EUR, position: 2800 EUR (28%), target: 1000 EUR (10%)
-        # excess = 1800 EUR, deposits = 500/mo → months_to_self_correct = 3.6 > 3
         rec = await engine._build_recommendation(
             symbol="TSM.US",
             ideal={"TSM.US": 0.10, "BUYME": 0.10},
@@ -157,11 +142,10 @@ class TestNewRebalancePhilosophy:
             },
             min_trade_value=100.0,
             settings_ctx={
-                "strategy_core_floor_pct": 0.05,
                 "strategy_core_cooloff_days": 21,
                 "strategy_same_side_cooloff_days": 10,
                 "strategy_opportunity_cooloff_days": 15,
-                "strategy_core_new_min_score": 0.0,
+                "strategy_core_timing_min_score": 0.0,
                 "max_position_pct": 25.0,
                 "min_trade_value": 100.0,
                 "strategy_min_opp_score": 0.55,
@@ -170,15 +154,9 @@ class TestNewRebalancePhilosophy:
                 "strategy_entry_t2_dd": -0.20,
                 "strategy_entry_t3_dd": -0.28,
                 "strategy_rotation_time_stop_days": 30,
-                "strategy_rotation_threshold": 0.8,
             },
             latest_trade=None,
             as_of_date=datetime.now(timezone.utc).isoformat(),
         )
 
-        # Should recommend sell of only 4 shares (excess above target, capped by profit)
-        # current_qty=20 at 100 USD, avg_cost 80 → profit = 20*20 = 400 EUR
-        # excess = 1800 EUR, max_sell = min(400, 1800) = 400 EUR → 4 shares
-        assert rec is not None
-        assert rec.action == "sell"
-        assert rec.quantity == 4  # Only sell profit-capped amount, not entire excess
+        assert rec is None

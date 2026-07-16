@@ -180,7 +180,10 @@ def apply_max_cap(weights: dict[str, float], max_position: float) -> dict[str, f
     if cap <= 0:
         return {}
     if len(normalized) * cap < 1.0:
-        return {symbol: min(cap, weight) for symbol, weight in normalized.items()}
+        # The requested invested total is infeasible. Maximize safe deployment
+        # by placing every eligible name at the cap; the planner represents the
+        # unavoidable remainder explicitly as cash.
+        return {symbol: cap for symbol in normalized}
 
     capped: dict[str, float] = {}
     remaining = dict(normalized)

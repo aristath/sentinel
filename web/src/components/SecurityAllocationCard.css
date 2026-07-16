@@ -23,12 +23,18 @@
 }
 
 .allocation-table__numbers {
-	width: 132px;
+	width: 174px;
 	padding: 4px 0;
 	color: var(--mantine-color-overlay1);
 	font-size: 11px;
 	text-align: right;
 	white-space: nowrap;
+}
+
+.allocation-table__target-value {
+	margin-top: 2px;
+	color: var(--mantine-color-overlay1);
+	font-size: 10px;
 }
 
 .allocation-table__arrow {
@@ -82,10 +88,6 @@
 	background-color: var(--mantine-color-red-6);
 }
 
-.allocation-bar__segment--future {
-	opacity: 0.3;
-}
-
 .allocation-bar__ideal {
 	position: absolute;
 	top: -2px;
@@ -117,11 +119,6 @@
 .allocation-legend__swatch--red {
 	background-color: var(--mantine-color-red-6);
 }
-.allocation-legend__swatch--future-green {
-	background-color: var(--mantine-color-green-6);
-	opacity: 0.3;
-}
-
 /* The ideal marker in the bar is a thin vertical line, so its legend swatch
    matches that shape rather than the segments' filled blocks. */
 .allocation-legend__swatch--ideal {
@@ -141,6 +138,15 @@
 	}
 
 	.allocation-table__numbers {
+		width: 118px;
+		white-space: normal;
+	}
+
+	.allocation-table__numbers > div:first-child {
 		display: none;
+	}
+
+	.allocation-table__target-value {
+		font-size: 9px;
 	}
 }

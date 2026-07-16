@@ -61,12 +61,12 @@ class TestMonthsToSelfCorrect:
         assert months == 2.0  # 2000 / 1000 = 2
 
 
-class TestProfitsFirstSelling:
-    """Tests for profits-first selling logic."""
+class TestStandaloneSellSuppression:
+    """Tests that drift alone never creates an orphan sell order."""
 
     @pytest.mark.asyncio
-    async def test_profit_sell(self):
-        """Test selling only profits, not principal."""
+    async def test_profitable_overweight_is_not_sold_without_a_buy(self):
+        """A profitable overweight remains a possible funding source."""
         # Create a real engine with mocked dependencies
         db = MagicMock()
         engine = RebalanceEngine(db=db)
@@ -137,24 +137,16 @@ class TestProfitsFirstSelling:
                 "strategy_same_side_cooloff_days": 10,
                 "strategy_core_floor_pct": 0.05,
                 "strategy_rotation_threshold": 0.8,
-                "strategy_core_new_min_score": 0.0,
+                "strategy_core_timing_min_score": 0.0,
             },
             avg_monthly_deposit_6m=500.0,
         )
 
-        # Verify that profits_first is True and profit_amount_eur is set
-        assert rec is not None
-        assert rec.profits_first is True
-        assert rec.profit_amount_eur is not None and rec.profit_amount_eur > 0
+        assert rec is None
 
     @pytest.mark.asyncio
-    async def test_profit_cap_converts_local_currency_to_eur(self):
-        """The profits-first cap must compare EUR-to-EUR.
-
-        A non-EUR position's unrealized profit is in local currency; it must be
-        converted to EUR (via fx_rate) before being capped against the EUR
-        excess-above-target. Regression test for the currency-mixing bug.
-        """
+    async def test_non_eur_overweight_is_not_sold_without_a_buy(self):
+        """Currency does not change the no-orphan-sell rule."""
         engine = RebalanceEngine(db=MagicMock())
         engine._deposit_history = MagicMock()
         engine._deposit_history.get_rolling_6m_avg_deposit = AsyncMock(return_value=500.0)
@@ -164,8 +156,6 @@ class TestProfitsFirstSelling:
         engine._currency.to_eur = AsyncMock(side_effect=lambda amt, curr: amt * 0.9)
         engine._calculate_months_to_self_correct = AsyncMock(return_value=4.0)
 
-        # USD position: local profit = (100 - 80) * 10 = 200 USD.
-        # fx_rate 0.9 (EUR per USD) → profit_amount_eur must be 180 EUR, not 200.
         rec = await engine._build_recommendation(
             symbol="USDX",
             ideal={"USDX": 0.05, "OTHER": 0.10},
@@ -207,15 +197,12 @@ class TestProfitsFirstSelling:
                 "strategy_same_side_cooloff_days": 10,
                 "strategy_core_floor_pct": 0.05,
                 "strategy_rotation_threshold": 0.8,
-                "strategy_core_new_min_score": 0.0,
+                "strategy_core_timing_min_score": 0.0,
             },
             avg_monthly_deposit_6m=500.0,
         )
 
-        assert rec is not None
-        assert rec.action == "sell"
-        # EUR-converted profit, not the raw 200 USD local figure.
-        assert rec.profit_amount_eur == pytest.approx(180.0)
+        assert rec is None
 
     @pytest.mark.asyncio
     async def test_underwater_position_not_drift_sold(self):
@@ -270,7 +257,7 @@ class TestProfitsFirstSelling:
                 "strategy_same_side_cooloff_days": 10,
                 "strategy_core_floor_pct": 0.05,
                 "strategy_rotation_threshold": 0.8,
-                "strategy_core_new_min_score": 0.0,
+                "strategy_core_timing_min_score": 0.0,
             },
             avg_monthly_deposit_6m=500.0,
         )
@@ -603,7 +590,7 @@ class TestTrancheLadderCooloff:
             "strategy_same_side_cooloff_days": 15,
             "strategy_core_floor_pct": 0.05,
             "strategy_rotation_threshold": 0.8,
-            "strategy_core_new_min_score": 0.0,
+            "strategy_core_timing_min_score": 0.0,
             "strategy_coarse_max_new_lots_per_cycle": 1,
         }
 

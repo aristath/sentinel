@@ -97,7 +97,7 @@
 	font-size: 11px;
 	font-weight: 700;
 	text-transform: uppercase;
-	letter-spacing: 0.05em;
+	letter-spacing: 0;
 }
 
 .planner-tape__meta {
@@ -141,7 +141,7 @@
 	background: color-mix(in srgb, var(--mantine-color-red-6) 14%, transparent);
 }
 
-.planner-tape__pill--forecast {
+.planner-tape__pill--target {
 	color: var(--mantine-color-blue-6);
 	border-color: color-mix(
 		in srgb,
@@ -171,6 +171,17 @@
 
 	.planner-tape__pill,
 	.planner-tape__empty {
+		flex: 1 0 100%;
+		width: 100%;
 		white-space: normal;
+	}
+
+	.planner-tape__meta {
+		width: 100%;
+		white-space: normal;
+	}
+
+	.planner-tape__inline-arrow {
+		display: none;
 	}
 }

@@ -28,6 +28,8 @@ def mock_db():
     db.update_quotes_bulk = AsyncMock()
     db.update_security_metadata = AsyncMock()
     db.cache_clear = AsyncMock(return_value=5)
+    db.invalidate_planner_cache = AsyncMock(return_value=5)
+    db.get_planner_state = AsyncMock(return_value=None)
     return db
 
 
@@ -65,6 +67,7 @@ def mock_broker():
         }
     )
     broker.get_market_status = AsyncMock(return_value={"m": [{"i": 1, "n2": "NASDAQ", "s": "OPEN"}]})
+    broker.get_trades_history = AsyncMock(return_value=[])
     return broker
 
 
@@ -561,7 +564,7 @@ class TestTradingExecute:
     """Tests for trading_execute task."""
 
     @pytest.mark.asyncio
-    async def test_execute_research_mode_no_trades(self, mock_broker, mock_db, mock_planner):
+    async def test_execute_research_mode_no_trades(self, mock_broker, mock_db, mock_planner, mock_portfolio):
         """Verify no actual trades in research mode."""
         from sentinel.jobs.tasks import trading_execute
 
@@ -571,8 +574,11 @@ class TestTradingExecute:
             mock_settings = AsyncMock()
             mock_settings.get = AsyncMock(return_value="research")
             MockSettings.return_value = mock_settings
+            mock_db.get_all_securities = AsyncMock(
+                return_value=[{"symbol": "AAPL.US", "data": '{"mrkt": {"mkt_id": 1}}'}]
+            )
 
-            await trading_execute(mock_broker, mock_db, mock_planner)
+            await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
 
             # Planner should be called to get recommendations for logging
             mock_planner.get_recommendations.assert_awaited()
@@ -581,20 +587,32 @@ class TestTradingExecute:
             mock_broker.has_pending_orders.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_execute_live_mode_trades(self, mock_broker, mock_db, mock_planner):
+    async def test_execute_live_mode_trades(self, mock_broker, mock_db, mock_planner, mock_portfolio):
         """Verify trades are executed in live mode."""
         from sentinel.jobs.tasks import trading_execute
 
         mock_broker.connected = True
 
-        # Setup mock recommendation
-        mock_rec = MagicMock()
-        mock_rec.symbol = "AAPL.US"
-        mock_rec.action = "buy"
-        mock_rec.quantity = 10
-        mock_rec.price = 100.0
-        mock_rec.currency = "USD"
-        mock_rec.priority = 1
+        from sentinel.planner.models import TradeRecommendation
+
+        mock_rec = TradeRecommendation(
+            symbol="AAPL.US",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.1,
+            allocation_delta=0.1,
+            current_value_eur=0.0,
+            target_value_eur=1000.0,
+            value_delta_eur=1000.0,
+            quantity=10,
+            price=100.0,
+            currency="USD",
+            lot_size=1,
+            contrarian_score=0.8,
+            priority=1.0,
+            reason="test",
+            execution_rank=1,
+        )
         mock_planner.get_recommendations = AsyncMock(return_value=[mock_rec])
 
         # Mock open markets
@@ -612,12 +630,69 @@ class TestTradingExecute:
                 mock_security.load = AsyncMock()
                 MockSecurity.return_value = mock_security
 
-                await trading_execute(mock_broker, mock_db, mock_planner)
+                await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
 
                 mock_security.buy.assert_awaited()
+                mock_portfolio.sync.assert_awaited_once()
+                mock_db.cache_clear.assert_awaited_with("quotes:")
+                mock_db.invalidate_planner_cache.assert_awaited()
+                mock_db.set_planner_state.assert_awaited_once()
+                mock_planner.get_recommendations.assert_awaited_once_with(
+                    eligible_symbols={"AAPL.US"},
+                    track_fallback_state=True,
+                )
 
     @pytest.mark.asyncio
-    async def test_execute_skips_when_orders_pending(self, mock_broker, mock_db, mock_planner):
+    async def test_execute_submits_only_first_ranked_trade(self, mock_broker, mock_db, mock_planner, mock_portfolio):
+        from sentinel.jobs.tasks import trading_execute
+        from sentinel.planner.models import TradeRecommendation
+
+        def recommendation(symbol, action, rank):
+            return TradeRecommendation(
+                symbol=symbol,
+                action=action,
+                current_allocation=0.1,
+                target_allocation=0.2,
+                allocation_delta=0.1,
+                current_value_eur=1000.0,
+                target_value_eur=2000.0,
+                value_delta_eur=1000.0 if action == "buy" else -1000.0,
+                quantity=10,
+                price=100.0,
+                currency="USD",
+                lot_size=1,
+                contrarian_score=0.8,
+                priority=1.0,
+                reason="test",
+                execution_rank=rank,
+            )
+
+        first = recommendation("SELL.US", "sell", 1)
+        second = recommendation("BUY.US", "buy", 2)
+        mock_planner.get_recommendations = AsyncMock(return_value=[second, first])
+        mock_db.get_all_securities = AsyncMock(
+            return_value=[
+                {"symbol": "SELL.US", "data": '{"mrkt": {"mkt_id": 1}}'},
+                {"symbol": "BUY.US", "data": '{"mrkt": {"mkt_id": 1}}'},
+            ]
+        )
+
+        with patch("sentinel.settings.Settings") as MockSettings:
+            MockSettings.return_value.get = AsyncMock(return_value="live")
+            with patch("sentinel.security.Security") as MockSecurity:
+                security = AsyncMock()
+                security.sell = AsyncMock(return_value="sell-order")
+                security.buy = AsyncMock(return_value="buy-order")
+                MockSecurity.return_value = security
+
+                await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
+
+        security.sell.assert_awaited_once_with(10)
+        security.buy.assert_not_awaited()
+        assert mock_db.set_planner_state.await_args.args[1]["order_id"] == "sell-order"
+
+    @pytest.mark.asyncio
+    async def test_execute_skips_when_orders_pending(self, mock_broker, mock_db, mock_planner, mock_portfolio):
         """No new orders are submitted while previous orders are still outstanding."""
         from sentinel.jobs.tasks import trading_execute
 
@@ -644,12 +719,15 @@ class TestTradingExecute:
                 mock_security.load = AsyncMock()
                 MockSecurity.return_value = mock_security
 
-                await trading_execute(mock_broker, mock_db, mock_planner)
+                await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
 
                 mock_broker.has_pending_orders.assert_awaited_once()
                 mock_security.buy.assert_not_awaited()
                 # Recommendations shouldn't even be fetched when we're skipping.
                 mock_planner.get_recommendations.assert_not_awaited()
+                # Each cycle still refreshes broker-backed state before deciding
+                # whether another transaction can be submitted.
+                mock_portfolio.sync.assert_awaited_once()
 
 
 class TestTradingRebalance:

@@ -2,16 +2,17 @@
 
 import inspect
 import json
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
+from sentinel.markets import get_open_market_symbols
 from sentinel.planner import Planner
-from sentinel.planner.deposit_history import DepositHistoryHelper
+from sentinel.planner.models import LongTermPlan
 from sentinel.portfolio import Portfolio
-from sentinel.settings import DEFAULTS
 from sentinel.utils.fees import FeeCalculator
 
 router = APIRouter(prefix="/planner", tags=["planner"])
@@ -34,11 +35,55 @@ def _serialize_recommendation(r) -> dict:
         "contrarian_score": r.contrarian_score,
         "priority": r.priority,
         "reason": r.reason,
+        "reason_code": r.reason_code,
         "sleeve": r.sleeve,
         "user_multiplier": r.user_multiplier,
         "clara_target_pct": (r.clara_target_pct * 100) if r.clara_target_pct is not None else None,
         "baseline_target_pct": (r.baseline_target_pct * 100) if r.baseline_target_pct is not None else None,
         "opportunity_target_pct": (r.opportunity_target_pct * 100 if r.opportunity_target_pct is not None else None),
+        "timing_eligible": r.timing_eligible,
+        "target_gap_ratio": r.target_gap_ratio,
+        "is_fallback": r.is_fallback,
+        "execution_rank": r.execution_rank,
+    }
+
+
+def _serialize_plan(plan: LongTermPlan) -> dict:
+    return {
+        "as_of_date": plan.as_of_date,
+        "horizon_end_date": plan.horizon_end_date,
+        "horizon_months": plan.horizon_months,
+        "current_total_value_eur": plan.current_total_value_eur,
+        "avg_monthly_net_deposit_eur": plan.avg_monthly_net_deposit_eur,
+        "expected_contributions_eur": plan.expected_contributions_eur,
+        "terminal_portfolio_value_eur": plan.terminal_portfolio_value_eur,
+        "current_cash_eur": plan.current_cash_eur,
+        "target_cash_allocation_pct": plan.target_cash_allocation * 100,
+        "target_cash_value_eur": plan.target_cash_value_eur,
+        "cash_gap_eur": plan.cash_gap_eur,
+        "targets": [
+            {
+                "symbol": target.symbol,
+                "clara_score": target.clara_score,
+                "opportunity_score": target.opportunity_score,
+                "target_allocation_pct": target.target_allocation * 100,
+                "current_value_eur": target.current_value_eur,
+                "target_value_eur": target.target_value_eur,
+                "gap_eur": target.gap_eur,
+                "model_target_allocation_pct": (
+                    target.model_target_allocation * 100
+                    if target.model_target_allocation is not None
+                    else target.target_allocation * 100
+                ),
+                "model_target_value_eur": (
+                    target.model_target_value_eur
+                    if target.model_target_value_eur is not None
+                    else target.target_value_eur
+                ),
+                "sell_locked": target.sell_locked,
+            }
+            for target in plan.targets
+        ],
     }
 
 
@@ -48,16 +93,28 @@ async def get_recommendations(
     min_value: Optional[float] = None,
 ) -> dict:
     """Get trade recommendations to move toward ideal portfolio."""
-    planner = Planner()
-    portfolio = Portfolio()
+    portfolio = Portfolio(
+        db=deps.db,
+        broker=deps.broker,
+        settings=deps.settings,
+        currency=deps.currency,
+    )
+    planner = Planner(db=deps.db, broker=deps.broker, portfolio=portfolio)
 
     # Use provided min_value or fall back to setting
     if min_value is None:
         min_value = await deps.settings.get("min_trade_value", default=100.0)
 
-    recommendations = await planner.get_recommendations(
+    open_symbols = await get_open_market_symbols(deps.broker, deps.db)
+    recommendations, long_term_plan = await planner.get_recommendations_with_plan(
         min_trade_value=min_value,
+        eligible_symbols=open_symbols,
     )
+
+    schedule = await deps.db.get_job_schedule("trading:execute")
+    valid_for_minutes = None
+    if isinstance(schedule, dict):
+        valid_for_minutes = schedule.get("interval_market_open_minutes") or schedule.get("interval_minutes")
 
     # Calculate summary with transaction fees
     current_cash = await portfolio.total_cash_eur()
@@ -73,63 +130,23 @@ async def get_recommendations(
 
     # Cash after plan: start + sells - sell_fees - buys - buy_fees
     cash_after_plan = current_cash + total_sell_value - sell_fees - total_buy_value - buy_fees
-    current_total_value = await portfolio.total_value()
-    projection_months_raw = await deps.settings.get(
-        "strategy_projection_months", default=DEFAULTS["strategy_projection_months"]
-    )
-    projection_months = float(projection_months_raw if projection_months_raw is not None else 0.0)
-    avg_monthly_net_deposit_6m = await DepositHistoryHelper(
-        db=deps.db,
-        currency=deps.currency,
-    ).get_rolling_6m_avg_net_deposit()
-    projected_contribution_eur = avg_monthly_net_deposit_6m * max(0.0, projection_months)
-    projected_total_value_eur = current_total_value + projected_contribution_eur
-    if projected_total_value_eur <= 0:
-        projected_total_value_eur = current_total_value
-
     return {
         "recommendations": [_serialize_recommendation(r) for r in recommendations],
+        "plan": _serialize_plan(long_term_plan),
         "summary": {
             "current_cash": current_cash,
             "total_sell_value": total_sell_value,
             "total_buy_value": total_buy_value,
             "total_fees": total_fees,
             "cash_after_plan": cash_after_plan,
-            "current_total_value_eur": current_total_value,
-            "avg_monthly_net_deposit_6m": avg_monthly_net_deposit_6m,
-            "projection_months": projection_months,
-            "projected_contribution_eur": projected_contribution_eur,
-            "projected_total_value_eur": projected_total_value_eur,
+            "current_total_value_eur": long_term_plan.current_total_value_eur,
+            "avg_monthly_net_deposit_6m": long_term_plan.avg_monthly_net_deposit_eur,
+            "projection_months": long_term_plan.horizon_months,
+            "projected_contribution_eur": long_term_plan.expected_contributions_eur,
+            "projected_total_value_eur": long_term_plan.terminal_portfolio_value_eur,
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "valid_for_minutes": valid_for_minutes,
         },
-    }
-
-
-@router.get("/forecast")
-async def get_forecast(
-    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
-    months: Optional[int] = None,
-    min_value: Optional[float] = None,
-) -> dict:
-    """Forecast monthly trade plans assuming stable net monthly contributions."""
-    planner = Planner()
-    if min_value is None:
-        min_value = await deps.settings.get("min_trade_value", default=100.0)
-    min_trade_value = float(min_value if min_value is not None else 100.0)
-    if months is None:
-        configured_months = await deps.settings.get(
-            "planner_forecast_months", default=DEFAULTS["planner_forecast_months"]
-        )
-        months = int(configured_months if configured_months is not None else DEFAULTS["planner_forecast_months"])
-    forecast_months = max(1, min(24, int(months)))
-    forecast = await planner.forecast_monthly_plans(months=forecast_months, min_trade_value=min_trade_value)
-    return {
-        "months": [
-            {
-                **{key: value for key, value in month.items() if key != "recommendations"},
-                "recommendations": [_serialize_recommendation(r) for r in month["recommendations"]],
-            }
-            for month in forecast
-        ]
     }
 
 

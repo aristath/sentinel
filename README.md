@@ -88,20 +88,22 @@ npm run dev  # http://localhost:5173
 
 ## Rebalancing Philosophy
 
-Sentinel follows a **patience-first** approach:
+Sentinel separates the long-term destination from today's execution:
 
-1. **Patience** - Don't trade just because allocations drifted; let deposits handle it
-2. **Conviction** - Only sell strong holdings if there's a really good reason
-3. **Profits-first** - Sell gains, not principal
-4. **Deposits do the work** - Monthly contributions naturally rebalance
-5. **High bar for rotation** - Selling A to buy B needs clear contrarian opportunity
+1. **Clara defines the destination** - Strategic scores set relative twelve-month target weights
+2. **Opportunity controls timing** - Under-target holdings are bought when their price signal is attractive
+3. **Orders form a complete plan** - Ordinary sells exist only to fund an executable selected buy
+4. **Patience has a limit** - After a durable waiting window, one fallback buy keeps the portfolio converging
+5. **Cash is explicit** - Position caps and configured reserves appear as a cash target instead of missing weight
+
+Live execution treats each `trading:execute` run as a fresh decision window: sync broker state, clear planner inputs, calculate the best currently executable plan for open markets, submit at most one ranked transaction, then replan from broker-confirmed state on the next cycle.
 
 ## Key Components
 
 | Component | Purpose |
 |---|---|
 | `PortfolioComposition` | Analytics: country/industry breakdowns, risk metrics |
-| `Planner` | Trade recommendation engine with patience checks |
+| `Planner` | Clara-weighted twelve-month targets with opportunity-timed recommendations |
 | `Contrarian` | Deterministic cycle-based trading signals |
 | `DepositHistory` | Cashflow analytics for self-correction timing |
 | `PriceValidator` | Anomaly detection and interpolation |

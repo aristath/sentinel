@@ -53,16 +53,25 @@ def _make_unified_mocks(one_security=True):
     mock_deps = MagicMock()
     if one_security:
         mock_deps.db.get_all_securities = AsyncMock(
-            return_value=[{"symbol": "AAPL", "name": "Apple", "currency": "USD"}]
+            return_value=[
+                {
+                    "symbol": "AAPL",
+                    "name": "Apple",
+                    "currency": "USD",
+                    "data": '{"mrkt": {"mkt_id": 1}}',
+                }
+            ]
         )
     else:
         mock_deps.db.get_all_securities = AsyncMock(return_value=[])
     mock_deps.db.get_all_positions = AsyncMock(return_value=[])
+    mock_deps.db.get_cash_balances = AsyncMock(return_value={})
     mock_cursor = MagicMock()
     mock_cursor.fetchall = AsyncMock(return_value=[])
     mock_cursor.fetchone = AsyncMock(return_value=None)
     mock_deps.db.conn.execute = AsyncMock(return_value=mock_cursor)
     mock_deps.broker.get_quotes = AsyncMock(return_value={})
+    mock_deps.broker.get_market_status = AsyncMock(return_value={"m": [{"i": 1, "s": "OPEN"}]})
     mock_deps.db.get_prices_bulk = AsyncMock(return_value={"AAPL": []})
     mock_deps.currency.to_eur = AsyncMock(return_value=0.0)
     mock_deps.settings.get = AsyncMock(return_value=None)
@@ -83,7 +92,7 @@ async def test_get_unified_view_with_as_of_no_prediction_fields():
     with patch("sentinel.planner.Planner", return_value=mock_planner):
         result = await get_unified_view(mock_deps, period="1Y", as_of="2024-01-15")
     assert isinstance(result, list)
-    mock_planner.get_recommendations.assert_awaited_once_with(as_of_date="2024-01-15")
+    mock_planner.get_recommendations.assert_awaited_once_with(as_of_date="2024-01-15", eligible_symbols=None)
     mock_planner.calculate_ideal_portfolio.assert_awaited_once_with(as_of_date="2024-01-15")
     mock_planner.get_current_allocations.assert_awaited_once_with(as_of_date="2024-01-15")
     mock_deps.db.get_prices_bulk.assert_any_await(["AAPL"], days=365, end_date="2024-01-15")
@@ -103,10 +112,65 @@ async def test_get_unified_view_without_as_of_no_prediction_fields():
     with patch("sentinel.planner.Planner", return_value=mock_planner):
         result = await get_unified_view(mock_deps, period="1Y", as_of=None)
     assert isinstance(result, list)
-    mock_planner.get_recommendations.assert_awaited_once_with(as_of_date=None)
+    mock_planner.get_recommendations.assert_awaited_once_with(as_of_date=None, eligible_symbols={"AAPL"})
     mock_planner.calculate_ideal_portfolio.assert_awaited_once_with(as_of_date=None)
     mock_planner.get_current_allocations.assert_awaited_once_with(as_of_date=None)
     mock_deps.db.get_prices_bulk.assert_any_await(["AAPL"], days=365, end_date=None)
+
+
+@pytest.mark.asyncio
+async def test_get_unified_view_current_uses_simulated_cash_in_research_mode():
+    from sentinel.api.routers.securities import get_unified_view
+
+    mock_deps = _make_unified_mocks(one_security=True)
+    mock_deps.db.get_all_securities = AsyncMock(
+        return_value=[
+            {
+                "symbol": "AAPL",
+                "name": "Apple",
+                "currency": "EUR",
+                "min_lot": 1,
+                "data": '{"mrkt": {"mkt_id": 1}}',
+            }
+        ]
+    )
+    mock_deps.db.get_all_positions = AsyncMock(
+        return_value=[
+            {
+                "symbol": "AAPL",
+                "quantity": 10,
+                "current_price": 100.0,
+                "currency": "EUR",
+                "avg_cost": 90.0,
+            }
+        ]
+    )
+    mock_deps.db.get_cash_balances = AsyncMock(return_value={"EUR": 0.0})
+    mock_deps.db.get_prices_bulk = AsyncMock(return_value={"AAPL": []})
+    mock_deps.currency.to_eur = AsyncMock(side_effect=lambda amount, _currency: amount)
+    mock_deps.currency.get_rate = AsyncMock(return_value=1.0)
+    mock_deps.settings.get = AsyncMock(
+        side_effect=lambda key, default=None: {
+            "trading_mode": "research",
+            "simulated_cash_eur": 20_000.0,
+            "transaction_fee_fixed": 0.0,
+            "transaction_fee_percent": 0.0,
+            "strategy_lot_standard_max_pct": 0.08,
+            "strategy_lot_coarse_max_pct": 0.30,
+            "strategy_min_opp_score": 0.55,
+        }.get(key, default)
+    )
+
+    mock_planner = MagicMock()
+    mock_planner.get_recommendations = AsyncMock(return_value=[])
+    mock_planner.calculate_ideal_portfolio = AsyncMock(return_value={})
+    mock_planner.get_current_allocations = AsyncMock(return_value={"AAPL": 1000.0 / 21_000.0})
+
+    with patch("sentinel.planner.Planner", return_value=mock_planner):
+        result = await get_unified_view(mock_deps, period="1Y", as_of=None)
+
+    assert result
+    assert result[0]["post_plan_allocation"] == pytest.approx(1000.0 / 21_000.0 * 100)
 
 
 @pytest.mark.asyncio
@@ -133,7 +197,7 @@ async def test_get_unified_view_populates_contrarian_signal_fields():
     assert "ticket_pct" in result[0]
     assert "lot_class" in result[0]
     assert "sleeve" in result[0]
-    assert "core_floor_active" in result[0]
+    assert "core_floor_active" not in result[0]
 
 
 @pytest.mark.asyncio
@@ -190,17 +254,16 @@ async def test_get_unified_view_as_of_uses_as_of_allocation_diagnostics_not_live
         "sleeves": {"AAPL": "core"},
         "allocation_decomposition": {
             "global": {
-                "user_multiplier_blend_pct": 0.80,
-                "algo_blend_pct": 0.20,
-                "algo_core_target": 0.80,
-                "algo_opportunity_target": 0.20,
+                "target_model": "clara_risk",
+                "clara_target_pct": 1.0,
+                "algo_blend_pct": 0.0,
             },
             "symbols": {
                 "AAPL": {
                     "allocation_sleeve": "core",
-                    "baseline_target_pct": 0.20,
-                    "clara_target_pct": 0.12,
-                    "opportunity_target_pct": 0.10,
+                    "baseline_target_pct": 0.0,
+                    "clara_target_pct": 0.42,
+                    "opportunity_target_pct": 0.0,
                     "final_target_pct": 0.42,
                 }
             },
@@ -212,7 +275,7 @@ async def test_get_unified_view_as_of_uses_as_of_allocation_diagnostics_not_live
 
     mock_deps.db.cache_get.assert_not_awaited()
     assert result[0]["sleeve"] == "core"
-    assert result[0]["baseline_target_pct"] == 20.0
+    assert result[0]["clara_target_pct"] == 42.0
     assert result[0]["final_target_pct"] == 42.0
 
 

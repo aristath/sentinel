@@ -1,7 +1,6 @@
 """Securities and prices API routes."""
 
 import inspect
-import json
 import math
 from typing import Any
 
@@ -9,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
+from sentinel.markets import get_open_market_symbols
 from sentinel.planner.preferences import preference_snapshot, utc_now_iso
 from sentinel.security import Security
 from sentinel.strategy import classify_lot_size, compute_contrarian_signal
@@ -360,10 +360,14 @@ async def get_unified_view(
 
     all_symbols = [sec["symbol"] for sec in securities]
 
-    planner = Planner(db=deps.db, broker=deps.broker)
-
     # Fetch all data sources
-    portfolio = Portfolio(db=deps.db, broker=deps.broker)
+    portfolio = Portfolio(
+        db=deps.db,
+        broker=deps.broker,
+        settings=deps.settings,
+        currency=deps.currency,
+    )
+    planner = Planner(db=deps.db, broker=deps.broker, portfolio=portfolio)
     analyzer = PortfolioAnalyzer(db=deps.db, portfolio=portfolio, currency=deps.currency)
     if as_of is None:
         positions = await deps.db.get_all_positions()
@@ -372,7 +376,8 @@ async def get_unified_view(
     positions_map = {p["symbol"]: p for p in positions}
 
     # Recommendations using settings default for min_trade_value
-    recommendations = await planner.get_recommendations(as_of_date=as_of)
+    eligible_symbols = await get_open_market_symbols(deps.broker, deps.db) if as_of is None else None
+    recommendations = await planner.get_recommendations(as_of_date=as_of, eligible_symbols=eligible_symbols)
     recommendations_map = {r.symbol: r for r in recommendations}
 
     # Ideal and current allocations
@@ -389,18 +394,11 @@ async def get_unified_view(
             if rows:
                 latest_prices_map[symbol] = rows[0].get("close", 0)
 
-    # Total portfolio value in EUR
-    total_value = 0.0
-    for pos in positions:
-        price = latest_prices_map.get(pos["symbol"], pos.get("current_price", 0))
-        qty = pos.get("quantity", 0)
-        pos_currency = pos.get("currency", "EUR")
-        total_value += await deps.currency.to_eur(price * qty, pos_currency)
-
-    # Post-plan total value (current + net effect of all recommendations)
-    post_plan_total_value = total_value
-    for rec in recommendations:
-        post_plan_total_value += rec.value_delta_eur
+    # Use the whole portfolio, including cash, for every allocation denominator.
+    if as_of is not None:
+        total_value = await analyzer.get_total_value(as_of_date=as_of)
+    else:
+        total_value = await portfolio.total_value()
 
     # Bulk-fetch and validate prices
     days_map = {"1M": 30, "1Y": 365, "5Y": 1825, "10Y": 3650}
@@ -416,43 +414,31 @@ async def get_unified_view(
     fee_pct_raw = await deps.settings.get("transaction_fee_percent", 0.2)
     lot_standard_raw = await deps.settings.get("strategy_lot_standard_max_pct", 0.08)
     lot_coarse_raw = await deps.settings.get("strategy_lot_coarse_max_pct", 0.30)
-    core_floor_raw = await deps.settings.get("strategy_core_floor_pct", 0.05)
     min_opp_raw = await deps.settings.get("strategy_min_opp_score", 0.55)
     fee_fixed = float(2.0 if fee_fixed_raw is None else fee_fixed_raw)
     fee_pct = float(0.2 if fee_pct_raw is None else fee_pct_raw) / 100.0
     lot_standard_max_pct = float(0.08 if lot_standard_raw is None else lot_standard_raw)
     lot_coarse_max_pct = float(0.30 if lot_coarse_raw is None else lot_coarse_raw)
-    core_floor_pct = float(0.05 if core_floor_raw is None else core_floor_raw)
     min_opp_score = float(0.55 if min_opp_raw is None else min_opp_raw)
+    total_plan_fees = sum(
+        fee_fixed + abs(float(rec.value_delta_eur)) * fee_pct
+        for rec in recommendations
+        if abs(float(rec.value_delta_eur)) > 0
+    )
+    post_plan_total_value = max(0.0, total_value - total_plan_fees)
     sleeves_map = {}
     allocation_decomposition = {}
     global_decomposition = {}
-    cache_getter = None
-    if as_of is not None:
-        diagnostics_getter = getattr(planner, "get_last_allocation_diagnostics", None)
-        diagnostics = diagnostics_getter(as_of_date=as_of) if callable(diagnostics_getter) else {}
-        if isinstance(diagnostics, dict):
-            sleeves_map = diagnostics.get("sleeves", {}) or {}
-            parsed_decomposition = diagnostics.get("allocation_decomposition", {}) or {}
-            if isinstance(parsed_decomposition, dict):
-                allocation_decomposition = parsed_decomposition.get("symbols", {}) or {}
-                global_decomposition = parsed_decomposition.get("global", {}) or {}
-    else:
-        cache_getter = getattr(deps.db, "cache_get", None)
-    if as_of is None and callable(cache_getter):
-        maybe_cache = cache_getter("planner:contrarian_sleeves")
-        if inspect.isawaitable(maybe_cache):
-            maybe_cache = await maybe_cache
-        if isinstance(maybe_cache, (str, bytes, bytearray)):
-            sleeves_map = json.loads(maybe_cache) if maybe_cache else {}
-        maybe_cache = cache_getter("planner:allocation_decomposition")
-        if inspect.isawaitable(maybe_cache):
-            maybe_cache = await maybe_cache
-        if isinstance(maybe_cache, (str, bytes, bytearray)) and maybe_cache:
-            parsed_decomposition = json.loads(maybe_cache)
-            if isinstance(parsed_decomposition, dict):
-                allocation_decomposition = parsed_decomposition.get("symbols", {}) or {}
-                global_decomposition = parsed_decomposition.get("global", {}) or {}
+    diagnostics_getter = getattr(planner, "get_last_allocation_diagnostics", None)
+    diagnostics = diagnostics_getter(as_of_date=as_of) if callable(diagnostics_getter) else {}
+    effective_signals = {}
+    if isinstance(diagnostics, dict):
+        sleeves_map = diagnostics.get("sleeves", {}) or {}
+        effective_signals = diagnostics.get("rebalance_signals", {}) or {}
+        parsed_decomposition = diagnostics.get("allocation_decomposition", {}) or {}
+        if isinstance(parsed_decomposition, dict):
+            allocation_decomposition = parsed_decomposition.get("symbols", {}) or {}
+            global_decomposition = parsed_decomposition.get("global", {}) or {}
 
     # Build unified response
     result = []
@@ -508,13 +494,14 @@ async def get_unified_view(
         ideal_alloc = ideal.get(symbol, 0) * 100
 
         if recommendation:
-            post_plan_value = value_eur + recommendation.value_delta_eur
+            post_plan_value = max(0.0, value_eur + recommendation.value_delta_eur)
         else:
             post_plan_value = value_eur
         post_plan_alloc = (post_plan_value / post_plan_total_value * 100) if post_plan_total_value > 0 else 0
 
         closes = [float(p["close"]) for p in reversed(prices) if p.get("close") is not None]
-        signal = compute_contrarian_signal(closes)
+        raw_signal = compute_contrarian_signal(closes)
+        signal = {**raw_signal, **(effective_signals.get(symbol) or {})}
 
         maybe_fx_rate = deps.currency.get_rate(sec_currency)
         if inspect.isawaitable(maybe_fx_rate):
@@ -540,10 +527,6 @@ async def get_unified_view(
             sleeve = decomposition.get("allocation_sleeve")
         if sleeve is None:
             sleeve = "opportunity" if float(signal.get("opp_score", 0.0) or 0.0) >= min_opp_score else "core"
-        core_floor_active = bool(
-            sleeve == "core" and has_position and total_value > 0 and ((value_eur / total_value) <= core_floor_pct)
-        )
-
         contrarian_score = float(signal.get("opp_score", 0.0) or 0.0)
 
         # Recommendation info
@@ -556,6 +539,11 @@ async def get_unified_view(
                 "reason": recommendation.reason,
                 "reason_code": recommendation.reason_code,
                 "priority": recommendation.priority,
+                "execution_rank": recommendation.execution_rank,
+                "contrarian_score": recommendation.contrarian_score,
+                "target_gap_ratio": recommendation.target_gap_ratio,
+                "timing_eligible": recommendation.timing_eligible,
+                "is_fallback": recommendation.is_fallback,
             }
 
         result.append(
@@ -595,6 +583,7 @@ async def get_unified_view(
                 "contrarian_score": contrarian_score,
                 # Deterministic strategy diagnostics
                 "opp_score": signal.get("opp_score"),
+                "opp_score_raw": signal.get("opp_score_raw", raw_signal.get("opp_score")),
                 "dip_score": signal.get("dip_score"),
                 "capitulation_score": signal.get("capitulation_score"),
                 "cycle_turn": signal.get("cycle_turn"),
@@ -602,7 +591,6 @@ async def get_unified_view(
                 "ticket_pct": lot_profile["ticket_pct"],
                 "lot_class": lot_profile["lot_class"],
                 "sleeve": sleeve,
-                "core_floor_active": core_floor_active,
                 "allocation_sleeves": global_decomposition or None,
                 "baseline_target_pct": float(decomposition.get("baseline_target_pct", 0.0) or 0.0) * 100,
                 "clara_target_pct": float(decomposition.get("clara_target_pct", 0.0) or 0.0) * 100,

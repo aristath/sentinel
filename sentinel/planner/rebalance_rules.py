@@ -5,7 +5,17 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from .preferences import has_strategic_buy_pressure
+
+def buy_rank_key(recommendation: Any) -> tuple[float, float, float, float, str]:
+    """Sort buys by timing first, then by how much of the target is missing."""
+    raw_user_multiplier = recommendation.user_multiplier
+    return (
+        -max(0.0, min(1.0, float(recommendation.contrarian_score))),
+        -max(0.0, min(1.0, float(recommendation.target_gap_ratio))),
+        -max(0.0, min(1.0, float(0.5 if raw_user_multiplier is None else raw_user_multiplier))),
+        -abs(float(recommendation.value_delta_eur)),
+        str(recommendation.symbol),
+    )
 
 
 def desired_tranche_stage(dd252: float, t1: float = -0.12, t2: float = -0.20, t3: float = -0.28) -> int:
@@ -111,32 +121,23 @@ def generate_buy_reason(
     target_alloc: float,
     signal: dict[str, float | int | str],
     lot_class: str,
-    strategic_buy_threshold: float = 0.70,
 ) -> str:
     """Generate human-readable reason for a buy recommendation."""
     underweight = (target_alloc - current_alloc) * 100
     dip = float(signal.get("dip_score", 0.0))
     cap = float(signal.get("capitulation_score", 0.0))
     turn = int(signal.get("cycle_turn", 0))
-    clara_target = float(signal.get("clara_target_pct", 0.0) or 0.0) * 100
     user_multiplier = float(signal.get("user_multiplier", 0.5) or 0.5)
-
-    if clara_target > 0 and has_strategic_buy_pressure(user_multiplier, strategic_buy_threshold):
-        return (
-            f"Strategic preference buy: underweight by {underweight:.1f}%, "
-            f"Clara target={clara_target:.1f}%, user multiplier={user_multiplier:.2f}, "
-            f"lot={lot_class}"
-        )
 
     if current_alloc == 0:
         return (
-            f"New contrarian entry ({lot_class} lot): dip={dip:.2f}, cap={cap:.2f}, turn={turn}, "
-            f"score={contrarian_score:.2f}"
+            f"New target entry ({lot_class} lot): opportunity={contrarian_score:.2f}, "
+            f"Clara={user_multiplier:.2f}, dip={dip:.2f}, cap={cap:.2f}, turn={turn}"
         )
 
     return (
-        f"Underweight by {underweight:.1f}%. Contrarian score={contrarian_score:.2f}, "
-        f"dip={dip:.2f}, cap={cap:.2f}, turn={turn}, lot={lot_class}"
+        f"Target-gap buy: underweight by {underweight:.1f}%, opportunity={contrarian_score:.2f}, "
+        f"Clara={user_multiplier:.2f}, dip={dip:.2f}, cap={cap:.2f}, turn={turn}, lot={lot_class}"
     )
 
 

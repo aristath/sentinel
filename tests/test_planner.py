@@ -22,8 +22,8 @@ class TestPlannerSettings:
         allocation = AllocationCalculator(settings=settings)
         allocation_config = await allocation._load_strategy_settings()
 
-        assert allocation_config["strategy_core_target_pct"] == DEFAULTS["strategy_core_target_pct"]
-        assert allocation_config["strategy_opportunity_target_pct"] == DEFAULTS["strategy_opportunity_target_pct"]
+        assert "strategy_core_target_pct" not in allocation_config
+        assert "strategy_opportunity_target_pct" not in allocation_config
         assert allocation_config["strategy_entry_memory_days"] == DEFAULTS["strategy_entry_memory_days"]
 
         rebalance = RebalanceEngine(settings=settings)
@@ -34,11 +34,8 @@ class TestPlannerSettings:
             runtime_config["strategy_max_opportunity_buys_per_cycle"]
             == DEFAULTS["strategy_max_opportunity_buys_per_cycle"]
         )
-        assert runtime_config["strategy_projection_months"] == DEFAULTS["strategy_projection_months"]
-        assert (
-            runtime_config["strategy_priority_contrarian_weight_pct"]
-            == DEFAULTS["strategy_priority_contrarian_weight_pct"]
-        )
+        assert "strategy_projection_months" not in runtime_config
+        assert runtime_config["strategy_fallback_wait_days"] == DEFAULTS["strategy_fallback_wait_days"]
 
 
 class TestRebalanceSummary:
@@ -439,7 +436,188 @@ class TestDeficitSellsSimulatedCash:
 
 class TestContrarianSizing:
     @pytest.mark.asyncio
-    async def test_strategic_core_buy_does_not_require_opportunity_score(self):
+    async def test_better_opportunity_suppresses_poorly_timed_target_gap(self):
+        poor = TradeRecommendation(
+            symbol="EXPENSIVE",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.5,
+            allocation_delta=0.5,
+            current_value_eur=0.0,
+            target_value_eur=5_000.0,
+            value_delta_eur=5_000.0,
+            quantity=50,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.05,
+            priority=5_000.0,
+            reason="test",
+            user_multiplier=0.95,
+            timing_eligible=False,
+            target_gap_ratio=1.0,
+        )
+        timely = TradeRecommendation(
+            symbol="AFFORDABLE",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.2,
+            allocation_delta=0.2,
+            current_value_eur=0.0,
+            target_value_eur=2_000.0,
+            value_delta_eur=2_000.0,
+            quantity=20,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.8,
+            priority=2_000.0,
+            reason="test",
+            user_multiplier=0.7,
+            timing_eligible=True,
+            target_gap_ratio=1.0,
+        )
+
+        engine = RebalanceEngine(db=MagicMock())
+        engine._apply_cash_constraint = AsyncMock(side_effect=lambda recs, *_args, **_kwargs: recs)
+        selected = await engine._select_executable_plan(
+            [poor, timely],
+            min_trade_value=100.0,
+            fallback_wait_days=30,
+            as_of_date="2025-01-15",
+            track_fallback_state=False,
+            cash_context={},
+        )
+
+        assert [rec.symbol for rec in selected] == ["AFFORDABLE"]
+
+    @pytest.mark.asyncio
+    async def test_best_remaining_gap_is_fallback_when_none_are_timely(self):
+        candidates = [
+            TradeRecommendation(
+                symbol=symbol,
+                action="buy",
+                current_allocation=0.0,
+                target_allocation=0.5,
+                allocation_delta=0.5,
+                current_value_eur=0.0,
+                target_value_eur=5_000.0,
+                value_delta_eur=5_000.0,
+                quantity=50,
+                price=100.0,
+                currency="EUR",
+                lot_size=1,
+                contrarian_score=score,
+                priority=priority,
+                reason="test",
+                user_multiplier=0.8,
+                timing_eligible=False,
+                target_gap_ratio=1.0,
+            )
+            for symbol, score, priority in [("BEST", 0.25, 1.0), ("WORSE", 0.05, 10_000.0)]
+        ]
+
+        engine = RebalanceEngine(db=MagicMock())
+        engine._apply_cash_constraint = AsyncMock(side_effect=lambda recs, *_args, **_kwargs: recs)
+        selected = await engine._select_executable_plan(
+            candidates,
+            min_trade_value=100.0,
+            fallback_wait_days=0,
+            as_of_date="2025-01-15",
+            track_fallback_state=False,
+            cash_context={},
+        )
+
+        assert [rec.symbol for rec in selected] == ["BEST"]
+        assert selected[0].is_fallback is True
+
+    @pytest.mark.asyncio
+    async def test_unfundable_top_opportunity_does_not_block_next_executable_buy(self):
+        engine = RebalanceEngine(db=MagicMock())
+        engine._settings = MagicMock()
+        engine._settings.get = AsyncMock(return_value=0.0)
+        engine._portfolio = MagicMock()
+        engine._portfolio.total_cash_eur = AsyncMock(return_value=500.0)
+        engine._currency = MagicMock()
+        engine._currency.get_rate = AsyncMock(return_value=1.0)
+        engine._currency.to_eur = AsyncMock(side_effect=lambda amount, _currency: amount)
+        engine._generate_deficit_sells = AsyncMock(return_value=[])
+
+        coarse = TradeRecommendation(
+            symbol="COARSE",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.5,
+            allocation_delta=0.5,
+            current_value_eur=0.0,
+            target_value_eur=10_000.0,
+            value_delta_eur=10_000.0,
+            quantity=100,
+            price=100.0,
+            currency="EUR",
+            lot_size=100,
+            contrarian_score=0.9,
+            priority=10.0,
+            reason="test",
+            timing_eligible=True,
+            target_gap_ratio=1.0,
+        )
+        executable = TradeRecommendation(
+            symbol="EXECUTABLE",
+            action="buy",
+            current_allocation=0.0,
+            target_allocation=0.2,
+            allocation_delta=0.2,
+            current_value_eur=0.0,
+            target_value_eur=2_000.0,
+            value_delta_eur=2_000.0,
+            quantity=20,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.8,
+            priority=5.0,
+            reason="test",
+            timing_eligible=True,
+            target_gap_ratio=1.0,
+        )
+
+        selected = await engine._select_executable_plan(
+            [coarse, executable],
+            min_trade_value=100.0,
+            fallback_wait_days=30,
+            as_of_date="2025-01-15",
+            track_fallback_state=False,
+            cash_context={},
+        )
+
+        assert [(rec.symbol, rec.quantity) for rec in selected] == [("EXECUTABLE", 5)]
+
+    @pytest.mark.asyncio
+    async def test_fallback_wait_is_persistent_and_resets_from_execution(self):
+        state: dict[str, int] = {}
+        engine = RebalanceEngine(db=MagicMock())
+
+        async def get_state(key):
+            return state.get(key)
+
+        async def set_state(key, value):
+            state[key] = value
+
+        engine._get_planner_state = AsyncMock(side_effect=get_state)
+        engine._set_planner_state = AsyncMock(side_effect=set_state)
+
+        assert not await engine._fallback_is_due(wait_days=30, as_of_date="2025-01-01", start_wait=True)
+        assert not await engine._fallback_is_due(wait_days=30, as_of_date="2025-01-30", start_wait=True)
+        assert await engine._fallback_is_due(wait_days=30, as_of_date="2025-01-31", start_wait=True)
+
+        state.pop(engine.FALLBACK_WAIT_STARTED_KEY, None)
+        assert not await engine._fallback_is_due(wait_days=30, as_of_date="2025-03-01", start_wait=True)
+        assert not await engine._fallback_is_due(wait_days=30, as_of_date="2025-03-30", start_wait=True)
+        assert await engine._fallback_is_due(wait_days=30, as_of_date="2025-03-31", start_wait=True)
+
+    @pytest.mark.asyncio
+    async def test_strategic_core_buy_waits_for_opportunity_or_fallback_window(self):
         db = MagicMock()
         db.get_all_positions = AsyncMock(return_value=[])
         db.get_all_securities = AsyncMock(
@@ -479,8 +657,8 @@ class TestContrarianSizing:
             "strategy_opportunity_cooloff_days": 0,
             "strategy_core_cooloff_days": 0,
             "strategy_same_side_cooloff_days": 0,
-            "strategy_core_new_min_score": 0.30,
-            "strategy_core_new_min_dip_score": 0.20,
+            "strategy_core_timing_min_score": 0.30,
+            "strategy_core_timing_min_dip_score": 0.20,
             "strategy_coarse_max_new_lots_per_cycle": 1,
             "strategy_core_floor_pct": 0.05,
             "strategy_max_opportunity_buys_per_cycle": 4,
@@ -516,12 +694,10 @@ class TestContrarianSizing:
             precomputed_sleeves={"AMD": "core"},
         )
 
-        assert len(recs) == 1
-        assert recs[0].action == "buy"
-        assert recs[0].reason_code == "rebalance_buy"
+        assert recs == []
 
     @pytest.mark.asyncio
-    async def test_neutral_core_target_still_requires_opportunity_quality_for_new_name(self):
+    async def test_poor_opportunity_is_used_as_fallback_when_it_is_the_only_target_gap(self):
         db = MagicMock()
         db.get_all_positions = AsyncMock(return_value=[])
         db.get_all_securities = AsyncMock(
@@ -561,12 +737,13 @@ class TestContrarianSizing:
             "strategy_opportunity_cooloff_days": 0,
             "strategy_core_cooloff_days": 0,
             "strategy_same_side_cooloff_days": 0,
-            "strategy_core_new_min_score": 0.30,
-            "strategy_core_new_min_dip_score": 0.20,
+            "strategy_core_timing_min_score": 0.30,
+            "strategy_core_timing_min_dip_score": 0.20,
             "strategy_coarse_max_new_lots_per_cycle": 1,
             "strategy_core_floor_pct": 0.05,
             "strategy_max_opportunity_buys_per_cycle": 4,
             "strategy_max_new_opportunity_buys_per_cycle": 2,
+            "strategy_fallback_wait_days": 0,
         }
         engine._settings.get = AsyncMock(side_effect=lambda key, default=None: settings_values.get(key, default))
         engine._portfolio = MagicMock()
@@ -598,7 +775,9 @@ class TestContrarianSizing:
             precomputed_sleeves={"BASE": "core"},
         )
 
-        assert recs == []
+        assert len(recs) == 1
+        assert recs[0].symbol == "BASE"
+        assert recs[0].timing_eligible is False
 
     @pytest.mark.asyncio
     async def test_coarse_lot_buy_is_capped_to_one_lot(self):
@@ -644,6 +823,7 @@ class TestContrarianSizing:
             "strategy_core_cooloff_days": 0,
             "strategy_same_side_cooloff_days": 0,
             "strategy_rotation_threshold": 0.8,
+            "strategy_fallback_wait_days": 0,
         }
         engine._settings.get = AsyncMock(side_effect=lambda key, default=None: settings_values.get(key, default))
         engine._portfolio = MagicMock()
@@ -708,6 +888,7 @@ class TestContrarianSizing:
             "strategy_memory_max_boost": 0.18,
             "strategy_opportunity_cooloff_days": 0,
             "strategy_core_cooloff_days": 0,
+            "strategy_fallback_wait_days": 0,
         }
         engine._settings.get = AsyncMock(side_effect=lambda key, default=None: settings_values.get(key, default))
         engine._portfolio = MagicMock()
@@ -971,6 +1152,8 @@ class TestPlannerAsOfPropagation:
             as_of_date="2025-01-01",
             precomputed_rebalance_signals=None,
             precomputed_sleeves=None,
+            eligible_symbols=None,
+            track_fallback_state=False,
             state=None,
         )
 

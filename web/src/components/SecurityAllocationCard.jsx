@@ -18,69 +18,40 @@ function formatPct(value) {
   return `${Number(value || 0).toFixed(1)}%`;
 }
 
-export function SecurityAllocationCard({ securities, recommendations, forecastMonths = [], totalValueEur = 0 }) {
+export function SecurityAllocationCard({ securities, recommendations, longTermPlan, cashAfterPlan }) {
   const [sortBy, setSortBy] = useState('allocation');
   const [showIdeal, setShowIdeal] = useState(true);
 
   const { rows, maxValue } = useMemo(() => {
-    if (!securities || securities.length === 0) {
+    if ((!securities || securities.length === 0) && !longTermPlan) {
       return { rows: [], maxValue: 0 };
     }
 
-    const futureTradesBySymbol = new Map();
-    forecastMonths.slice(1).forEach((month) => {
-      (month.recommendations || []).forEach((rec) => {
-        const value = Math.abs(Number(rec.value_delta_eur || 0));
-        if (!rec.symbol || value <= 0) return;
-        const existing = futureTradesBySymbol.get(rec.symbol) || { buy: 0, sell: 0 };
-        if (rec.action === 'buy') {
-          existing.buy += value;
-        } else if (rec.action === 'sell') {
-          existing.sell += value;
-        }
-        futureTradesBySymbol.set(rec.symbol, existing);
-      });
-    });
+    const targetsBySymbol = new Map((longTermPlan?.targets || []).map((target) => [target.symbol, target]));
 
     // A row is shown if it's relevant to any of the three series:
     //   - currently held (`value_eur > 0`)
     //   - has a pending recommendation (buy or sell)
-    //   - has a future-month forecasted trade
     //   - has a planner-derived ideal weight > 0 — only when the ideal layer is
     //     turned on (otherwise rows that exist purely because of an ideal would
     //     render as empty bars).
-    const data = securities
+    const data = (securities || [])
       .filter((s) => {
         const hasPosition = s.has_position && s.value_eur > 0;
         const hasRecommendation = recommendations?.some((r) => r.symbol === s.symbol);
-        const hasFutureTrade = futureTradesBySymbol.has(s.symbol);
-        const hasIdeal = showIdeal && (s.ideal_allocation || 0) > 0;
-        return hasPosition || hasRecommendation || hasFutureTrade || hasIdeal;
+        const hasIdeal = showIdeal && targetsBySymbol.has(s.symbol);
+        return hasPosition || hasRecommendation || hasIdeal;
       })
       .map((s) => {
         const rec = recommendations?.find((r) => r.symbol === s.symbol);
         const delta = rec ? rec.value_delta_eur : 0;
-        const futureTrade = futureTradesBySymbol.get(s.symbol) || { buy: 0, sell: 0 };
-        const futureBuy = futureTrade.buy;
-        const futureSell = futureTrade.sell;
+        const target = targetsBySymbol.get(s.symbol);
         const current = s.value_eur || 0;
         const final = current + delta;
-        const forecastFinal = Math.max(0, final + futureBuy - futureSell);
-        // Ideal EUR target. Recommendations carry it directly; for securities
-        // without a recommendation we derive it from ideal_allocation (%) ×
-        // total portfolio value. Fallback to `current` when neither is known
-        // — that just hides the marker under the bar's right edge.
-        let ideal;
-        if (rec) {
-          ideal = rec.target_value_eur;
-        } else if ((s.ideal_allocation || 0) > 0 && totalValueEur > 0) {
-          ideal = (s.ideal_allocation / 100) * totalValueEur;
-        } else {
-          ideal = current;
-        }
+        const ideal = Number(target?.target_value_eur ?? rec?.target_value_eur ?? current);
+        const modelIdeal = Number(target?.model_target_value_eur ?? ideal);
 
-        // Skip rows that contribute nothing to any of the three series.
-        if (final <= 0 && current <= 0 && ideal <= 0 && futureBuy <= 0 && futureSell <= 0) return null;
+        if (final <= 0 && current <= 0 && ideal <= 0) return null;
 
         const isBuy = delta > 0;
         const isSell = delta < 0;
@@ -93,21 +64,46 @@ export function SecurityAllocationCard({ securities, recommendations, forecastMo
           ideal,
           currentAllocation: s.current_allocation || 0,
           postPlanAllocation: s.post_plan_allocation ?? s.current_allocation ?? 0,
-          idealAllocation: s.ideal_allocation || 0,
-          futureBuy,
-          futureSell,
+          idealAllocation: target?.target_allocation_pct ?? s.ideal_allocation ?? 0,
+          targetGap: Number(target?.gap_eur || 0),
+          modelIdeal,
+          sellLocked: Boolean(target?.sell_locked),
           isBuy,
           isSell,
           // Bar must extend to whichever of current / final / ideal is largest
           // so the ideal marker always lands inside the bar's range. When the
           // ideal is hidden it doesn't influence the scale.
           maxBar: showIdeal
-            ? Math.max(current, final, forecastFinal, ideal)
-            : Math.max(current, final, forecastFinal),
+            ? Math.max(current, final, ideal)
+            : Math.max(current, final),
         };
       })
-      .filter(Boolean)
-      .sort((a, b) => {
+      .filter(Boolean);
+
+    const currentCash = Number(longTermPlan?.current_cash_eur || 0);
+    const targetCash = Number(longTermPlan?.target_cash_value_eur || 0);
+    if (currentCash > 0 || targetCash > 0) {
+      const currentTotal = Number(longTermPlan?.current_total_value_eur || 0);
+      const cashGap = Number(longTermPlan?.cash_gap_eur || 0);
+      const plannedCash = Number.isFinite(Number(cashAfterPlan)) ? Math.max(0, Number(cashAfterPlan)) : currentCash;
+      const cashDelta = plannedCash - currentCash;
+      data.push({
+        symbol: 'CASH',
+        current: currentCash,
+        final: plannedCash,
+        delta: cashDelta,
+        ideal: targetCash,
+        currentAllocation: currentTotal > 0 ? (currentCash / currentTotal) * 100 : 0,
+        postPlanAllocation: currentTotal > 0 ? (plannedCash / currentTotal) * 100 : 0,
+        idealAllocation: Number(longTermPlan?.target_cash_allocation_pct || 0),
+        targetGap: cashGap,
+        isBuy: cashDelta > 0,
+        isSell: cashDelta < 0,
+        maxBar: showIdeal ? Math.max(currentCash, plannedCash, targetCash) : Math.max(currentCash, plannedCash),
+      });
+    }
+
+    data.sort((a, b) => {
         if (sortBy === 'ideal') return b.ideal - a.ideal;
         // 'allocation' — largest current/post-plan holding first
         return Math.max(b.final, b.current) - Math.max(a.final, a.current);
@@ -116,7 +112,7 @@ export function SecurityAllocationCard({ securities, recommendations, forecastMo
     const max = Math.max(...data.map((d) => d.maxBar), 0);
 
     return { rows: data, maxValue: max };
-  }, [securities, recommendations, forecastMonths, totalValueEur, sortBy, showIdeal]);
+  }, [securities, recommendations, longTermPlan, cashAfterPlan, sortBy, showIdeal]);
 
   const hasData = rows.length > 0;
 
@@ -152,9 +148,11 @@ export function SecurityAllocationCard({ securities, recommendations, forecastMo
                     ? (row.isBuy ? ((row.final - row.delta) / maxValue) * 100 : (row.final / maxValue) * 100)
                     : 0;
                   const deltaWidth = maxValue > 0 ? (Math.abs(row.delta) / maxValue) * 100 : 0;
-                  const futureBuyWidth = maxValue > 0 ? (row.futureBuy / maxValue) * 100 : 0;
-                  const futureSellWidth = maxValue > 0 ? (row.futureSell / maxValue) * 100 : 0;
                   const idealPct = maxValue > 0 ? (row.ideal / maxValue) * 100 : 0;
+                  const targetGapText = `${row.targetGap >= 0 ? '+' : '-'}${formatEur(Math.abs(row.targetGap))}`;
+                  const idealTitle = row.sellLocked
+                    ? `No-sell floor: ${formatEur(row.ideal)}; model target: ${formatEur(row.modelIdeal)}`
+                    : `12-month target: ${formatEur(row.ideal)}; gap: ${targetGapText}`;
 
                   return (
                     <tr key={row.symbol}>
@@ -179,34 +177,27 @@ export function SecurityAllocationCard({ securities, recommendations, forecastMo
                               style={{ width: `${deltaWidth}%` }}
                             />
                           )}
-                          {futureBuyWidth > 0 && (
-                            <div
-                              className="allocation-bar__segment allocation-bar__segment--green allocation-bar__segment--future"
-                              style={{ width: `${futureBuyWidth}%` }}
-                            />
-                          )}
-                          {futureSellWidth > 0 && (
-                            <div
-                              className="allocation-bar__segment allocation-bar__segment--red allocation-bar__segment--future"
-                              style={{ width: `${futureSellWidth}%` }}
-                            />
-                          )}
                           {showIdeal && (
                             <div
                               className="allocation-bar__ideal"
                               style={{ left: `${idealPct}%` }}
-                              title={`Ideal: ${formatEur(row.ideal)}`}
+                              title={idealTitle}
                             />
                           )}
                         </div>
                       </td>
                       <td className="allocation-table__numbers">
-                        <span>{formatPct(row.currentAllocation)}</span>
-                        <span className="allocation-table__arrow">→</span>
-                        <span className={row.isBuy ? 'allocation-table__buy' : row.isSell ? 'allocation-table__sell' : ''}>
-                          {formatPct(row.postPlanAllocation)}
-                        </span>
-                        <span className="allocation-table__target">/ {formatPct(row.idealAllocation)}</span>
+                        <div>
+                          <span>{formatPct(row.currentAllocation)}</span>
+                          <span className="allocation-table__arrow">→</span>
+                          <span className={row.isBuy ? 'allocation-table__buy' : row.isSell ? 'allocation-table__sell' : ''}>
+                            {formatPct(row.postPlanAllocation)}
+                          </span>
+                          <span className="allocation-table__target">/ {formatPct(row.idealAllocation)}</span>
+                        </div>
+                        <div className="allocation-table__target-value">
+                          {formatEur(row.ideal)} · {row.sellLocked ? 'locked' : targetGapText}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -222,10 +213,9 @@ export function SecurityAllocationCard({ securities, recommendations, forecastMo
 
         <Group gap="md" wrap="wrap" className="allocation-legend">
           <LegendSwatch kind="gray" label="Current holding" />
-          <LegendSwatch kind="green" label="Will buy" />
-          <LegendSwatch kind="red" label="Will sell" />
-          <LegendSwatch kind="future-green" label="Future buy" />
-          {showIdeal && <LegendSwatch kind="ideal" label="Planner's ideal" />}
+          <LegendSwatch kind="green" label="Today's increase" />
+          <LegendSwatch kind="red" label="Today's decrease" />
+          {showIdeal && <LegendSwatch kind="ideal" label="12-month target" />}
         </Group>
       </Stack>
     </Card>

@@ -330,8 +330,8 @@ class TestBuildRecommendationPaths:
             "strategy_opportunity_cooloff_days": 15,
             "strategy_same_side_cooloff_days": 10,
             "strategy_core_floor_pct": 0.05,
-            "strategy_core_new_min_score": 0.30,
-            "strategy_core_new_min_dip_score": 0.20,
+            "strategy_core_timing_min_score": 0.30,
+            "strategy_core_timing_min_dip_score": 0.20,
             "strategy_coarse_max_new_lots_per_cycle": 1,
         }
 
@@ -481,7 +481,7 @@ class TestBuildRecommendationPaths:
         assert rec is None
 
     @pytest.mark.asyncio
-    async def test_cannot_buy_security_can_still_sell(self, _make_engine, _settings_ctx):
+    async def test_overweight_security_is_only_a_funding_source(self, _make_engine, _settings_ctx):
         engine = _make_engine()
         engine._calculate_months_to_self_correct = AsyncMock(return_value=4.0)
         rec = await engine._build_recommendation(
@@ -527,8 +527,7 @@ class TestBuildRecommendationPaths:
             avg_monthly_deposit_6m=500.0,
         )
 
-        assert rec is not None
-        assert rec.action == "sell"
+        assert rec is None
 
     @pytest.mark.asyncio
     async def test_cannot_sell_returns_none(self, _make_engine, _settings_ctx):
@@ -704,10 +703,8 @@ class TestBuildRecommendationPaths:
         assert rec.value_delta_eur == pytest.approx(1600.0)
 
     @pytest.mark.asyncio
-    async def test_sell_reason_code_rebalance_sell(self, _make_engine, _settings_ctx):
+    async def test_positive_target_does_not_create_standalone_rotation_sell(self, _make_engine, _settings_ctx):
         engine = _make_engine()
-        # A core overweight only sells when a higher-conviction rotation
-        # candidate exists — provide one (BUYME) so the drift-sell proceeds.
         rec = await engine._build_recommendation(
             symbol="CORE_SELL",
             ideal={"CORE_SELL": 0.03, "BUYME": 0.10},
@@ -741,6 +738,4 @@ class TestBuildRecommendationPaths:
                 "strategy_rotation_threshold": 0.8,
             },
         )
-        assert rec is not None
-        assert rec.action == "sell"
-        assert rec.reason_code == "rebalance_sell"
+        assert rec is None

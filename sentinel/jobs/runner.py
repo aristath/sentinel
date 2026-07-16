@@ -43,7 +43,7 @@ TASK_REGISTRY: dict[str, tuple[Callable, list[str]]] = {
     "decay:user_multipliers": (tasks.decay_user_multipliers, ["db"]),
     "snapshot:backfill": (tasks.snapshot_backfill, ["db", "currency"]),
     "trading:check_markets": (tasks.trading_check_markets, ["broker", "db", "planner"]),
-    "trading:execute": (tasks.trading_execute, ["broker", "db", "planner"]),
+    "trading:execute": (tasks.trading_execute, ["broker", "db", "planner", "portfolio"]),
     "trading:rebalance": (tasks.trading_rebalance, ["planner"]),
     "trading:balance_fix": (tasks.trading_balance_fix, ["db", "broker"]),
     "planning:refresh": (tasks.planning_refresh, ["db", "planner", "broker"]),

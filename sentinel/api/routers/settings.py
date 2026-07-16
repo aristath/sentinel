@@ -15,12 +15,11 @@ from sentinel.settings import REMOVED_SETTINGS
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 STRATEGY_KEYS = {
-    "strategy_core_target_pct",
-    "strategy_opportunity_target_pct",
     "strategy_min_opp_score",
     "strategy_ideal_qualifying_threshold",
-    "strategy_strategic_buy_threshold",
-    "strategy_core_floor_pct",
+    "strategy_core_timing_min_score",
+    "strategy_core_timing_min_dip_score",
+    "strategy_fallback_wait_days",
     "strategy_entry_t1_dd",
     "strategy_entry_t2_dd",
     "strategy_entry_t3_dd",
@@ -29,16 +28,16 @@ STRATEGY_KEYS = {
     "strategy_opportunity_addon_threshold",
     "strategy_max_opportunity_buys_per_cycle",
     "strategy_max_new_opportunity_buys_per_cycle",
-    "strategy_priority_contrarian_weight_pct",
 }
 PLANNER_SETTING_KEYS = {
     *STRATEGY_KEYS,
     "clara_preference_strength",
-    "user_multiplier_blend_pct",
     "user_multiplier_decay_factor",
     "user_multiplier_decay_interval_days",
     "max_position_pct",
     "min_position_pct",
+    "min_cash_buffer",
+    "target_cash_pct",
     "min_trade_value",
     "transaction_fee_fixed",
     "transaction_fee_percent",
@@ -46,8 +45,6 @@ PLANNER_SETTING_KEYS = {
     "strategy_lot_standard_max_pct",
     "strategy_lot_coarse_max_pct",
     "strategy_coarse_max_new_lots_per_cycle",
-    "strategy_core_new_min_score",
-    "strategy_core_new_min_dip_score",
     "strategy_opportunity_cooloff_days",
     "strategy_core_cooloff_days",
     "strategy_same_side_cooloff_days",
@@ -55,7 +52,6 @@ PLANNER_SETTING_KEYS = {
     "strategy_max_funding_sells_per_cycle",
     "strategy_max_funding_turnover_pct",
     "strategy_funding_conviction_bias",
-    "strategy_projection_months",
 }
 
 # Global LED controller reference (set by app lifespan)
@@ -199,13 +195,6 @@ async def set_settings_batch(
         value = float(raw)
         parsed_values[key] = value
 
-    if parsed_values["strategy_core_target_pct"] < 0 or parsed_values["strategy_core_target_pct"] > 100:
-        raise HTTPException(status_code=400, detail="'strategy_core_target_pct' must be in [0, 100]")
-    if parsed_values["strategy_opportunity_target_pct"] < 0 or parsed_values["strategy_opportunity_target_pct"] > 100:
-        raise HTTPException(status_code=400, detail="'strategy_opportunity_target_pct' must be in [0, 100]")
-    target_sum = parsed_values["strategy_core_target_pct"] + parsed_values["strategy_opportunity_target_pct"]
-    if abs(target_sum - 100.0) > 1e-9:
-        raise HTTPException(status_code=400, detail="Core and opportunity targets must sum to 100")
     if parsed_values["strategy_min_opp_score"] < 0 or parsed_values["strategy_min_opp_score"] > 1:
         raise HTTPException(status_code=400, detail="'strategy_min_opp_score' must be in [0, 1]")
     if (
@@ -213,10 +202,11 @@ async def set_settings_batch(
         or parsed_values["strategy_ideal_qualifying_threshold"] > 1
     ):
         raise HTTPException(status_code=400, detail="'strategy_ideal_qualifying_threshold' must be in [0, 1]")
-    if parsed_values["strategy_strategic_buy_threshold"] < 0 or parsed_values["strategy_strategic_buy_threshold"] > 1:
-        raise HTTPException(status_code=400, detail="'strategy_strategic_buy_threshold' must be in [0, 1]")
-    if parsed_values["strategy_core_floor_pct"] < 0 or parsed_values["strategy_core_floor_pct"] > 1:
-        raise HTTPException(status_code=400, detail="'strategy_core_floor_pct' must be in [0, 1]")
+    for key in ("strategy_core_timing_min_score", "strategy_core_timing_min_dip_score"):
+        if parsed_values[key] < 0 or parsed_values[key] > 1:
+            raise HTTPException(status_code=400, detail=f"'{key}' must be in [0, 1]")
+    if parsed_values["strategy_fallback_wait_days"] < 0 or parsed_values["strategy_fallback_wait_days"] > 365:
+        raise HTTPException(status_code=400, detail="'strategy_fallback_wait_days' must be in [0, 365]")
     for key in ("strategy_entry_t1_dd", "strategy_entry_t2_dd", "strategy_entry_t3_dd"):
         if parsed_values[key] < -0.9 or parsed_values[key] > 0:
             raise HTTPException(status_code=400, detail=f"'{key}' must be in [-0.9, 0]")
@@ -233,11 +223,6 @@ async def set_settings_batch(
         or parsed_values["strategy_opportunity_addon_threshold"] > 1
     ):
         raise HTTPException(status_code=400, detail="'strategy_opportunity_addon_threshold' must be in [0, 1]")
-    if (
-        parsed_values["strategy_priority_contrarian_weight_pct"] < 0
-        or parsed_values["strategy_priority_contrarian_weight_pct"] > 100
-    ):
-        raise HTTPException(status_code=400, detail="'strategy_priority_contrarian_weight_pct' must be in [0, 100]")
     for key in ("strategy_max_opportunity_buys_per_cycle", "strategy_max_new_opportunity_buys_per_cycle"):
         if parsed_values[key] < 0 or parsed_values[key] > 50:
             raise HTTPException(status_code=400, detail=f"'{key}' must be in [0, 50]")

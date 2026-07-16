@@ -120,7 +120,7 @@ class TestGenerateSellReason:
 class TestGenerateBuyReason:
     """Tests for generate_buy_reason function."""
 
-    def test_strategic_preference_buy(self):
+    def test_target_gap_reason_includes_destination_and_timing(self):
         signal = {
             "clara_target_pct": 0.05,
             "user_multiplier": 0.8,
@@ -133,10 +133,11 @@ class TestGenerateBuyReason:
             signal=signal,
             lot_class="standard",
         )
-        assert "Strategic preference buy" in reason
-        assert "Clara target=5.0%" in reason
+        assert "Target-gap buy" in reason
+        assert "opportunity=0.50" in reason
+        assert "Clara=0.80" in reason
 
-    def test_new_contrarian_entry(self):
+    def test_new_target_entry(self):
         signal = {
             "dip_score": -0.15,
             "capitulation_score": -0.25,
@@ -150,7 +151,7 @@ class TestGenerateBuyReason:
             signal=signal,
             lot_class="coarse",
         )
-        assert "New contrarian entry" in reason
+        assert "New target entry" in reason
         assert "coarse lot" in reason
 
     def test_underweight_regular_buy(self):
@@ -167,8 +168,8 @@ class TestGenerateBuyReason:
             signal=signal,
             lot_class="standard",
         )
-        assert "Underweight by 5.0%" in reason
-        assert "Contrarian score=0.40" in reason
+        assert "underweight by 5.0%" in reason
+        assert "opportunity=0.40" in reason
 
 
 class TestForcedOpportunityExit:

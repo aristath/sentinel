@@ -3,6 +3,42 @@
 from dataclasses import dataclass
 from typing import Optional
 
+PLANNING_HORIZON_MONTHS = 12
+
+
+@dataclass(frozen=True)
+class LongTermTarget:
+    """Terminal target and current distance for one security."""
+
+    symbol: str
+    clara_score: float
+    opportunity_score: float
+    target_allocation: float
+    current_value_eur: float
+    target_value_eur: float
+    gap_eur: float
+    model_target_allocation: float | None = None
+    model_target_value_eur: float | None = None
+    sell_locked: bool = False
+
+
+@dataclass(frozen=True)
+class LongTermPlan:
+    """A fresh twelve-month portfolio destination, not a future trade schedule."""
+
+    as_of_date: str
+    horizon_end_date: str
+    horizon_months: int
+    current_total_value_eur: float
+    avg_monthly_net_deposit_eur: float
+    expected_contributions_eur: float
+    terminal_portfolio_value_eur: float
+    targets: list[LongTermTarget]
+    current_cash_eur: float = 0.0
+    target_cash_allocation: float = 0.0
+    target_cash_value_eur: float = 0.0
+    cash_gap_eur: float = 0.0
+
 
 @dataclass
 class TradeRecommendation:
@@ -27,14 +63,15 @@ class TradeRecommendation:
     sleeve: Optional[str] = None
     lot_class: Optional[str] = None
     ticket_pct: Optional[float] = None
-    core_floor_active: Optional[bool] = None
     memory_entry: Optional[bool] = None
     user_multiplier: Optional[float] = None
     clara_target_pct: Optional[float] = None
     baseline_target_pct: Optional[float] = None
     opportunity_target_pct: Optional[float] = None
-    profit_amount_eur: Optional[float] = None  # Profit amount for sell recommendations
-    profits_first: Optional[bool] = None  # True if selling profits only
+    timing_eligible: bool = True
+    target_gap_ratio: float = 0.0
+    is_fallback: bool = False
+    execution_rank: Optional[int] = None
 
 
 @dataclass
@@ -42,7 +79,7 @@ class PlannerState:
     """Portfolio-side inputs for a planner run.
 
     Live planning can omit this and read from the normal DB/portfolio services.
-    Forecast planning can provide it to run the same planner logic over simulated
+    Simulations can provide it to run the same planner logic over supplied
     cash and positions without writing those assumptions back to the database.
     """
 

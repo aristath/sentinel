@@ -48,7 +48,7 @@ Manually trigger a job by type. Runs immediately, regardless of schedule.
 | `decay:user_multipliers` | Daily walk over `securities`: any row whose slider is ≥ 7 days old gets one step closer to neutral via `value = 0.5 + (value − 0.5) × 0.9`. Touching the slider resets the timer. |
 | `snapshot:backfill` | Reconstruct missing portfolio snapshots |
 | `trading:check_markets` | Check market open status |
-| `trading:execute` | Execute pending trade recommendations |
+| `trading:execute` | Sync broker state, calculate a fresh current-window plan, and submit at most one transaction |
 | `trading:rebalance` | Generate new trade recommendations via Planner |
 | `trading:balance_fix` | Fix quantity mismatches between DB and broker |
 | `planning:refresh` | Refresh planner state without generating trades |

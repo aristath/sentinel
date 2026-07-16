@@ -49,19 +49,17 @@ export function SettingsModal({ opened, onClose }) {
   useEffect(() => {
     if (!settings) return;
     setStrategyDraft({
-      strategy_core_target_pct: Number(settings.strategy_core_target_pct ?? 80),
-      strategy_opportunity_target_pct: Number(settings.strategy_opportunity_target_pct ?? 20),
       strategy_min_opp_score: Number(settings.strategy_min_opp_score ?? 0.55),
       strategy_ideal_qualifying_threshold: Number(settings.strategy_ideal_qualifying_threshold ?? 0.65),
-      strategy_strategic_buy_threshold: Number(settings.strategy_strategic_buy_threshold ?? 0.70),
-      strategy_core_floor_pct: Number(settings.strategy_core_floor_pct ?? 0.05),
+      strategy_core_timing_min_score: Number(settings.strategy_core_timing_min_score ?? 0.30),
+      strategy_core_timing_min_dip_score: Number(settings.strategy_core_timing_min_dip_score ?? 0.20),
+      strategy_fallback_wait_days: Number(settings.strategy_fallback_wait_days ?? 30),
       strategy_entry_t1_dd: Number(settings.strategy_entry_t1_dd ?? -0.10),
       strategy_entry_t2_dd: Number(settings.strategy_entry_t2_dd ?? -0.16),
       strategy_entry_t3_dd: Number(settings.strategy_entry_t3_dd ?? -0.22),
       strategy_entry_memory_days: Number(settings.strategy_entry_memory_days ?? 45),
       strategy_memory_max_boost: Number(settings.strategy_memory_max_boost ?? 0.12),
       strategy_opportunity_addon_threshold: Number(settings.strategy_opportunity_addon_threshold ?? 0.75),
-      strategy_priority_contrarian_weight_pct: Number(settings.strategy_priority_contrarian_weight_pct ?? 25),
       strategy_max_opportunity_buys_per_cycle: Number(settings.strategy_max_opportunity_buys_per_cycle ?? 1),
       strategy_max_new_opportunity_buys_per_cycle: Number(settings.strategy_max_new_opportunity_buys_per_cycle ?? 1),
     });
@@ -141,7 +139,7 @@ export function SettingsModal({ opened, onClose }) {
               <NumberInput
                 label="Target Cash %"
                 description="Target cash allocation in portfolio"
-                value={settings?.target_cash_pct || 5}
+                value={settings?.target_cash_pct ?? 0}
                 onChange={(value) => handleChange('target_cash_pct', value)}
                 min={0}
                 max={50}
@@ -151,7 +149,7 @@ export function SettingsModal({ opened, onClose }) {
               <NumberInput
                 label="Min Cash Buffer %"
                 description="Minimum cash to keep as safety buffer"
-                value={(settings?.min_cash_buffer || 0.005) * 100}
+                value={(settings?.min_cash_buffer ?? 0.005) * 100}
                 onChange={(value) => handleChange('min_cash_buffer', value / 100)}
                 min={0}
                 max={10}
@@ -201,26 +199,6 @@ export function SettingsModal({ opened, onClose }) {
           <Tabs.Panel value="strategy" pt="md">
             <Stack gap="md">
               <NumberInput
-                label="Strategic Target %"
-                description="Strategic allocation sleeve before tactical opportunity"
-                value={strategyDraft?.strategy_core_target_pct ?? settings?.strategy_core_target_pct ?? 80}
-                onChange={(value) => handleStrategyChange('strategy_core_target_pct', value)}
-                min={0}
-                max={100}
-                suffix="%"
-              />
-
-              <NumberInput
-                label="Opportunity Target %"
-                description="Tactical sleeve for high-opportunity names"
-                value={strategyDraft?.strategy_opportunity_target_pct ?? settings?.strategy_opportunity_target_pct ?? 20}
-                onChange={(value) => handleStrategyChange('strategy_opportunity_target_pct', value)}
-                min={0}
-                max={100}
-                suffix="%"
-              />
-
-              <NumberInput
                 label="Minimum Opportunity Score"
                 description="Minimum opp score required to enter opportunity sleeve"
                 value={strategyDraft?.strategy_min_opp_score ?? settings?.strategy_min_opp_score ?? 0.55}
@@ -241,24 +219,33 @@ export function SettingsModal({ opened, onClose }) {
               />
 
               <NumberInput
-                label="Strategic Buy Threshold"
-                description="Minimum Clara preference that counts as strategic buy pressure"
-                value={strategyDraft?.strategy_strategic_buy_threshold ?? settings?.strategy_strategic_buy_threshold ?? 0.70}
-                onChange={(value) => handleStrategyChange('strategy_strategic_buy_threshold', value)}
+                label="Core Timing Score"
+                description="Minimum opportunity score for a normally timed core buy"
+                value={strategyDraft?.strategy_core_timing_min_score ?? settings?.strategy_core_timing_min_score ?? 0.30}
+                onChange={(value) => handleStrategyChange('strategy_core_timing_min_score', value)}
                 min={0}
                 max={1}
                 decimalScale={3}
               />
 
               <NumberInput
-                label="Core Floor %"
-                description="Minimum total portfolio share kept for core positions before trimming"
-                value={(strategyDraft?.strategy_core_floor_pct ?? settings?.strategy_core_floor_pct ?? 0.05) * 100}
-                onChange={(value) => handleStrategyChange('strategy_core_floor_pct', (value ?? 0) / 100)}
+                label="Core Timing Dip"
+                description="Minimum dip score for a normally timed core buy"
+                value={strategyDraft?.strategy_core_timing_min_dip_score ?? settings?.strategy_core_timing_min_dip_score ?? 0.20}
+                onChange={(value) => handleStrategyChange('strategy_core_timing_min_dip_score', value)}
                 min={0}
-                max={100}
-                decimalScale={2}
-                suffix="%"
+                max={1}
+                decimalScale={3}
+              />
+
+              <NumberInput
+                label="Fallback Wait"
+                description="Days without an executable opportunity before one convergence buy"
+                value={strategyDraft?.strategy_fallback_wait_days ?? settings?.strategy_fallback_wait_days ?? 30}
+                onChange={(value) => handleStrategyChange('strategy_fallback_wait_days', value)}
+                min={0}
+                max={365}
+                suffix=" days"
               />
 
               <NumberInput
@@ -319,27 +306,6 @@ export function SettingsModal({ opened, onClose }) {
                 min={0}
                 max={1}
                 decimalScale={3}
-              />
-
-              <NumberInput
-                label="Contrarian Priority Weight"
-                description="How strongly timing adjusts EUR target-gap priority"
-                value={strategyDraft?.strategy_priority_contrarian_weight_pct ?? settings?.strategy_priority_contrarian_weight_pct ?? 25}
-                onChange={(value) => handleStrategyChange('strategy_priority_contrarian_weight_pct', value)}
-                min={0}
-                max={100}
-                decimalScale={1}
-                suffix="%"
-              />
-
-              <NumberInput
-                label="Forecast Months"
-                description="Number of future monthly plans to show"
-                value={settings?.planner_forecast_months ?? 6}
-                onChange={(value) => handleChange('planner_forecast_months', value)}
-                min={1}
-                max={24}
-                suffix=" months"
               />
 
               <NumberInput

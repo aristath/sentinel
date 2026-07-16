@@ -19,19 +19,17 @@ from sentinel.settings import Settings
 
 def strategy_values(**overrides):
     values = {
-        "strategy_core_target_pct": 70,
-        "strategy_opportunity_target_pct": 30,
         "strategy_min_opp_score": 0.6,
         "strategy_ideal_qualifying_threshold": 0.65,
-        "strategy_strategic_buy_threshold": 0.7,
-        "strategy_core_floor_pct": 0.1,
+        "strategy_core_timing_min_score": 0.3,
+        "strategy_core_timing_min_dip_score": 0.2,
+        "strategy_fallback_wait_days": 30,
         "strategy_entry_t1_dd": -0.10,
         "strategy_entry_t2_dd": -0.16,
         "strategy_entry_t3_dd": -0.22,
         "strategy_entry_memory_days": 45,
         "strategy_memory_max_boost": 0.12,
         "strategy_opportunity_addon_threshold": 0.75,
-        "strategy_priority_contrarian_weight_pct": 25.0,
         "strategy_max_opportunity_buys_per_cycle": 1,
         "strategy_max_new_opportunity_buys_per_cycle": 1,
     }
@@ -92,7 +90,7 @@ async def test_settings_batch_http_rejects_boolean(deps):
     client = _build_client(deps)
     resp = client.put(
         "/api/settings",
-        json={"values": strategy_values(strategy_core_target_pct=True)},
+        json={"values": strategy_values(strategy_min_opp_score=True)},
     )
     assert resp.status_code == 400
     assert "must be a number" in resp.json().get("detail", "")

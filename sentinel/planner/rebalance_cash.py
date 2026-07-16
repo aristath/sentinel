@@ -12,7 +12,7 @@ from sentinel.strategy import compute_contrarian_signal
 
 from .models import PlannerState, TradeRecommendation
 from .preferences import is_explicit_downgrade, normalize_user_multiplier
-from .rebalance_rules import calculate_transaction_cost
+from .rebalance_rules import buy_rank_key, calculate_transaction_cost
 
 if TYPE_CHECKING:
     from .rebalance import RebalanceEngine
@@ -106,6 +106,7 @@ async def apply_cash_constraint(
     preloaded_securities_map: dict[str, dict] | None = None,
     preloaded_symbol_scores: dict[str, float] | None = None,
     preloaded_symbol_prices: dict[str, float] | None = None,
+    eligible_symbols: set[str] | None = None,
     state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Scale down buy recommendations to fit within available cash."""
@@ -113,7 +114,8 @@ async def apply_cash_constraint(
     pct_fee = await engine._settings.get("transaction_fee_percent", 0.2) / 100
 
     sells = [r for r in recommendations if r.action == "sell"]
-    buys = [r for r in recommendations if r.action == "buy"]
+    base_sells = list(sells)
+    buys = sorted((r for r in recommendations if r.action == "buy"), key=buy_rank_key)
 
     if not buys:
         return recommendations
@@ -126,10 +128,20 @@ async def apply_cash_constraint(
         current_cash = state.cash_eur()
     else:
         current_cash = await engine._portfolio.total_cash_eur()
+
+    reserve_base = float(total_value or 0.0)
+    if reserve_base <= 0 and state is None:
+        maybe_total = engine._portfolio.total_value()
+        if inspect.isawaitable(maybe_total):
+            maybe_total = await maybe_total
+        reserve_base = float(maybe_total) if isinstance(maybe_total, int | float) else 0.0
+    min_cash_buffer = max(0.0, float(await _setting(engine, "min_cash_buffer", 0.005)))
+    cash_reserve = reserve_base * min_cash_buffer
+
     net_sell_proceeds = sum(
         abs(r.value_delta_eur) - calculate_transaction_cost(abs(r.value_delta_eur), fixed_fee, pct_fee) for r in sells
     )
-    available_budget = current_cash + net_sell_proceeds
+    available_budget = max(0.0, current_cash + net_sell_proceeds - cash_reserve)
 
     # Calculate total buy costs
     total_buy_costs = sum(
@@ -166,12 +178,30 @@ async def apply_cash_constraint(
     if total_buy_costs <= available_budget:
         return sells + buys
 
-    # If budget is short, rotate out weakest holdings to fund high-priority buys.
-    deficit = total_buy_costs - available_budget
+    # Consume existing cash in opportunity order, then raise only enough for the
+    # next preferred buy. Lower-ranked target gaps are future demand, not today's
+    # funding requirement.
+    remaining_for_ranked_buys = available_budget
+    funded_prefix: list[TradeRecommendation] = []
+    deficit = 0.0
+    for buy in buys:
+        full_cost = buy.value_delta_eur + calculate_transaction_cost(buy.value_delta_eur, fixed_fee, pct_fee)
+        funded_prefix.append(buy)
+        if full_cost <= remaining_for_ranked_buys:
+            remaining_for_ranked_buys -= full_cost
+            continue
+        deficit = full_cost - remaining_for_ranked_buys
+        break
+
+    # If budget is short, rotate out weakest holdings to fund that selected demand.
     if deficit > 0:
-        buy_conviction_cap = max((conviction_by_symbol.get(b.symbol, 0.5) for b in buys), default=0.5)
+        reserve_shortfall = max(0.0, cash_reserve - current_cash - net_sell_proceeds)
+        buy_conviction_cap = max(
+            (conviction_by_symbol.get(b.symbol, 0.5) for b in funded_prefix),
+            default=0.5,
+        )
         funding_sells = await engine._generate_deficit_sells(
-            deficit + engine.BALANCE_BUFFER_EUR,
+            deficit + reserve_shortfall + engine.BALANCE_BUFFER_EUR,
             as_of_date=as_of_date,
             ideal=ideal,
             current=current,
@@ -183,6 +213,7 @@ async def apply_cash_constraint(
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
+            eligible_symbols=eligible_symbols,
             state=state,
         )
         if funding_sells:
@@ -209,26 +240,22 @@ async def apply_cash_constraint(
             new_sells = [s for s in funding_sells if s.symbol not in existing_sell_symbols]
             if new_sells:
                 sells.extend(new_sells)
-                recommendations = [
-                    r for r in recommendations if not (r.action == "sell" and r.symbol in existing_sell_symbols)
-                ]
-                recommendations = new_sells + recommendations
                 net_sell_proceeds = sum(
                     abs(r.value_delta_eur) - calculate_transaction_cost(abs(r.value_delta_eur), fixed_fee, pct_fee)
                     for r in sells
                 )
-                available_budget = current_cash + net_sell_proceeds
+                available_budget = max(0.0, current_cash + net_sell_proceeds - cash_reserve)
                 total_buy_costs = sum(
                     r.value_delta_eur + calculate_transaction_cost(r.value_delta_eur, fixed_fee, pct_fee) for r in buys
                 )
                 if total_buy_costs <= available_budget:
-                    return recommendations
+                    return sells + buys
 
     # Waterfall allocation: fully fund the highest-priority projected gap before
     # moving to the next one. Unreached buys are simply the tail of the ranked plan.
     final_buys: list[TradeRecommendation] = []
     remaining_budget = available_budget
-    for buy in sorted(buys, key=lambda r: (float(r.priority), float(r.value_delta_eur)), reverse=True):
+    for buy in buys:
         one_lot_eur = await _one_lot_value_eur(engine, buy, fx_rates)
         if one_lot_eur <= 0:
             continue
@@ -246,7 +273,11 @@ async def apply_cash_constraint(
         final_buys.append(replace(buy, value_delta_eur=actual_eur, quantity=qty))
         remaining_budget -= cost
 
-    final_buys.sort(key=lambda x: -x.priority)
+    final_buys.sort(key=buy_rank_key)
+    if not final_buys:
+        # Funding rotations exist only to support selected demand. Mandatory
+        # lifecycle/deficit sells supplied by the caller remain independent.
+        return base_sells
     return sells + final_buys
 
 
@@ -258,6 +289,7 @@ async def get_deficit_sells(
     current: dict[str, float] | None = None,
     total_value: float | None = None,
     planning_total_value: float | None = None,
+    eligible_symbols: set[str] | None = None,
     state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Generate sell recommendations if negative balances can't be covered."""
@@ -292,6 +324,7 @@ async def get_deficit_sells(
         total_value=total_value,
         planning_total_value=planning_total_value,
         reason_kind="cash_deficit",
+        eligible_symbols=eligible_symbols,
         state=state,
     )
 
@@ -311,6 +344,7 @@ async def generate_deficit_sells(
     preloaded_securities_map: dict[str, dict] | None = None,
     preloaded_symbol_scores: dict[str, float] | None = None,
     preloaded_symbol_prices: dict[str, float] | None = None,
+    eligible_symbols: set[str] | None = None,
     state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Generate sell recommendations to cover remaining deficit."""
@@ -338,6 +372,8 @@ async def generate_deficit_sells(
     conviction_bias = float(await _setting(engine, "strategy_funding_conviction_bias", 1.0))
     for pos in positions:
         symbol = pos["symbol"]
+        if eligible_symbols is not None and symbol not in eligible_symbols:
+            continue
         qty = pos.get("quantity", 0)
         if qty <= 0:
             continue

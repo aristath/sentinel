@@ -4,17 +4,23 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-import json
 import logging
 import os
 import tarfile
 import tempfile
+import time
+from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+from sentinel.markets import get_open_market_symbols
+from sentinel.planner.models import TradeRecommendation
+from sentinel.planner.rebalance_rules import buy_rank_key
 
 logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
+SUBMITTED_TRADE_STATE_KEY = "submitted_trade"
 
 
 # -----------------------------------------------------------------------------
@@ -514,7 +520,7 @@ async def trading_check_markets(broker, db, planner) -> None:
     logger.info(f"Open markets: {', '.join(open_markets.keys())}")
 
     # Get securities whose market is open
-    open_securities = await _get_open_market_symbols(broker, db)
+    open_securities = await get_open_market_symbols(broker, db)
 
     if not open_securities:
         logger.info("No securities with open markets")
@@ -523,7 +529,7 @@ async def trading_check_markets(broker, db, planner) -> None:
     logger.info(f"Securities with open markets: {', '.join(open_securities)}")
 
     # Check for pending trades
-    recommendations = await planner.get_recommendations()
+    recommendations = await planner.get_recommendations(eligible_symbols=open_securities)
     actionable = [r for r in recommendations if r.symbol in open_securities]
 
     if not actionable:
@@ -535,11 +541,12 @@ async def trading_check_markets(broker, db, planner) -> None:
         logger.info(f"Ready to {rec.action.upper()}: {rec.quantity} x {rec.symbol} @ {rec.price:.2f} {rec.currency}")
 
 
-async def trading_execute(broker, db, planner) -> None:
-    """Execute pending trade recommendations.
+async def trading_execute(broker, db, planner, portfolio) -> None:
+    """Replan from fresh broker state and submit at most one transaction.
 
     Only executes in LIVE trading mode. In research mode, logs what would happen.
-    Checks market status before executing and only trades securities with open markets.
+    Each invocation is independent: the previous plan is discarded and the next
+    order is selected from current broker state and currently open markets.
     """
     from sentinel.settings import Settings
 
@@ -551,32 +558,32 @@ async def trading_execute(broker, db, planner) -> None:
     settings = Settings()
     trading_mode = await settings.get("trading_mode", "research")
 
-    if trading_mode != "live":
-        logger.info(f"Trading mode is '{trading_mode}', skipping actual execution")
-        # Still log what would happen
-        await _log_pending_trades(broker, db, planner)
+    is_live = trading_mode == "live"
+
+    # Plans are disposable. Refresh the account and discard every cached input
+    # before deciding what the next configured execution window should do.
+    await sync_portfolio(portfolio)
+    await sync_trades(db, broker)
+    if not await _reconcile_submitted_trade(db):
+        logger.info("Previous submitted trade is awaiting broker confirmation")
         return
 
-    # Skip the entire cycle if any orders are still pending at the broker.
-    # This prevents submitting duplicate orders for recommendations whose
-    # previous order has been placed but not yet filled.
-    if await broker.has_pending_orders():
+    if is_live and await broker.has_pending_orders():
         logger.info("Broker has pending orders, skipping trade execution")
         return
 
-    # Get market status to find open markets
-    open_symbols = await _get_open_market_symbols(broker, db)
+    await db.cache_clear("quotes:")
+    await db.invalidate_planner_cache()
+
+    open_symbols = await get_open_market_symbols(broker, db)
     if not open_symbols:
         logger.info("No securities with open markets, skipping execution")
         return
 
-    # Sync trades from broker to ensure cooldown checks have the latest trade history
-    # This is critical to prevent violating cooldown periods when trading_execute runs
-    # before sync_trades in the same cycle
-    await sync_trades(db, broker)
-
-    # Get recommendations
-    recommendations = await planner.get_recommendations()
+    recommendations = await planner.get_recommendations(
+        eligible_symbols=open_symbols,
+        track_fallback_state=is_live,
+    )
     if not recommendations:
         logger.info("No trade recommendations")
         return
@@ -587,36 +594,27 @@ async def trading_execute(broker, db, planner) -> None:
         logger.info("No actionable trades for open markets")
         return
 
-    # Sort by priority (highest first) and execute sells before buys
-    sells = sorted([r for r in actionable if r.action == "sell"], key=lambda x: -x.priority)
-    buys = sorted([r for r in actionable if r.action == "buy"], key=lambda x: -x.priority)
+    next_trade = min(actionable, key=_execution_order_key)
+    if not is_live:
+        logger.info(
+            f"Trading mode is '{trading_mode}', would {next_trade.action.upper()}: "
+            f"{next_trade.quantity} x {next_trade.symbol} @ {next_trade.price:.2f} {next_trade.currency}"
+        )
+        return
 
-    executed = []
-    failed = []
+    order_id = await _execute_trade(broker, next_trade)
+    if not order_id:
+        return
 
-    # Execute sells first (to free up cash for buys)
-    for rec in sells:
-        success = await _execute_trade(broker, rec)
-        if success:
-            executed.append(rec)
-            await _update_strategy_state_after_execution(db, rec)
-        else:
-            failed.append(rec)
-
-    # Then execute buys
-    for rec in buys:
-        success = await _execute_trade(broker, rec)
-        if success:
-            executed.append(rec)
-            await _update_strategy_state_after_execution(db, rec)
-        else:
-            failed.append(rec)
-
-    # Log summary
-    if executed:
-        logger.info(f"Executed {len(executed)} trades successfully")
-    if failed:
-        logger.warning(f"Failed to execute {len(failed)} trades")
+    await db.set_planner_state(
+        SUBMITTED_TRADE_STATE_KEY,
+        {
+            "order_id": str(order_id),
+            "submitted_at": int(time.time()),
+            "recommendation": asdict(next_trade),
+        },
+    )
+    await db.invalidate_planner_cache()
 
 
 async def trading_rebalance(planner) -> None:
@@ -807,8 +805,18 @@ async def backup_r2(db) -> None:
 # -----------------------------------------------------------------------------
 
 
-async def _execute_trade(broker, rec) -> bool:
-    """Execute a single trade recommendation. Returns True if successful."""
+def _execution_order_key(rec) -> tuple:
+    """Use the planner's explicit rank, with deterministic legacy fallbacks."""
+    rank = getattr(rec, "execution_rank", None)
+    if isinstance(rank, int | float):
+        return (0, float(rank), str(rec.symbol))
+    if rec.action == "sell":
+        return (1, 0, -float(rec.priority), str(rec.symbol))
+    return (1, 1, *buy_rank_key(rec))
+
+
+async def _execute_trade(broker, rec) -> str | None:
+    """Submit one trade recommendation and return its broker order ID."""
     from sentinel.security import Security
 
     try:
@@ -824,23 +832,82 @@ async def _execute_trade(broker, rec) -> bool:
 
         if order_id:
             logger.info(
-                f"Executed {action_str}: {rec.quantity} x {rec.symbol} "
+                f"Submitted {action_str}: {rec.quantity} x {rec.symbol} "
                 f"@ {rec.price:.2f} {rec.currency} (order: {order_id})"
             )
-            return True
+            return str(order_id)
         else:
             logger.error(f"Failed to {action_str} {rec.symbol}: no order ID returned")
-            return False
+            return None
 
     except Exception as e:
         logger.error(f"Failed to execute {rec.action} {rec.symbol}: {e}")
+        return None
+
+
+async def _reconcile_submitted_trade(db) -> bool:
+    """Advance strategy state only after a submitted order appears in broker trades."""
+    payload = await db.get_planner_state(SUBMITTED_TRADE_STATE_KEY)
+    if payload is None:
+        return True
+    if not isinstance(payload, dict):
+        logger.error("Discarding malformed submitted trade state")
+        await db.delete_planner_state(SUBMITTED_TRADE_STATE_KEY)
+        return True
+
+    order_id = str(payload.get("order_id", ""))
+    rec_data = payload.get("recommendation")
+    submitted_at = int(payload.get("submitted_at", 0) or 0)
+    if not order_id or not isinstance(rec_data, dict):
+        logger.error("Discarding incomplete submitted trade state")
+        await db.delete_planner_state(SUBMITTED_TRADE_STATE_KEY)
+        return True
+
+    trades = await db.get_trades(symbol=rec_data.get("symbol"), limit=100)
+    matching = [trade for trade in trades if str((trade.get("raw_data") or {}).get("order_id", "")) == order_id]
+    if matching:
+        rec = TradeRecommendation(**rec_data)
+        executed_at = max(int(trade.get("executed_at", 0) or 0) for trade in matching)
+        filled_quantity = sum(float(trade.get("quantity", 0) or 0) for trade in matching)
+        weighted_price = (
+            sum(float(trade.get("price", 0) or 0) * float(trade.get("quantity", 0) or 0) for trade in matching)
+            / filled_quantity
+            if filled_quantity > 0
+            else rec.price
+        )
+        await _update_strategy_state_after_execution(
+            db,
+            rec,
+            executed_at=executed_at or None,
+            executed_price=weighted_price,
+        )
+        await db.delete_planner_state(SUBMITTED_TRADE_STATE_KEY)
+        logger.info("Confirmed broker fill for order %s", order_id)
+        return True
+
+    schedule = await db.get_job_schedule("trading:execute")
+    interval_minutes = 60
+    if isinstance(schedule, dict):
+        interval_minutes = int(
+            schedule.get("interval_market_open_minutes") or schedule.get("interval_minutes") or interval_minutes
+        )
+    grace_seconds = max(60, interval_minutes * 2 * 60)
+    if submitted_at > 0 and int(time.time()) - submitted_at < grace_seconds:
         return False
 
+    logger.warning("Order %s was not found in broker trade history; releasing stale submission state", order_id)
+    await db.delete_planner_state(SUBMITTED_TRADE_STATE_KEY)
+    return True
 
-async def _update_strategy_state_after_execution(db, rec) -> None:
+
+async def _update_strategy_state_after_execution(
+    db,
+    rec,
+    *,
+    executed_at: int | None = None,
+    executed_price: float | None = None,
+) -> None:
     """Persist deterministic strategy lifecycle state after a successful trade."""
-    import time
-
     getter = getattr(db, "get_strategy_state", None)
     upserter = getattr(db, "upsert_strategy_state", None)
     if not callable(getter) or not callable(upserter):
@@ -850,7 +917,7 @@ async def _update_strategy_state_after_execution(db, rec) -> None:
     if inspect.isawaitable(current_value):
         current_value = await current_value
     current = current_value if isinstance(current_value, dict) else {}
-    now = int(time.time())
+    now = int(executed_at if executed_at is not None else time.time())
     updates = {
         "updated_at": now,
         "sleeve": rec.sleeve or current.get("sleeve", "core"),
@@ -866,10 +933,15 @@ async def _update_strategy_state_after_execution(db, rec) -> None:
         updates.update(
             {
                 "tranche_stage": tranche_stage,
-                "last_entry_price": rec.price,
+                "last_entry_price": executed_price if executed_price is not None else rec.price,
                 "last_entry_ts": now,
             }
         )
+        delete_planner_state = getattr(db, "delete_planner_state", None)
+        if callable(delete_planner_state):
+            result = delete_planner_state("fallback_wait_started_at")
+            if inspect.isawaitable(result):
+                await result
     else:
         scaleout_stage = int(current.get("scaleout_stage", 0) or 0)
         if rec.reason_code == "scaleout_10":
@@ -886,52 +958,6 @@ async def _update_strategy_state_after_execution(db, rec) -> None:
     upsert_result = upserter(rec.symbol, **updates)
     if inspect.isawaitable(upsert_result):
         await upsert_result
-
-
-async def _get_open_market_symbols(broker, db) -> set[str]:
-    """Get symbols whose markets are currently open."""
-    market_data = await broker.get_market_status("*")
-    if not market_data:
-        return set()
-
-    markets = market_data.get("m", [])
-    open_market_ids = {str(m.get("i")) for m in markets if m.get("s") == "OPEN"}
-
-    if not open_market_ids:
-        return set()
-
-    securities = await db.get_all_securities(active_only=True)
-    open_symbols = set()
-
-    for sec in securities:
-        data = sec.get("data")
-        if data:
-            try:
-                sec_data = json.loads(data) if isinstance(data, str) else data
-                market_id = str(sec_data.get("mrkt", {}).get("mkt_id"))
-                if market_id in open_market_ids:
-                    open_symbols.add(sec["symbol"])
-            except (json.JSONDecodeError, KeyError, TypeError, ValueError):
-                pass
-
-    return open_symbols
-
-
-async def _log_pending_trades(broker, db, planner) -> None:
-    """Log what trades would be executed (for research mode)."""
-    recommendations = await planner.get_recommendations()
-    if not recommendations:
-        logger.info("No pending trade recommendations")
-        return
-
-    open_symbols = await _get_open_market_symbols(broker, db)
-
-    for rec in recommendations:
-        market_status = "OPEN" if rec.symbol in open_symbols else "CLOSED"
-        logger.info(
-            f"[RESEARCH] Would {rec.action.upper()}: {rec.quantity} x {rec.symbol} "
-            f"@ {rec.price:.2f} {rec.currency} (market: {market_status})"
-        )
 
 
 # -----------------------------------------------------------------------------

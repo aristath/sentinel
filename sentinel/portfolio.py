@@ -22,18 +22,20 @@ from sentinel.utils.positions import PositionCalculator
 class Portfolio:
     """Represents the entire portfolio with all operations."""
 
-    def __init__(self, db=None, broker=None):
+    def __init__(self, db=None, broker=None, settings=None, currency=None):
         """
         Initialize portfolio with optional dependency injection.
 
         Args:
             db: Database instance (uses singleton if None)
             broker: Broker instance (uses singleton if None)
+            settings: Settings instance (uses singleton if None)
+            currency: Currency instance (uses singleton if None)
         """
         self._db = db or Database()
         self._broker = broker or Broker()
-        self._settings = Settings()
-        self._currency = Currency()
+        self._settings = settings or Settings()
+        self._currency = currency or Currency()
         self._cash: dict[str, float] = {}
 
     async def sync(self) -> "Portfolio":
