@@ -60,6 +60,7 @@ DEFAULTS = {
     "strategy_lot_standard_max_pct": 0.08,
     "strategy_lot_coarse_max_pct": 0.30,
     "strategy_coarse_max_new_lots_per_cycle": 1,
+    "cooldown_enabled": True,
     "strategy_opportunity_cooloff_days": 7,
     "strategy_core_cooloff_days": 21,
     "strategy_same_side_cooloff_days": 15,

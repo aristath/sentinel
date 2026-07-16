@@ -131,6 +131,7 @@ class RebalanceEngine:
             "strategy_core_timing_min_dip_score": DEFAULTS["strategy_core_timing_min_dip_score"],
             "strategy_fallback_wait_days": DEFAULTS["strategy_fallback_wait_days"],
             "strategy_coarse_max_new_lots_per_cycle": DEFAULTS["strategy_coarse_max_new_lots_per_cycle"],
+            "cooldown_enabled": DEFAULTS["cooldown_enabled"],
         }
         keys = list(defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, defaults[k]) for k in keys])
@@ -814,13 +815,17 @@ class RebalanceEngine:
             is_tranche_raising_buy = desired_stage > current_stage
 
         # Check cool-off period
-        if sleeve == "opportunity":
-            cooloff_days = int(settings_ctx["strategy_opportunity_cooloff_days"])
+        if bool(settings_ctx.get("cooldown_enabled", True)):
+            if sleeve == "opportunity":
+                cooloff_days = int(settings_ctx["strategy_opportunity_cooloff_days"])
+            else:
+                cooloff_days = int(settings_ctx["strategy_core_cooloff_days"])
+            same_side_cooloff_days = int(settings_ctx["strategy_same_side_cooloff_days"])
+            if is_tranche_raising_buy:
+                # Laddering a deeper tranche right after a shallower one is intended.
+                same_side_cooloff_days = 0
         else:
-            cooloff_days = int(settings_ctx["strategy_core_cooloff_days"])
-        same_side_cooloff_days = int(settings_ctx["strategy_same_side_cooloff_days"])
-        if is_tranche_raising_buy:
-            # Laddering a deeper tranche right after a shallower one is intended.
+            cooloff_days = 0
             same_side_cooloff_days = 0
         action_for_cooloff = "sell" if forced_sell_qty > 0 else ("buy" if delta > 0 else "sell")
         is_blocked, _ = await self._check_cooloff_violation(

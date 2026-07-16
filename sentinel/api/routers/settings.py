@@ -45,6 +45,7 @@ PLANNER_SETTING_KEYS = {
     "strategy_lot_standard_max_pct",
     "strategy_lot_coarse_max_pct",
     "strategy_coarse_max_new_lots_per_cycle",
+    "cooldown_enabled",
     "strategy_opportunity_cooloff_days",
     "strategy_core_cooloff_days",
     "strategy_same_side_cooloff_days",

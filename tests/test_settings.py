@@ -98,6 +98,7 @@ class TestSettingsDefaults:
             "strategy_lot_standard_max_pct",
             "strategy_lot_coarse_max_pct",
             "strategy_coarse_max_new_lots_per_cycle",
+            "cooldown_enabled",
             "strategy_same_side_cooloff_days",
             "strategy_core_timing_min_score",
             "strategy_core_timing_min_dip_score",
@@ -110,6 +111,10 @@ class TestSettingsDefaults:
         ]
         for key in strategy_keys:
             assert key in DEFAULTS, f"Missing strategy default: {key}"
+
+    def test_defaults_cooldown_enabled(self):
+        """Cooldown checks should be enabled unless explicitly disabled."""
+        assert DEFAULTS["cooldown_enabled"] is True
 
     def test_obsolete_plan_model_settings_are_marked_removed(self):
         """Old blended targets and simulated forecast controls must not return."""

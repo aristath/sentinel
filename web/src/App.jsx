@@ -54,6 +54,15 @@ function App() {
     },
   });
 
+  const cooldownMutation = useMutation({
+    mutationFn: (enabled) => updateSetting('cooldown_enabled', enabled),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['settings'] });
+      queryClient.invalidateQueries({ queryKey: ['recommendations'] });
+      queryClient.invalidateQueries({ queryKey: ['unified'] });
+    },
+  });
+
   const ledMutation = useMutation({
     mutationFn: setLedEnabled,
     onSuccess: () => {
@@ -64,6 +73,7 @@ function App() {
   const runningJobs = schedulerStatus?.pending?.length || 0;
   const isRefreshing = refreshMutation.isPending || runningJobs > 0;
   const isLive = settings?.trading_mode === 'live';
+  const cooldownEnabled = settings?.cooldown_enabled !== false && settings?.cooldown_enabled !== 0;
   const ledEnabled = ledStatus?.enabled || false;
   const ledRunning = ledStatus?.running || false;
 
@@ -97,6 +107,20 @@ function App() {
                   size="sm"
                   disabled={tradingModeMutation.isPending}
                   className="app__trading-mode-switch"
+                />
+              </Group>
+
+              <Group gap="xs" className="app__cooldown-mode">
+                <Text size="sm" c={cooldownEnabled ? 'dimmed' : 'orange'}>
+                  Cooldown
+                </Text>
+                <Switch
+                  checked={cooldownEnabled}
+                  onChange={(e) => cooldownMutation.mutate(e.currentTarget.checked)}
+                  color="blue"
+                  size="sm"
+                  disabled={cooldownMutation.isPending}
+                  className="app__cooldown-switch"
                 />
               </Group>
 

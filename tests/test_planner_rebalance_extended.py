@@ -562,6 +562,59 @@ class TestBuildRecommendationPaths:
         assert rec is None
 
     @pytest.mark.asyncio
+    async def test_cooldown_disabled_ignores_recent_trade(self, _make_engine, _settings_ctx):
+        engine = _make_engine()
+        recent_buy = datetime.now(timezone.utc).timestamp() - 2 * 86400
+        base_kwargs = dict(
+            symbol="COOL",
+            ideal={"COOL": 0.1},
+            current={"COOL": 0.0},
+            total_value=10000.0,
+            security_data={
+                "COOL": {
+                    "price": 100.0,
+                    "currency": "EUR",
+                    "fx_rate": 1.0,
+                    "lot_size": 1,
+                    "current_qty": 0,
+                    "avg_cost": 0,
+                    "allow_buy": 1,
+                    "allow_sell": 1,
+                    "trade_blocked": False,
+                    "lot_class": "standard",
+                    "ticket_pct": 0.0,
+                    "min_ticket_eur": 0,
+                    "state": {},
+                }
+            },
+            contrarian_scores={"COOL": 0.5},
+            signal_data={
+                "COOL": {
+                    "sleeve": "core",
+                    "opp_score": 0.5,
+                    "dip_score": 0.5,
+                    "cycle_turn": 0,
+                }
+            },
+            min_trade_value=100.0,
+            latest_trade={"side": "BUY", "executed_at": recent_buy},
+        )
+
+        blocked = await engine._build_recommendation(
+            **base_kwargs,
+            settings_ctx={**_settings_ctx, "cooldown_enabled": True},
+        )
+        allowed = await engine._build_recommendation(
+            **base_kwargs,
+            settings_ctx={**_settings_ctx, "cooldown_enabled": False},
+        )
+
+        assert blocked is None
+        assert allowed is not None
+        assert allowed.symbol == "COOL"
+        assert allowed.action == "buy"
+
+    @pytest.mark.asyncio
     async def test_quantity_below_lot_size_returns_none(self, _make_engine, _settings_ctx):
         engine = _make_engine()
         rec = await engine._build_recommendation(

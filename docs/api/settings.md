@@ -41,6 +41,7 @@ Returns all application settings, merging stored values with defaults. Runtime s
   "strategy_lot_standard_max_pct": 0.08,
   "strategy_lot_coarse_max_pct": 0.3,
   "strategy_coarse_max_new_lots_per_cycle": 1,
+  "cooldown_enabled": true,
   "strategy_opportunity_cooloff_days": 7,
   "strategy_core_cooloff_days": 21,
   "strategy_same_side_cooloff_days": 15,
@@ -86,6 +87,7 @@ Returns all application settings, merging stored values with defaults. Runtime s
 | `led_bridge_health` | Latest bridge health snapshot (same data as `GET /api/led/bridge/health`) |
 | `target_cash_pct` | Long-term cash allocation target; the remaining target weight is allocated to securities |
 | `min_cash_buffer` | Cash reserve ratio kept out of buy budgets during trade sizing |
+| `cooldown_enabled` | Master switch for planner cool-off checks. When false, recent-trade cooldown periods are ignored. |
 
 ---
 

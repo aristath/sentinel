@@ -80,6 +80,7 @@ async def test_set_setting_rejects_removed_strategy_knobs(deps):
         ("strategy_max_funding_turnover_pct", 0.18),
         ("strategy_funding_conviction_bias", 1.2),
         ("strategy_fallback_wait_days", 45),
+        ("cooldown_enabled", False),
         ("user_multiplier_decay_factor", 0.85),
         ("min_cash_buffer", 0.01),
         ("target_cash_pct", 5),

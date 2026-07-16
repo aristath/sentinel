@@ -502,7 +502,7 @@ async def generate_deficit_sells(
     # it's the more conservative of the configured windows, and over-blocking only
     # ever means "trade less", never a bad trade. The same-side window guards
     # re-selling a name we recently sold, matching the main-path policy.
-    if reason_kind == "funding_rotation":
+    if reason_kind == "funding_rotation" and bool(await _setting(engine, "cooldown_enabled", True)):
         cooloff_days = int(await _setting(engine, "strategy_core_cooloff_days", 21))
         same_side_cooloff_days = int(await _setting(engine, "strategy_same_side_cooloff_days", 15))
         if position_data and (cooloff_days > 0 or same_side_cooloff_days > 0):
