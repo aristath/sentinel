@@ -6,7 +6,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sentinel.snapshot_service import (
+    _apply_cash_flow,
     _apply_stock_position_trade,
+    _apply_trade_cash,
     _format_progress,
     _midnight_utc_ts,
     _snapshot_write_plan,
@@ -56,3 +58,66 @@ def test_apply_stock_position_trade_uses_ledger_math_for_reordered_same_timestam
     _apply_stock_position_trade(positions, "AIR.EU", "BUY", 2)
 
     assert "AIR.EU" not in positions
+
+
+def test_apply_trade_cash_handles_fx_pair_native_balances():
+    cash: dict[str, float] = {}
+
+    _apply_trade_cash(
+        cash,
+        {
+            "symbol": "HKD/EUR",
+            "side": "BUY",
+            "quantity": 3510,
+            "price": 0.1198,
+            "raw_data": {"summ": "420.50"},
+        },
+        security_currency="EUR",
+    )
+
+    assert cash == {"HKD": 3510.0, "EUR": -420.5}
+
+
+def test_apply_trade_cash_uses_native_trade_sum_and_commission():
+    cash: dict[str, float] = {}
+
+    _apply_trade_cash(
+        cash,
+        {
+            "symbol": "AETF.GR",
+            "side": "BUY",
+            "quantity": 4,
+            "price": 39.855,
+            "commission": 2.08,
+            "commission_currency": "EUR",
+            "raw_data": {"summ": "159.42", "curr_c": "EUR"},
+        },
+        security_currency="EUR",
+    )
+
+    assert cash == {"EUR": -161.5}
+
+
+def test_apply_cash_flow_only_counts_trading_side_of_block_transfers():
+    cash: dict[str, float] = {}
+
+    _apply_cash_flow(
+        cash,
+        {
+            "type_id": "block",
+            "amount": 774.93,
+            "currency": "EUR",
+            "raw_data": {"account": "Blocked for withdrawal"},
+        },
+    )
+    _apply_cash_flow(
+        cash,
+        {
+            "type_id": "block",
+            "amount": -774.93,
+            "currency": "EUR",
+            "raw_data": {"account": "trading"},
+        },
+    )
+
+    assert cash == {"EUR": -774.93}

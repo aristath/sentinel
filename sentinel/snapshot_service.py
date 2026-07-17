@@ -7,10 +7,13 @@ Usage:
 """
 
 import asyncio
+import json
 import logging
 import time
+from collections.abc import Mapping
 from datetime import date as date_type
 from datetime import datetime, timedelta, timezone
+from typing import Any
 
 from sentinel.database import Database
 from sentinel.price_validator import PriceValidator
@@ -43,6 +46,26 @@ def _midnight_utc_ts(iso_date: str) -> int:
     return int(dt.timestamp())
 
 
+def _as_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _raw_data(row: Mapping[str, Any]) -> dict[str, Any]:
+    raw = row.get("raw_data")
+    if isinstance(raw, dict):
+        return raw
+    if isinstance(raw, str) and raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 def _snapshot_write_plan(
     all_dates: list[str],
     all_date_timestamps: list[int],
@@ -70,6 +93,73 @@ def _apply_stock_position_trade(positions: dict[str, float], symbol: str, side: 
         positions.pop(symbol, None)
     else:
         positions[symbol] = next_quantity
+
+
+def _apply_cash_balance(cash_balances: dict[str, float], currency: str, amount: float) -> None:
+    if not currency or abs(amount) < POSITION_EPSILON:
+        return
+    next_amount = cash_balances.get(currency, 0.0) + amount
+    if abs(next_amount) < POSITION_EPSILON:
+        cash_balances.pop(currency, None)
+    else:
+        cash_balances[currency] = next_amount
+
+
+def _cashflow_affects_trading_cash(cash_flow: Mapping[str, Any]) -> bool:
+    type_id = cash_flow.get("type_id")
+    if type_id not in {"block", "unblock", "block_commission", "unblock_commission"}:
+        return True
+    return _raw_data(cash_flow).get("account") == "trading"
+
+
+def _apply_cash_flow(cash_balances: dict[str, float], cash_flow: Mapping[str, Any]) -> None:
+    if not _cashflow_affects_trading_cash(cash_flow):
+        return
+    _apply_cash_balance(
+        cash_balances,
+        str(cash_flow.get("currency") or "EUR"),
+        _as_float(cash_flow.get("amount")),
+    )
+
+
+def _trade_cash_amount(trade: Mapping[str, Any]) -> float:
+    raw = _raw_data(trade)
+    amount = _as_float(raw.get("summ"), default=float("nan"))
+    if amount == amount:
+        return amount
+    amount = _as_float(raw.get("v"), default=float("nan"))
+    if amount == amount:
+        return amount
+    return _as_float(trade.get("quantity")) * _as_float(trade.get("price"))
+
+
+def _apply_trade_cash(
+    cash_balances: dict[str, float],
+    trade: Mapping[str, Any],
+    *,
+    security_currency: str,
+) -> None:
+    symbol = str(trade.get("symbol") or "")
+    side = str(trade.get("side") or "").upper()
+    quantity = _as_float(trade.get("quantity"))
+    amount = _trade_cash_amount(trade)
+
+    if "/" in symbol:
+        base, quote = symbol.split("/", 1)
+        if side == "BUY":
+            _apply_cash_balance(cash_balances, base, quantity)
+            _apply_cash_balance(cash_balances, quote, -amount)
+        elif side == "SELL":
+            _apply_cash_balance(cash_balances, base, -quantity)
+            _apply_cash_balance(cash_balances, quote, amount)
+    else:
+        raw = _raw_data(trade)
+        currency = str(raw.get("curr_c") or security_currency or "EUR")
+        _apply_cash_balance(cash_balances, currency, -amount if side == "BUY" else amount)
+
+    commission = _as_float(trade.get("commission"))
+    if commission:
+        _apply_cash_balance(cash_balances, str(trade.get("commission_currency") or "EUR"), -commission)
 
 
 class SnapshotService:
@@ -236,10 +326,28 @@ class SnapshotService:
                     else:
                         sec_currency_map[symbol] = "EUR"
 
+            live_cash_balances = await self._current_broker_cash()
+
             # Prefetch historical FX rates only for dates we will write.
             currencies_needed = list(set(sec_currency_map.values()))
             cf_currencies = list(set(cf["currency"] for cf in cash_flows))
-            currencies_needed = list(set(currencies_needed + cf_currencies))
+            trade_currencies = []
+            for trade in trades:
+                symbol = trade.get("symbol") or ""
+                if "/" in symbol:
+                    base, quote = symbol.split("/", 1)
+                    trade_currencies.extend([base, quote])
+                else:
+                    raw = _raw_data(trade)
+                    trade_currencies.append(raw.get("curr_c") or sec_currency_map.get(symbol, "EUR"))
+                if trade.get("commission_currency"):
+                    trade_currencies.append(trade["commission_currency"])
+            live_cash_currencies = list((live_cash_balances or {}).keys())
+            currencies_needed = [
+                str(currency)
+                for currency in set(currencies_needed + cf_currencies + trade_currencies + live_cash_currencies)
+                if currency
+            ]
             logger.info(f"Prefetching FX rates for {len(write_dates)} dates, currencies: {currencies_needed}")
             fx_start = time.monotonic()
             await self._currency.prefetch_rates_for_dates(currencies_needed, write_dates)
@@ -247,7 +355,7 @@ class SnapshotService:
 
             # Running state
             positions: dict[str, float] = {}  # symbol -> quantity
-            running_cash_eur = 0.0
+            cash_balances: dict[str, float] = {}
 
             last_trade_idx = 0
             last_cf_idx = 0
@@ -268,14 +376,7 @@ class SnapshotService:
                     if cf["date"] > date_str:
                         break
 
-                    amount_local = cf["amount"]
-                    curr = cf["currency"]
-                    type_id = cf["type_id"]
-
-                    amount_eur = await self._currency.to_eur_for_date(amount_local, curr, cf["date"])
-
-                    if type_id not in ("block", "unblock"):
-                        running_cash_eur += amount_eur
+                    _apply_cash_flow(cash_balances, cf)
 
                     last_cf_idx += 1
 
@@ -288,23 +389,15 @@ class SnapshotService:
 
                     symbol = trade["symbol"]
                     qty = trade["quantity"]
-                    price_local = trade["price"]
-                    trade_value_local = qty * price_local
                     sec_curr = sec_currency_map.get(symbol, "EUR")
 
-                    comm_local = trade.get("commission", 0) or 0
-                    comm_curr = trade.get("commission_currency", "EUR")
-                    comm_eur = await self._currency.to_eur_for_date(comm_local, comm_curr, trade_date)
-
-                    trade_value_eur = await self._currency.to_eur_for_date(trade_value_local, sec_curr, trade_date)
+                    _apply_trade_cash(cash_balances, trade, security_currency=sec_curr)
 
                     if trade["side"] == "BUY":
                         if is_stock_symbol(symbol):
-                            running_cash_eur -= trade_value_eur + comm_eur
                             _apply_stock_position_trade(positions, symbol, trade["side"], qty)
                     else:  # SELL
                         if is_stock_symbol(symbol):
-                            running_cash_eur += trade_value_eur - comm_eur
                             _apply_stock_position_trade(positions, symbol, trade["side"], qty)
 
                     last_trade_idx += 1
@@ -335,10 +428,23 @@ class SnapshotService:
                             "value_eur": round(value_eur, 2),
                         }
 
+                snapshot_cash_balances = cash_balances
+                if live_cash_balances and date_str == date_type.today().isoformat():
+                    snapshot_cash_balances = live_cash_balances
+
+                cash_eur = 0.0
+                cash_data = {}
+                for currency, amount in snapshot_cash_balances.items():
+                    if abs(amount) < POSITION_EPSILON:
+                        continue
+                    cash_data[currency] = round(amount, 2)
+                    cash_eur += await self._currency.to_eur_for_date(amount, currency, date_str)
+
                 # 4. Save snapshot (only missing date)
                 snapshot_data = {
                     "positions": positions_data,
-                    "cash_eur": round(running_cash_eur, 2),
+                    "cash": cash_data,
+                    "cash_eur": round(cash_eur, 2),
                 }
                 await self._db.upsert_portfolio_snapshot(date_ts, snapshot_data)
 
@@ -347,3 +453,18 @@ class SnapshotService:
                 time.monotonic() - start_ts,
                 len(write_timestamps),
             )
+
+    async def _current_broker_cash(self) -> dict[str, float] | None:
+        from sentinel.broker import Broker
+
+        try:
+            broker = Broker()
+            if not await broker.connect():
+                return None
+            portfolio = await broker.get_portfolio()
+            cash = portfolio.get("cash") or {}
+        except Exception as e:
+            logger.info("Live broker cash unavailable for snapshot reconciliation: %s", e)
+            return None
+
+        return {str(currency): _as_float(amount) for currency, amount in cash.items()}
