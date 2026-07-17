@@ -513,6 +513,79 @@ class TestBrokerGetTradesHistory:
             assert trades[0]["symbol"] == "AAPL.US"
 
 
+class TestBrokerGetCashFlows:
+    """Tests for broker.get_cash_flows method."""
+
+    @pytest.mark.asyncio
+    async def test_get_cash_flows_includes_non_trade_commissions(self):
+        from sentinel.broker import Broker
+
+        broker = Broker()
+
+        def get_broker_report(start, end, data_block_type):
+            if data_block_type == "in_outs":
+                return {
+                    "report": {
+                        "detailed": [
+                            {
+                                "date": "2026-07-17",
+                                "type_id": "card",
+                                "amount": 100,
+                                "currency": "EUR",
+                                "comment": "Deposit",
+                            }
+                        ]
+                    }
+                }
+            if data_block_type == "commissions":
+                return {
+                    "report": {
+                        "commissions": [
+                            {
+                                "datetime": "2026-07-17 09:00:00",
+                                "type": "For trade:  123",
+                                "sum": "2.00",
+                                "currency": "EUR",
+                            },
+                            {
+                                "datetime": "2026-07-17 10:00:00",
+                                "type": "Other fees",
+                                "sum": "3.50",
+                                "currency": "EUR",
+                            },
+                        ]
+                    }
+                }
+            raise AssertionError(data_block_type)
+
+        with patch.object(broker, "_api") as mock_api:
+            mock_api.get_broker_report = MagicMock(side_effect=get_broker_report)
+            broker._api = mock_api
+
+            cash_flows = await broker.get_cash_flows(start_date="2026-07-01", end_date="2026-07-17")
+
+        assert cash_flows == [
+            {
+                "date": "2026-07-17",
+                "type_id": "card",
+                "amount": 100,
+                "currency": "EUR",
+                "comment": "Deposit",
+            },
+            {
+                "datetime": "2026-07-17 10:00:00",
+                "type": "Other fees",
+                "sum": "3.50",
+                "currency": "EUR",
+                "date": "2026-07-17",
+                "type_id": "commission",
+                "amount": -3.5,
+                "comment": "Other fees",
+                "source": "broker_report.commissions",
+            },
+        ]
+
+
 class TestBrokerHasPendingOrders:
     """Tests for broker.has_pending_orders method."""
 

@@ -12,7 +12,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 from sentinel.database import Database
 from sentinel.settings import Settings
@@ -25,6 +25,58 @@ logger = logging.getLogger(__name__)
 # window length and try once more — but do not escalate further: the daily
 # sync cycle will pick up anything still missing on the next run.
 RATE_LIMIT_BACKOFF_S = 60
+
+
+def _as_float(value: Any, default: float = 0.0) -> float:
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _broker_report_rows(response: Any, block_name: str) -> list[dict]:
+    if isinstance(response, list):
+        return [row for row in response if isinstance(row, dict)]
+    if not isinstance(response, dict):
+        return []
+
+    report = response.get("report", response)
+    if isinstance(report, list):
+        return [row for row in report if isinstance(row, dict)]
+    if not isinstance(report, dict):
+        return []
+
+    for key in ("detailed", block_name, f"{block_name}_json"):
+        rows = report.get(key)
+        if isinstance(rows, list):
+            return [row for row in rows if isinstance(row, dict)]
+    return []
+
+
+def _normalize_non_trade_commission(row: dict) -> dict | None:
+    commission_type = str(row.get("type") or "")
+    if commission_type.startswith("For trade:"):
+        return None
+
+    amount = _as_float(row.get("sum"))
+    if amount == 0:
+        return None
+
+    raw_date = str(row.get("datetime") or row.get("date") or "")
+    date = raw_date[:10]
+    if not date:
+        return None
+
+    currency = str(row.get("currency") or "EUR")
+    return {
+        **row,
+        "date": date,
+        "type_id": "commission",
+        "amount": -amount,
+        "currency": currency,
+        "comment": commission_type,
+        "source": "broker_report.commissions",
+    }
 
 
 @singleton
@@ -763,14 +815,14 @@ class Broker:
         end_date: str | None = None,
     ) -> list[dict]:
         """
-        Fetch cash flow history (deposits, withdrawals, dividends, taxes) from Tradernet API.
+        Fetch cash flow history from Tradernet API.
 
         Args:
             start_date: Start date in YYYY-MM-DD format (default: 2020-01-01)
             end_date: End date in YYYY-MM-DD format (default: today)
 
         Returns:
-            List of cash flow entries with type_id: card, card_payout, dividend, tax, block, unblock
+            List of cash flow entries. Includes in/out rows and non-trade commission rows.
         """
         if not self._api:
             return []
@@ -778,24 +830,25 @@ class Broker:
         if end_date is None:
             end_date = datetime.now().strftime("%Y-%m-%d")
 
+        cash_flows = []
+
         try:
-            response = self._api.get_broker_report(
-                start=start_date,
-                end=end_date,
-                data_block_type="in_outs",
-            )
-
-            cash_flows = []
-            if response and "report" in response:
-                detailed = response.get("report", {}).get("detailed", [])
-                cash_flows = detailed
-
-            logger.info(f"Fetched {len(cash_flows)} cash flow entries from Tradernet API")
-            return cash_flows
-
+            response = self._api.get_broker_report(start=start_date, end=end_date, data_block_type="in_outs")
+            cash_flows.extend(_broker_report_rows(response, "in_outs"))
         except Exception as e:
-            logger.error(f"Failed to get cash flows: {e}")
-            return []
+            logger.error(f"Failed to get in/out cash flows: {e}")
+
+        try:
+            response = self._api.get_broker_report(start=start_date, end=end_date, data_block_type="commissions")
+            commission_rows = _broker_report_rows(response, "commissions")
+            cash_flows.extend(
+                flow for row in commission_rows if (flow := _normalize_non_trade_commission(row)) is not None
+            )
+        except Exception as e:
+            logger.error(f"Failed to get commission cash flows: {e}")
+
+        logger.info(f"Fetched {len(cash_flows)} cash flow entries from Tradernet API")
+        return cash_flows
 
     async def get_corporate_actions(
         self,
