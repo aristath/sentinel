@@ -9,7 +9,7 @@ dependencies = [
     "tradernet-sdk>=2.0.0",
     "numpy>=2.0.0",
     "pandas>=2.2.0",
-    "scipy>=1.14.0",
+    "scipy>=1.17.1",
     "aiosqlite>=0.20.0",
     "python-dotenv>=1.0.0",
     "boto3>=1.26.0",
@@ -27,6 +27,7 @@ dev = [
     "pyyaml>=6.0",
 ]
 forecasting = [
+    "lightning>=2.4.0",
     "torch>=2.5.0",
     "toto-models>=0.1.0",
 ]
