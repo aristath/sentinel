@@ -18,6 +18,7 @@ from sentinel.price_validator import PriceValidator
 logger = logging.getLogger(__name__)
 _BACKFILL_LOCK = asyncio.Lock()
 SNAPSHOT_MUTABLE_TAIL_DAYS = 30
+POSITION_EPSILON = 1e-9
 
 
 def _format_progress(start_ts: float, current_idx: int, total: int, date_str: str, now_ts: float | None = None) -> str:
@@ -59,6 +60,16 @@ def _snapshot_write_plan(
         for iso, ts in zip(all_dates, all_date_timestamps, strict=False)
         if ts not in existing_snapshot_dates or date_type.fromisoformat(iso) >= refresh_start
     ]
+
+
+def _apply_stock_position_trade(positions: dict[str, float], symbol: str, side: str, quantity: float) -> None:
+    current_quantity = positions.get(symbol, 0.0)
+    next_quantity = current_quantity + quantity if side == "BUY" else current_quantity - quantity
+
+    if abs(next_quantity) < POSITION_EPSILON:
+        positions.pop(symbol, None)
+    else:
+        positions[symbol] = next_quantity
 
 
 class SnapshotService:
@@ -290,11 +301,11 @@ class SnapshotService:
                     if trade["side"] == "BUY":
                         if is_stock_symbol(symbol):
                             running_cash_eur -= trade_value_eur + comm_eur
-                            positions[symbol] = positions.get(symbol, 0) + qty
+                            _apply_stock_position_trade(positions, symbol, trade["side"], qty)
                     else:  # SELL
                         if is_stock_symbol(symbol):
                             running_cash_eur += trade_value_eur - comm_eur
-                            positions[symbol] = max(0, positions.get(symbol, 0) - qty)
+                            _apply_stock_position_trade(positions, symbol, trade["side"], qty)
 
                     last_trade_idx += 1
 

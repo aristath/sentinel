@@ -5,7 +5,12 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from sentinel.snapshot_service import _format_progress, _midnight_utc_ts, _snapshot_write_plan
+from sentinel.snapshot_service import (
+    _apply_stock_position_trade,
+    _format_progress,
+    _midnight_utc_ts,
+    _snapshot_write_plan,
+)
 
 
 def test_format_progress_includes_percent_and_eta():
@@ -42,3 +47,12 @@ def test_snapshot_write_plan_includes_missing_old_dates():
     plan = _snapshot_write_plan(all_dates, all_timestamps, existing, today=today, tail_days=30)
 
     assert ("2026-06-10", missing_old) in plan
+
+
+def test_apply_stock_position_trade_uses_ledger_math_for_reordered_same_timestamp_trades():
+    positions: dict[str, float] = {}
+
+    _apply_stock_position_trade(positions, "AIR.EU", "SELL", 2)
+    _apply_stock_position_trade(positions, "AIR.EU", "BUY", 2)
+
+    assert "AIR.EU" not in positions
