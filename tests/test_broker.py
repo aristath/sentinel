@@ -223,6 +223,39 @@ class TestGetSecurityMetadata:
         mock_sleep.assert_not_awaited()
 
 
+class TestGetPortfolio:
+    @pytest.mark.asyncio
+    async def test_maps_account_position_and_exposes_previous_close(self, broker):
+        broker._api.account_summary.return_value = {
+            "result": {
+                "ps": {
+                    "pos": [
+                        {
+                            "i": "BYD.1211.AS",
+                            "q": 1000,
+                            "bal_price_a": 84.9,
+                            "mkt_price": 90.95,
+                            "close_price": 86.95,
+                            "profit_price": 90.5,
+                            "curr": "HKD",
+                            "name": "BYD CO. LTD",
+                            "market_value": 90900,
+                            "profit_close": 5600,
+                        }
+                    ],
+                    "acc": [{"curr": "EUR", "s": 109.3}],
+                }
+            }
+        }
+
+        result = await broker.get_portfolio()
+
+        assert result["cash"] == {"EUR": 109.3}
+        assert result["positions"][0]["current_price"] == 90.95
+        assert result["positions"][0]["close_price"] == 86.95
+        assert result["positions"][0]["previous_close_price"] == 90.5
+
+
 class TestGetAllIndices:
     """Verify Broker.get_all_indices pulls the full universe of market indices
     from Tradernet (instr_type_c == 5), paginated until exhausted."""

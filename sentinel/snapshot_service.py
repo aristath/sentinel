@@ -17,6 +17,7 @@ from sentinel.price_validator import PriceValidator
 
 logger = logging.getLogger(__name__)
 _BACKFILL_LOCK = asyncio.Lock()
+SNAPSHOT_MUTABLE_TAIL_DAYS = 30
 
 
 def _format_progress(start_ts: float, current_idx: int, total: int, date_str: str, now_ts: float | None = None) -> str:
@@ -39,6 +40,25 @@ def _midnight_utc_ts(iso_date: str) -> int:
     """Convert YYYY-MM-DD string to unix timestamp at midnight UTC."""
     dt = datetime.strptime(iso_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     return int(dt.timestamp())
+
+
+def _snapshot_write_plan(
+    all_dates: list[str],
+    all_date_timestamps: list[int],
+    existing_snapshot_dates: set[int],
+    *,
+    today: date_type | None = None,
+    tail_days: int = SNAPSHOT_MUTABLE_TAIL_DAYS,
+) -> list[tuple[str, int]]:
+    if not all_dates:
+        return []
+    today = today or date_type.today()
+    refresh_start = max(date_type.fromisoformat(all_dates[0]), today - timedelta(days=tail_days))
+    return [
+        (iso, ts)
+        for iso, ts in zip(all_dates, all_date_timestamps, strict=False)
+        if ts not in existing_snapshot_dates or date_type.fromisoformat(iso) >= refresh_start
+    ]
 
 
 class SnapshotService:
@@ -118,26 +138,27 @@ class SnapshotService:
                 current += timedelta(days=1)
             logger.info("Date range: %s → %s (%s days)", start_date.isoformat(), end_date.isoformat(), len(all_dates))
 
-            # Only process missing snapshot days.
+            # Historical snapshots are deterministic, but the recent tail is
+            # mutable in practice: trades, cashflows, and broker settlement can
+            # arrive after a date already has a row.
             existing_snapshot_dates = set(
                 await self._db.get_portfolio_snapshot_dates(
                     start_ts=all_date_timestamps[0],
                     end_ts=all_date_timestamps[-1],
                 )
             )
-            missing_date_pairs = [
-                (iso, ts)
-                for iso, ts in zip(all_dates, all_date_timestamps, strict=False)
-                if ts not in existing_snapshot_dates
-            ]
-            if not missing_date_pairs:
-                logger.info("Portfolio snapshots already complete for full activity range; skipping backfill")
+            write_date_pairs = _snapshot_write_plan(all_dates, all_date_timestamps, existing_snapshot_dates)
+            if not write_date_pairs:
+                logger.info("Portfolio snapshots already complete and recent tail is fresh; skipping backfill")
                 return
-            missing_dates = [iso for iso, _ in missing_date_pairs]
-            missing_timestamps = {ts for _, ts in missing_date_pairs}
+            write_dates = [iso for iso, _ in write_date_pairs]
+            write_timestamps = {ts for _, ts in write_date_pairs}
+            missing_count = sum(1 for _, ts in write_date_pairs if ts not in existing_snapshot_dates)
+            refresh_count = len(write_date_pairs) - missing_count
             logger.info(
-                "Backfilling only missing dates: %s missing of %s total",
-                len(missing_date_pairs),
+                "Backfilling/refreshing snapshots: %s missing, %s recent refreshes of %s total",
+                missing_count,
+                refresh_count,
                 len(all_dates),
             )
 
@@ -204,13 +225,13 @@ class SnapshotService:
                     else:
                         sec_currency_map[symbol] = "EUR"
 
-            # Prefetch historical FX rates only for missing dates.
+            # Prefetch historical FX rates only for dates we will write.
             currencies_needed = list(set(sec_currency_map.values()))
             cf_currencies = list(set(cf["currency"] for cf in cash_flows))
             currencies_needed = list(set(currencies_needed + cf_currencies))
-            logger.info(f"Prefetching FX rates for {len(missing_dates)} dates, currencies: {currencies_needed}")
+            logger.info(f"Prefetching FX rates for {len(write_dates)} dates, currencies: {currencies_needed}")
             fx_start = time.monotonic()
-            await self._currency.prefetch_rates_for_dates(currencies_needed, missing_dates)
+            await self._currency.prefetch_rates_for_dates(currencies_needed, write_dates)
             logger.info("FX prefetch complete in %.2fs", time.monotonic() - fx_start)
 
             # Running state
@@ -224,7 +245,7 @@ class SnapshotService:
             progress_every = max(1, total_dates // 50)
             if total_dates > 10 and progress_every < 5:
                 progress_every = 5
-            logger.info("Starting daily backfill scan for %s days (%s missing)", total_dates, len(missing_timestamps))
+            logger.info("Starting daily backfill scan for %s days (%s writes)", total_dates, len(write_timestamps))
 
             for i, date_str in enumerate(all_dates):
                 if i == 0 or (i + 1) % progress_every == 0 or i + 1 == total_dates:
@@ -278,10 +299,10 @@ class SnapshotService:
                     last_trade_idx += 1
 
                 date_ts = all_date_timestamps[i]
-                if date_ts not in missing_timestamps:
+                if date_ts not in write_timestamps:
                     continue
 
-                # 3. Build positions snapshot with EUR values for missing dates only.
+                # 3. Build positions snapshot with EUR values for dates we will write.
                 positions_data = {}
                 for symbol, qty in positions.items():
                     if qty <= 0:
@@ -313,5 +334,5 @@ class SnapshotService:
             logger.info(
                 "Portfolio snapshots backfill complete in %.2fs (%s snapshots written)",
                 time.monotonic() - start_ts,
-                len(missing_timestamps),
+                len(write_timestamps),
             )

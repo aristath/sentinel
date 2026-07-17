@@ -11,8 +11,8 @@ from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.freedom24_web import Freedom24WebClient
-from sentinel.portfolio import Portfolio
 from sentinel.services.portfolio import PortfolioService
+from sentinel.services.valuation import PortfolioValuationService
 
 logger = logging.getLogger(__name__)
 
@@ -218,6 +218,18 @@ async def _cashflow_value_since(
     return total
 
 
+async def _current_net_deposits_eur(deps: CommonDependencies) -> float:
+    current_net_deposits = 0.0
+    summary = await deps.db.get_cash_flow_summary()
+    for type_id, currencies in summary.items():
+        if type_id not in ("card", "card_payout"):
+            continue
+        for curr, total in currencies.items():
+            amount_eur = await deps.currency.to_eur(total, curr)
+            current_net_deposits += amount_eur if type_id == "card" else -abs(amount_eur)
+    return current_net_deposits
+
+
 async def _period_stats_from_reconstructed_starts(
     deps: CommonDependencies,
     benchmark_rows: list[dict],
@@ -348,25 +360,15 @@ async def _snapshot_adjusted_period_stats(
     return dict(pair for pair in pairs if pair is not None)
 
 
-async def _broker_intraday_stat(deps: CommonDependencies, current_value: float) -> dict[str, float | None] | None:
-    """Tradernet account summary exposes the broker's current-vs-close move per position."""
-    if not await deps.broker.connect():
+def _intraday_stat_from_valuation(
+    valuation: dict[str, Any],
+) -> dict[str, float | None] | None:
+    """Current-vs-previous-close move from the shared live valuation."""
+    intraday_pnl = valuation.get("intraday_pnl_eur")
+    if intraday_pnl is None:
         return None
-    portfolio = await deps.broker.get_portfolio()
-    total = 0.0
-    used = 0
-    for position in portfolio.get("positions", []):
-        quantity = position.get("quantity")
-        current_price = position.get("current_price")
-        close_price = position.get("close_price")
-        if quantity is None or current_price is None or close_price is None:
-            continue
-        native = (float(current_price) - float(close_price)) * float(quantity)
-        total += await deps.currency.to_eur(native, position.get("currency") or "EUR")
-        used += 1
-    if used == 0:
-        return None
-    portfolio_eur = round(total, 2)
+    current_value = float(valuation.get("total_value_eur") or 0.0)
+    portfolio_eur = round(float(intraday_pnl), 2)
     start_value = current_value - portfolio_eur
     portfolio_pct = round((portfolio_eur / start_value) * 100, 2) if start_value > 0 else None
     return {
@@ -511,6 +513,23 @@ async def get_portfolio_pnl_history(
         deposits_by_date[cf["date"]] = running
 
     daily = build_daily_pnl(snapshots, deposits_by_date)
+    valuation = await PortfolioValuationService(db=deps.db, broker=deps.broker, currency=deps.currency).current()
+    current_value = valuation["total_value_eur"]
+    if current_value > 0:
+        current_net_deposits = await _current_net_deposits_eur(deps)
+        today_iso = date_type.today().isoformat()
+        pnl_eur = current_value - current_net_deposits
+        live_point = {
+            "date": today_iso,
+            "total_value_eur": round(current_value, 2),
+            "net_deposits_eur": round(current_net_deposits, 2),
+            "pnl_eur": round(pnl_eur, 2),
+            "pnl_pct": round((pnl_eur / current_net_deposits * 100), 2) if current_net_deposits > 0 else 0.0,
+        }
+        if daily and daily[-1]["date"] == today_iso:
+            daily[-1] = live_point
+        elif not daily or daily[-1]["date"] < today_iso:
+            daily.append(live_point)
 
     # --- Build output with rolling TWR ---
     start_date = (date_type.today() - timedelta(days=days)).isoformat()
@@ -624,18 +643,11 @@ async def get_portfolio_period_stats(
     """Table-only portfolio period stats using live current value as the endpoint."""
     cash_flows = await deps.db.get_cash_flows()
 
-    current_net_deposits = 0.0
-    summary = await deps.db.get_cash_flow_summary()
-    for type_id, currencies in summary.items():
-        if type_id not in ("card", "card_payout"):
-            continue
-        for curr, total in currencies.items():
-            amount_eur = await deps.currency.to_eur(total, curr)
-            current_net_deposits += amount_eur if type_id == "card" else -abs(amount_eur)
-
+    current_net_deposits = await _current_net_deposits_eur(deps)
     benchmark_symbol = await deps.settings.get("performance_benchmark_symbol", "VWCE.EU")
     benchmark_rows = await deps.db.get_prices(benchmark_symbol)
-    current_value = await Portfolio(db=deps.db).total_value()
+    valuation = await PortfolioValuationService(db=deps.db, broker=deps.broker, currency=deps.currency).current()
+    current_value = valuation["total_value_eur"]
 
     as_of_date = date_type.today()
     period_stats = await _period_stats_from_reconstructed_starts(
@@ -656,7 +668,7 @@ async def get_portfolio_period_stats(
             as_of_date=as_of_date,
         )
     )
-    intraday_stat = await _broker_intraday_stat(deps, current_value)
+    intraday_stat = _intraday_stat_from_valuation(valuation)
     if intraday_stat is not None:
         period_stats["1D"] = intraday_stat
     return {

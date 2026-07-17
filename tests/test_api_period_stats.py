@@ -69,17 +69,17 @@ def _deps(
     return deps
 
 
-def _fake_portfolio(monkeypatch, total_value: float):
+def _fake_valuation(monkeypatch, total_value: float, intraday_pnl: float | None = None):
     from sentinel.api.routers import portfolio as portfolio_router
 
-    class FakePortfolio:
-        def __init__(self, db=None):
-            self.db = db
+    class FakePortfolioValuationService:
+        def __init__(self, db=None, broker=None, currency=None):
+            pass
 
-        async def total_value(self):
-            return total_value
+        async def current(self):
+            return {"total_value_eur": total_value, "intraday_pnl_eur": intraday_pnl}
 
-    monkeypatch.setattr(portfolio_router, "Portfolio", FakePortfolio)
+    monkeypatch.setattr(portfolio_router, "PortfolioValuationService", FakePortfolioValuationService)
 
 
 @pytest.mark.asyncio
@@ -88,7 +88,7 @@ async def test_period_stats_use_live_current_value_and_adjust_period_deposits(mo
 
     today = date.today()
     week_ago = today - timedelta(days=7)
-    _fake_portfolio(monkeypatch, 1250.0)
+    _fake_valuation(monkeypatch, 1250.0)
 
     deps = _deps(
         cash_flows=[
@@ -128,7 +128,7 @@ async def test_period_stats_reconstruct_start_before_trades(monkeypatch):
 
     today = date.today()
     yesterday = today - timedelta(days=1)
-    _fake_portfolio(monkeypatch, 110.0)
+    _fake_valuation(monkeypatch, 110.0)
 
     deps = _deps(
         cash_flows=[],
@@ -157,7 +157,7 @@ async def test_period_stats_use_broker_intraday_for_1d(monkeypatch):
     from sentinel.api.routers.portfolio import get_portfolio_period_stats
 
     today = date.today()
-    _fake_portfolio(monkeypatch, 990.0)
+    _fake_valuation(monkeypatch, 990.0, intraday_pnl=-10.0)
 
     deps = _deps(
         cash_flows=[],
@@ -166,26 +166,30 @@ async def test_period_stats_use_broker_intraday_for_1d(monkeypatch):
         cash={"EUR": 0.0},
         prices={"TEST": [{"date": (today - timedelta(days=30)).isoformat(), "close": 120.0}]},
     )
-    deps.broker.connect = AsyncMock(return_value=True)
-    deps.broker.get_portfolio = AsyncMock(
-        return_value={
-            "positions": [
-                {
-                    "symbol": "TEST",
-                    "quantity": 10.0,
-                    "current_price": 99.0,
-                    "close_price": 100.0,
-                    "currency": "EUR",
-                }
-            ],
-            "cash": {},
-        }
-    )
-
     result = await get_portfolio_period_stats(deps)
 
     assert result["period_stats"]["1D"]["portfolio_eur"] == -10.0
     assert result["period_stats"]["1D"]["portfolio_pct"] == pytest.approx(-1.0)
+
+
+@pytest.mark.asyncio
+async def test_period_stats_use_valuation_intraday_for_1d(monkeypatch):
+    from sentinel.api.routers.portfolio import get_portfolio_period_stats
+
+    _fake_valuation(monkeypatch, 950.0, intraday_pnl=-50.0)
+
+    deps = _deps(
+        cash_flows=[],
+        cash_flow_summary={},
+        positions=[{"symbol": "TEST", "quantity": 10.0, "currency": "EUR", "current_price": 95.0}],
+        cash={"EUR": 0.0},
+        prices={},
+    )
+
+    result = await get_portfolio_period_stats(deps)
+
+    assert result["period_stats"]["1D"]["portfolio_eur"] == -50.0
+    assert result["period_stats"]["1D"]["portfolio_pct"] == pytest.approx(-5.0)
 
 
 @pytest.mark.asyncio
@@ -195,7 +199,7 @@ async def test_period_stats_do_not_use_stale_component_prices(monkeypatch):
     today = date.today()
     yesterday = today - timedelta(days=1)
     stale_date = today - timedelta(days=30)
-    _fake_portfolio(monkeypatch, 110.0)
+    _fake_valuation(monkeypatch, 110.0)
 
     deps = _deps(
         cash_flows=[],
@@ -225,7 +229,7 @@ async def test_period_stats_fill_1w_and_1m_from_current_price_fallback_when_comp
     week_ago = today - timedelta(days=7)
     month_ago = today - timedelta(days=30)
     stale_date = today - timedelta(days=45)
-    _fake_portfolio(monkeypatch, 1250.0)
+    _fake_valuation(monkeypatch, 1250.0)
 
     deps = _deps(
         cash_flows=[
@@ -268,7 +272,7 @@ async def test_period_stats_do_not_turn_stale_benchmark_prices_into_zero(monkeyp
     today = date.today()
     week_ago = today - timedelta(days=7)
     stale_end = today - timedelta(days=10)
-    _fake_portfolio(monkeypatch, 1100.0)
+    _fake_valuation(monkeypatch, 1100.0)
 
     deps = _deps(
         cash_flows=[{"date": week_ago.isoformat(), "type_id": "card", "amount": 1000.0, "currency": "EUR"}],

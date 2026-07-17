@@ -189,6 +189,53 @@ class TestPnlHistoryComputations:
                 assert snap["net_deposits_eur"] == 5000.0
 
     @pytest.mark.asyncio
+    async def test_latest_point_uses_live_portfolio_value(self, temp_db):
+        """Today's snapshot can be stale after trades; the published latest
+        point should use the live positions/cash endpoint value.
+        """
+        from sentinel.api.routers.portfolio import get_portfolio_pnl_history
+
+        today = datetime.now(tz=timezone.utc).date()
+        base_date = today - timedelta(days=749)
+        await temp_db.upsert_cash_flow(
+            date=(base_date - timedelta(days=1)).isoformat(),
+            type_id="card",
+            amount=1000.0,
+            currency="EUR",
+            comment=None,
+            raw_data={"test": True},
+        )
+        for i in range(750):
+            d = base_date + timedelta(days=i)
+            ts = _midnight_utc(d.isoformat())
+            value = 5000.0 if d == today else 1000.0
+            await temp_db.upsert_portfolio_snapshot(
+                ts,
+                {"positions": {"STALE.EU": {"quantity": 10, "value_eur": value}}, "cash_eur": 0.0},
+            )
+        await temp_db.upsert_position("LIVE.EU", quantity=10, current_price=110.0, currency="EUR")
+        await temp_db.set_cash_balances({"EUR": 100.0})
+
+        currency = MagicMock()
+        currency.to_eur_for_date = AsyncMock(side_effect=lambda a, c, d: a)
+        currency.to_eur = AsyncMock(side_effect=lambda a, c: a)
+
+        deps = MagicMock()
+        deps.db = temp_db
+        deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
+
+        result = await get_portfolio_pnl_history(deps)
+
+        assert result["summary"]["end_value"] == 1200.0
+        assert result["summary"]["pnl_absolute"] == 200.0
+        latest = result["snapshots"][-1]
+        assert latest["date"] == today.isoformat()
+        assert latest["total_value_eur"] == 1200.0
+        assert latest["net_deposits_eur"] == 1000.0
+        assert latest["pnl_eur"] == 200.0
+
+    @pytest.mark.asyncio
     async def test_benchmark_series_populated_when_prices_exist(self, temp_db):
         """When the benchmark symbol has price history, each point carries a
         benchmark_ann_return and the summary names the benchmark."""

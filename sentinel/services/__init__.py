@@ -5,5 +5,6 @@ or require complex orchestration beyond what individual models provide.
 """
 
 from sentinel.services.portfolio import PortfolioService
+from sentinel.services.valuation import PortfolioValuationService
 
-__all__ = ["PortfolioService"]
+__all__ = ["PortfolioService", "PortfolioValuationService"]
