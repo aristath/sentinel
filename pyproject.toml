@@ -7,7 +7,7 @@ dependencies = [
     "fastapi>=0.115.0",
     "uvicorn>=0.32.0",
     "tradernet-sdk>=2.0.0",
-    "numpy>=2.0.0",
+    "numpy>=2.4.0",
     "pandas>=2.2.0",
     "scipy>=1.17.1",
     "aiosqlite>=0.20.0",
@@ -26,12 +26,6 @@ dev = [
     # Used by the validate-yaml pre-commit hook in lefthook.yml.
     "pyyaml>=6.0",
 ]
-forecasting = [
-    "lightning>=2.4.0",
-    "torch>=2.5.0",
-    "toto-models>=0.1.0",
-]
-
 [build-system]
 requires = ["setuptools>=75.0.0"]
 build-backend = "setuptools.build_meta"
