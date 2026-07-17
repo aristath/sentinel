@@ -23,8 +23,6 @@ export function PeriodStatsTable({ stats }) {
             <th scope="col">Period</th>
             <th scope="col">P/L</th>
             <th scope="col">Return</th>
-            <th scope="col">Benchmark</th>
-            <th scope="col">Alpha</th>
           </tr>
         </thead>
         <tbody>
@@ -35,10 +33,6 @@ export function PeriodStatsTable({ stats }) {
                 <th scope="row">{period}</th>
                 <td style={{ color: valueColor(row.portfolio_eur) }}>{formatEur(row.portfolio_eur)}</td>
                 <td style={{ color: valueColor(row.portfolio_pct) }}>{formatPct(row.portfolio_pct)}</td>
-                <td style={{ color: row.benchmark_pct == null ? catppuccin.overlay1 : catppuccin.blue }}>
-                  {formatPct(row.benchmark_pct)}
-                </td>
-                <td style={{ color: valueColor(row.alpha_pct) }}>{formatPct(row.alpha_pct)}</td>
               </tr>
             );
           })}

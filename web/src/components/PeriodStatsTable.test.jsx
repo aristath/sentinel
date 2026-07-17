@@ -7,16 +7,18 @@ describe('PeriodStatsTable', () => {
     render(
       <PeriodStatsTable
         stats={{
-          '1D': { portfolio_eur: -1234, portfolio_pct: -2, benchmark_pct: 1, alpha_pct: -3 },
-          '1W': { portfolio_eur: 0, portfolio_pct: 0, benchmark_pct: 0, alpha_pct: 0 },
-          All: { portfolio_eur: 250, portfolio_pct: 25, benchmark_pct: null, alpha_pct: null },
+          '1D': { portfolio_eur: -1234, portfolio_pct: -2 },
+          '1W': { portfolio_eur: 0, portfolio_pct: 0 },
+          All: { portfolio_eur: 250, portfolio_pct: 25 },
         }}
       />,
     );
 
     const table = screen.getByRole('table', { name: 'Portfolio performance by period' });
-    expect(within(table).getAllByRole('columnheader')).toHaveLength(5);
+    expect(within(table).getAllByRole('columnheader')).toHaveLength(3);
     expect(within(table).getAllByRole('rowheader')).toHaveLength(8);
+    expect(within(table).queryByRole('columnheader', { name: 'Benchmark' })).not.toBeInTheDocument();
+    expect(within(table).queryByRole('columnheader', { name: 'Alpha' })).not.toBeInTheDocument();
     expect(screen.getByText('1D')).toBeInTheDocument();
     expect(screen.getByText('1W')).toBeInTheDocument();
     expect(screen.getByText('-€1.2K')).toBeInTheDocument();

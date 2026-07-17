@@ -5,7 +5,7 @@
 
 .period-stats-table {
   width: 100%;
-  min-width: 520px;
+  min-width: 340px;
   border-collapse: collapse;
   table-layout: fixed;
   font-variant-numeric: tabular-nums;
