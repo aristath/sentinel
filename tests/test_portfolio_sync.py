@@ -53,9 +53,7 @@ def _broker_with_position(symbol: str):
             "lot": "1.00000000",
         }
     )
-    broker.get_historical_prices_bulk = AsyncMock(
-        return_value={symbol: [{"date": "2026-01-01", "close": 100.0}]}
-    )
+    broker.get_historical_prices_bulk = AsyncMock(return_value={symbol: [{"date": "2026-01-01", "close": 100.0}]})
     return broker
 
 

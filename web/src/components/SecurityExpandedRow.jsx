@@ -2,31 +2,31 @@
  * Security Expanded Row Component
  *
  * Inline expandable content for a security row showing:
- * - Price chart (historical)
- * - Position data
- * - Controls (buy/sell toggles, multiplier, geography/industry)
+ * - Aliases and security metadata
+ * - Price and forecast charts
+ * - Clara preference, current action, and opportunity signals
  */
-import { useState, useEffect } from 'react';
+import { Fragment, useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Group,
   Stack,
   Text,
   Badge,
-  Switch,
   Slider,
   TagsInput,
   Grid,
+  Table,
   Box,
   Tooltip,
   ActionIcon,
 } from '@mantine/core';
-import { IconTrash, IconAlertTriangle, IconStarFilled } from '@tabler/icons-react';
+import { IconTrash, IconAlertTriangle } from '@tabler/icons-react';
 import { SecurityChart } from './SecurityChart';
+import { SecurityForecastCard } from './SecurityForecastCard';
 import { catppuccin } from '../theme';
 import { formatCurrencySymbol as formatCurrency, formatPercent } from '../utils/formatting';
-import { usePortfolioStructure } from '../hooks/usePortfolioStructure';
-
-const REPLACEMENTS_TO_SHOW = 5;
+import { getSecurityForecast } from '../api/client';
 
 // Aliases is stored as a comma-separated string but TagsInput wants an array.
 function parseCommaSeparated(value) {
@@ -35,44 +35,26 @@ function parseCommaSeparated(value) {
   return value.split(',').map((v) => v.trim()).filter(Boolean);
 }
 
-/**
- * Find the replacePositions[] entry for a given symbol (case-insensitive).
- * Returns the entry or null.
- */
-function findReplacementEntry(structure, symbol) {
-  const list = structure?.portfolioAnalysis?.replacePositions;
-  if (!Array.isArray(list) || !symbol) return null;
-  const upper = String(symbol).toUpperCase();
-  return list.find(
-    (r) => String(r?.assetToReplace?.ticker || '').toUpperCase() === upper
-  ) || null;
-}
-
-function ReplacementRow({ candidate }) {
-  if (!candidate) return null;
-  return (
-    <Group gap="xs" wrap="nowrap" align="center">
-      <Group gap={4} wrap="nowrap" style={{ width: 56, flexShrink: 0 }}>
-        <IconStarFilled size={11} color={catppuccin.yellow} />
-        <Text size="xs" fw={500}>
-          {candidate.praamsRatio}/7
-        </Text>
-      </Group>
-      <Text size="xs" fw={500} style={{ width: 100, flexShrink: 0 }}>
-        {candidate.ticker}
-      </Text>
-      <Text size="xs" c="dimmed" lineClamp={1}>
-        {candidate.issuer}
-      </Text>
-    </Group>
-  );
+function selectForecastPoints(forecastData) {
+  const points = forecastData?.points || {};
+  if (Array.isArray(points.grouped) && points.grouped.length > 0) {
+    return points.grouped;
+  }
+  if (Array.isArray(points.solo) && points.solo.length > 0) {
+    return points.solo;
+  }
+  return [];
 }
 
 export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
   const [isUpdating, setIsUpdating] = useState(false);
   const [localMultiplier, setLocalMultiplier] = useState(null);
-  const { data: structure } = usePortfolioStructure();
-  const replacement = findReplacementEntry(structure, security?.symbol);
+  const { data: forecastData } = useQuery({
+    queryKey: ['forecast', security?.symbol],
+    queryFn: () => getSecurityForecast(security.symbol),
+    enabled: Boolean(security?.symbol),
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Reset local state when security changes
   useEffect(() => {
@@ -97,8 +79,6 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
     industry,
     min_lot,
     aliases,
-    allow_buy,
-    allow_sell,
     user_multiplier,
     user_multiplier_updated_at,
     user_multiplier_source,
@@ -106,13 +86,9 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
     has_position,
     quantity,
     avg_cost,
-    current_price,
-    value_eur,
-    profit_pct,
-    profit_value_eur,
-    current_allocation,
-    ideal_allocation,
     opp_score,
+    forecast_score,
+    forecast_return_4w,
     dip_score,
     capitulation_score,
     cycle_turn,
@@ -122,14 +98,32 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
     price_warning,
   } = security;
 
-  const allocationDelta = ideal_allocation - current_allocation;
-  const isUnderweight = allocationDelta > 0.5;
-  const isOverweight = allocationDelta < -0.5;
+  const forecastChartPoints = selectForecastPoints(forecastData);
 
   const storedMultiplier = Math.max(0, Math.min(1, localMultiplier ?? user_multiplier ?? 0.5));
   const preferenceTimestamp = user_multiplier_updated_at
     ? new Date(user_multiplier_updated_at).toLocaleString()
     : null;
+  const hasClaraReport = Boolean(user_multiplier_analysis || user_multiplier_source || preferenceTimestamp);
+  const opportunityRows = [
+    [
+      { label: 'Opportunity score', value: formatPercent((opp_score || 0) * 100, true, 1) },
+      {
+        label: 'Forecast timing',
+        value: forecast_score !== undefined && forecast_score !== null
+          ? formatPercent((forecast_score || 0) * 100, false, 0)
+          : '-',
+      },
+    ],
+    [
+      { label: 'Dip', value: formatPercent((dip_score || 0) * 100, false, 1) },
+      { label: 'Cycle turn', value: cycle_turn ? 'Yes' : 'No' },
+    ],
+    [
+      { label: 'Capitulation', value: formatPercent((capitulation_score || 0) * 100, false, 1) },
+      { label: 'Freefall blocked', value: freefall_block ? 'Yes' : 'No' },
+    ],
+  ];
 
   return (
     <Box
@@ -139,121 +133,25 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
         borderTop: `1px solid ${catppuccin.surface0}`,
       }}
     >
-      <Grid gap="md">
-        {/* Left Column: Chart & Stats */}
-        <Grid.Col span={{ base: 12, md: 6, lg: 4 }}>
-          <Stack gap="md">
-            {/* Price Anomaly Warning */}
-            {price_warning && (
-              <Box
-                p="xs"
-                style={{
-                  background: catppuccin.yellow + '33',
-                  borderRadius: 'var(--mantine-radius-sm)',
-                  border: `1px solid ${catppuccin.yellow}`,
-                }}
-              >
-                <Group gap="xs">
-                  <IconAlertTriangle size={16} color={catppuccin.yellow} />
-                  <Text size="sm" fw={500}>{price_warning}</Text>
-                </Group>
-              </Box>
-            )}
-
-            {/* Chart */}
-            <Box
-              style={{
-                background: catppuccin.base,
-                borderRadius: 'var(--mantine-radius-sm)',
-                padding: '8px',
-              }}
-            >
-              <SecurityChart
-                prices={prices}
-                avgCost={avg_cost}
-                hasPosition={has_position}
-                width={300}
-                height={150}
-              />
-            </Box>
-
-            {/* Position Stats */}
-            <Stack gap="xs">
-              {has_position ? (
-                <>
-                  <Group justify="space-between">
-                    <Text size="xs" c="dimmed">Quantity</Text>
-                    <Text size="xs" fw={500}>{quantity}</Text>
-                  </Group>
-                  <Group justify="space-between">
-                    <Text size="xs" c="dimmed">Avg Cost</Text>
-                    <Text size="xs">{formatCurrency(avg_cost, currency)}</Text>
-                  </Group>
-                  <Group justify="space-between">
-                    <Text size="xs" c="dimmed">Current Price</Text>
-                    <Text size="xs">{formatCurrency(current_price, currency)}</Text>
-                  </Group>
-                  <Group justify="space-between">
-                    <Text size="xs" c="dimmed">Lot Size</Text>
-                    <Text size="xs">{min_lot}</Text>
-                  </Group>
-                </>
-              ) : (
-                <>
-                  <Group justify="space-between">
-                    <Text size="xs" c="dimmed">Current Price</Text>
-                    <Text size="xs">{formatCurrency(current_price, currency)}</Text>
-                  </Group>
-                  <Group justify="space-between">
-                    <Text size="xs" c="dimmed">Lot Size</Text>
-                    <Text size="xs">{min_lot}</Text>
-                  </Group>
-                </>
-              )}
-            </Stack>
-          </Stack>
-        </Grid.Col>
-
-        {/* Middle Column: Settings */}
-        <Grid.Col span={{ base: 12, md: 6, lg: 4 }}>
-          <Stack gap="md">
-            {/* Controls Row */}
-            <Group justify="space-between">
-              <Group gap="md">
-                <Switch
-                  label="Buy"
-                  size="xs"
-                  checked={allow_buy === 1}
-                  onChange={(e) => handleUpdate('allow_buy', e.currentTarget.checked ? 1 : 0)}
-                  disabled={isUpdating}
-                />
-                <Switch
-                  label="Sell"
-                  size="xs"
-                  checked={allow_sell === 1}
-                  onChange={(e) => handleUpdate('allow_sell', e.currentTarget.checked ? 1 : 0)}
-                  disabled={isUpdating}
-                />
-              </Group>
-              <Tooltip label="Delete security">
-                <ActionIcon
-                  variant="subtle"
-                  color="red"
-                  size="sm"
-                  onClick={() => onDelete(security)}
-                >
-                  <IconTrash size={16} />
-                </ActionIcon>
-              </Tooltip>
+      <Stack gap="md">
+        {price_warning && (
+          <Box
+            p="xs"
+            style={{
+              background: catppuccin.yellow + '33',
+              borderRadius: 'var(--mantine-radius-sm)',
+              border: `1px solid ${catppuccin.yellow}`,
+            }}
+          >
+            <Group gap="xs">
+              <IconAlertTriangle size={16} color={catppuccin.yellow} />
+              <Text size="sm" fw={500}>{price_warning}</Text>
             </Group>
+          </Box>
+        )}
 
-            {/* Geography & Industry are broker-sourced (auto-filled on metadata sync). */}
-            <Text size="xs" c="dimmed">
-              Geography: <Text component="span" size="xs" fw={500}>{geography || '—'}</Text>
-              {'  ·  '}
-              Industry: <Text component="span" size="xs" fw={500}>{industry || '—'}</Text>
-            </Text>
-
+        <Group align="flex-end" gap="sm" wrap="nowrap">
+          <Box style={{ flex: 1, minWidth: 0 }}>
             <TagsInput
               label="Aliases"
               size="xs"
@@ -263,11 +161,77 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
               clearable
               disabled={isUpdating}
             />
+          </Box>
+          <Tooltip label="Delete security">
+            <ActionIcon
+              variant="subtle"
+              color="red"
+              size="lg"
+              onClick={() => onDelete(security)}
+              aria-label={`Delete ${symbol}`}
+            >
+              <IconTrash size={16} />
+            </ActionIcon>
+          </Tooltip>
+        </Group>
 
-            {/* Clara Preference */}
+        <Group gap="md" wrap="wrap">
+          <Text size="xs" c="dimmed">
+            Geography: <Text component="span" size="xs" fw={500}>{geography || '—'}</Text>
+          </Text>
+          <Text size="xs" c="dimmed">
+            Industry: <Text component="span" size="xs" fw={500}>{industry || '—'}</Text>
+          </Text>
+          <Text size="xs" c="dimmed">
+            Lot Size: <Text component="span" size="xs" fw={500}>{min_lot}</Text>
+          </Text>
+        </Group>
+
+        <Grid gutter="md">
+          <Grid.Col span={{ base: 12, md: 6 }}>
+            <Box
+              p="xs"
+              style={{
+                background: catppuccin.base,
+                border: `1px solid ${catppuccin.surface0}`,
+                height: '100%',
+              }}
+            >
+              <Stack gap={6}>
+                <Group justify="space-between" align="center">
+                  <Text size="xs" fw={700} tt="uppercase" c="dimmed">Price</Text>
+                  {has_position && (
+                    <Text size="xs" c="dimmed">
+                      Avg <Text component="span" size="xs" fw={500}>{formatCurrency(avg_cost, currency)}</Text>
+                    </Text>
+                  )}
+                </Group>
+                <SecurityChart
+                  prices={prices}
+                  avgCost={avg_cost}
+                  hasPosition={has_position}
+                  forecastPoints={forecastChartPoints}
+                  height={100}
+                />
+              </Stack>
+            </Box>
+          </Grid.Col>
+          <Grid.Col span={{ base: 12, md: 6 }}>
+            <SecurityForecastCard
+              symbol={symbol}
+              forecastData={forecastData}
+              forecastScore={forecast_score}
+              forecastReturn4w={forecast_return_4w}
+              chartHeight={100}
+            />
+          </Grid.Col>
+        </Grid>
+
+        <Grid gutter="sm" align="stretch">
+          <Grid.Col span={{ base: 12, md: hasClaraReport ? 5 : 12 }}>
             <Box>
               <Group justify="space-between" mb={4}>
-                <Text size="xs" c="dimmed">Clara strategic preference</Text>
+                <Text size="xs" c="dimmed" fw={600} tt="uppercase">Clara</Text>
                 <Text size="xs" fw={500}>{storedMultiplier.toFixed(2)}</Text>
               </Group>
               <Slider
@@ -288,122 +252,101 @@ export function SecurityExpandedRow({ security, onUpdate, onDelete }) {
                 disabled={isUpdating}
                 size="xs"
               />
-              {(user_multiplier_analysis || user_multiplier_source || preferenceTimestamp) && (
-                <Box
-                  mt="sm"
-                  p="xs"
-                  style={{
-                    background: catppuccin.base,
-                    borderRadius: 'var(--mantine-radius-sm)',
-                    border: `1px solid ${catppuccin.surface0}`,
-                  }}
-                >
-                  <Group gap="xs" mb={user_multiplier_analysis ? 4 : 0}>
-                    {user_multiplier_source && (
-                      <Badge variant="light" color={user_multiplier_source === 'clara' ? 'violet' : 'gray'} size="xs">
-                        {user_multiplier_source}
-                      </Badge>
-                    )}
-                    {preferenceTimestamp && <Text size="xs" c="dimmed">{preferenceTimestamp}</Text>}
-                  </Group>
-                  {user_multiplier_analysis && (
-                    <Text size="xs" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                      {user_multiplier_analysis}
-                    </Text>
-                  )}
-                </Box>
-              )}
             </Box>
-          </Stack>
-        </Grid.Col>
-
-        {/* Right Column: Recommendation */}
-        <Grid.Col span={{ base: 12, lg: 4 }}>
-          <Stack gap="md">
-            {/* Recommendation */}
-            {recommendation && (
+          </Grid.Col>
+          {hasClaraReport && (
+            <Grid.Col span={{ base: 12, md: 7 }}>
               <Box
-                p="sm"
+                p="xs"
                 style={{
                   background: catppuccin.base,
                   borderRadius: 'var(--mantine-radius-sm)',
-                  borderLeft: `3px solid ${recommendation.action === 'buy' ? catppuccin.green : catppuccin.red}`,
+                  border: `1px solid ${catppuccin.surface0}`,
+                  height: '100%',
                 }}
               >
-                <Group gap="sm">
-                  <Badge
-                    color={recommendation.action === 'buy' ? 'green' : 'red'}
-                    variant="filled"
-                    size="sm"
-                  >
-                    {recommendation.action.toUpperCase()}
-                  </Badge>
-                  <Text size="xs">
-                    {formatCurrency(Math.abs(recommendation.value_delta_eur))}
-                    {recommendation.action === 'sell' && quantity > 0 && (
-                      <Text span c="dimmed"> ({Math.round((recommendation.quantity / quantity) * 100)}%)</Text>
-                    )}
-                  </Text>
+                <Group gap="xs" mb={user_multiplier_analysis ? 4 : 0}>
+                  {user_multiplier_source && (
+                    <Badge variant="light" color={user_multiplier_source === 'clara' ? 'violet' : 'gray'} size="xs">
+                      {user_multiplier_source}
+                    </Badge>
+                  )}
+                  {preferenceTimestamp && <Text size="xs" c="dimmed">{preferenceTimestamp}</Text>}
                 </Group>
-                <Text size="xs" c="dimmed" mt={4}>{recommendation.reason}</Text>
+                {user_multiplier_analysis && (
+                  <Text size="xs" style={{ whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+                    {user_multiplier_analysis}
+                  </Text>
+                )}
               </Box>
-            )}
+            </Grid.Col>
+          )}
+        </Grid>
 
-            {/* Deterministic Signals */}
-            <Box>
-              <Group justify="space-between" mb={4}>
-                <Text size="xs" c="dimmed">Opportunity score</Text>
-                <Text size="xs" fw={500}>{formatPercent((opp_score || 0) * 100, 1)}</Text>
-              </Group>
-              <Group justify="space-between" mb={4}>
-                <Text size="xs" c="dimmed">Dip</Text>
-                <Text size="xs" fw={500}>{formatPercent((dip_score || 0) * 100, 1)}</Text>
-              </Group>
-              <Group justify="space-between" mb={4}>
-                <Text size="xs" c="dimmed">Capitulation</Text>
-                <Text size="xs" fw={500}>{formatPercent((capitulation_score || 0) * 100, 1)}</Text>
-              </Group>
-              <Group justify="space-between" mb={4}>
-                <Text size="xs" c="dimmed">Cycle turn</Text>
-                <Text size="xs" fw={500}>{cycle_turn ? 'Yes' : 'No'}</Text>
-              </Group>
-              <Group justify="space-between">
-                <Text size="xs" c="dimmed">Freefall blocked</Text>
-                <Text size="xs" fw={500}>{freefall_block ? 'Yes' : 'No'}</Text>
-              </Group>
-            </Box>
-          </Stack>
-        </Grid.Col>
-
-        {/* PRAAMS replacement suggestions (full-width row, only when we have
-            structure data and an entry for this ticker) */}
-        {replacement?.improveOverall?.length > 0 && (
-          <Grid.Col span={12}>
-            <Box
-              p="sm"
-              style={{
-                background: catppuccin.base,
-                borderRadius: 'var(--mantine-radius-sm)',
-                borderLeft: `3px solid ${catppuccin.yellow}`,
-              }}
-            >
-              <Group gap="xs" mb={6}>
-                <IconStarFilled size={12} color={catppuccin.yellow} />
-                <Text size="xs" fw={600} tt="uppercase" c="dimmed">
-                  Risk/Return (PRAAMS) replacement suggestions
-                </Text>
-              </Group>
-              <Stack gap={4}>
-                {replacement.improveOverall
-                  .slice(0, REPLACEMENTS_TO_SHOW)
-                  .map((c) => (
-                    <ReplacementRow key={c.assetId ?? c.ticker} candidate={c} />
-                  ))}
-              </Stack>
-            </Box>
-          </Grid.Col>
+        {recommendation && (
+          <Box
+            p="sm"
+            style={{
+              background: catppuccin.base,
+              borderRadius: 'var(--mantine-radius-sm)',
+              borderLeft: `3px solid ${recommendation.action === 'buy' ? catppuccin.green : catppuccin.red}`,
+            }}
+          >
+            <Group gap="sm">
+              <Badge
+                color={recommendation.action === 'buy' ? 'green' : 'red'}
+                variant="filled"
+                size="sm"
+              >
+                {recommendation.action.toUpperCase()}
+              </Badge>
+              <Text size="xs">
+                {formatCurrency(Math.abs(recommendation.value_delta_eur))}
+                {recommendation.action === 'sell' && quantity > 0 && (
+                  <Text span c="dimmed"> ({Math.round((recommendation.quantity / quantity) * 100)}%)</Text>
+                )}
+              </Text>
+            </Group>
+            <Text size="xs" c="dimmed" mt={4}>{recommendation.reason}</Text>
+          </Box>
         )}
-      </Grid>
+
+        <Box style={{ overflowX: 'auto' }}>
+          <Table
+            withRowBorders={false}
+            style={{
+              width: '100%',
+              minWidth: 520,
+            }}
+          >
+            <Table.Tbody>
+              {opportunityRows.map((row) => (
+                <Table.Tr key={row.map((item) => item.label).join('-')}>
+                  {row.map((item) => (
+                    <Fragment key={item.label}>
+                      <Table.Th
+                        scope="row"
+                        style={{ padding: '2px 12px 2px 0', fontWeight: 400 }}
+                      >
+                        <Text size="xs" c="dimmed">{item.label}</Text>
+                      </Table.Th>
+                      <Table.Td
+                        ta="right"
+                        style={{
+                          padding: '2px 32px 2px 0',
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        <Text size="xs" fw={500}>{item.value}</Text>
+                      </Table.Td>
+                    </Fragment>
+                  ))}
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Box>
+      </Stack>
     </Box>
   );
 }

@@ -172,3 +172,7 @@ export const getPortfolioPeriodStats = () => request('/portfolio/period-stats');
 
 // Portfolio composition + risk/return metrics (replaces freedom24 PRAAMS)
 export const getPortfolioComposition = () => request('/portfolio/composition');
+
+// Forecasts
+export const getForecastStatus = () => request('/forecasts/status');
+export const getSecurityForecast = (symbol) => request(`/forecasts/${encodeURIComponent(symbol)}`);

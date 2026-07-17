@@ -59,7 +59,11 @@ if [ ! -d "$VENV_DIR" ]; then
     log "Creating virtual environment..."
     python3 -m venv "$VENV_DIR"
     "$VENV_DIR/bin/pip" install --upgrade pip --quiet
-    "$VENV_DIR/bin/pip" install . --quiet
+    if systemctl is-enabled --quiet sentinel-forecasting 2>/dev/null || systemctl is-active --quiet sentinel-forecasting 2>/dev/null; then
+        "$VENV_DIR/bin/pip" install '.[forecasting]' --quiet
+    else
+        "$VENV_DIR/bin/pip" install . --quiet
+    fi
     log "Virtual environment created and dependencies installed"
 fi
 
@@ -79,17 +83,23 @@ DEPS_HASH_BEFORE=$(md5sum pyproject.toml | cut -d' ' -f1)
 git pull origin "$BRANCH" --quiet
 log "Pulled latest changes"
 
-# Update deps if pyproject.toml changed
+# Update deps if pyproject.toml changed. The forecasting service is optional
+# and carries heavy model dependencies, so only install its extra when that
+# systemd unit is already enabled or running on the device.
 DEPS_HASH_AFTER=$(md5sum pyproject.toml | cut -d' ' -f1)
 if [ "$DEPS_HASH_BEFORE" != "$DEPS_HASH_AFTER" ]; then
     log "pyproject.toml changed, updating dependencies..."
-    "$VENV_DIR/bin/pip" install . --quiet
+    if systemctl is-enabled --quiet sentinel-forecasting 2>/dev/null || systemctl is-active --quiet sentinel-forecasting 2>/dev/null; then
+        "$VENV_DIR/bin/pip" install '.[forecasting]' --quiet
+    else
+        "$VENV_DIR/bin/pip" install . --quiet
+    fi
     log "Dependencies updated"
 fi
 
 # Update systemd units if changed
 UNITS_CHANGED=false
-for unit in sentinel.service sentinel-deploy.service sentinel-deploy.timer; do
+for unit in sentinel.service sentinel-forecasting.service sentinel-deploy.service sentinel-deploy.timer; do
     if ! diff -q "$REPO_DIR/systemd/$unit" "/etc/systemd/system/$unit" &>/dev/null; then
         sudo cp "$REPO_DIR/systemd/$unit" "/etc/systemd/system/$unit"
         UNITS_CHANGED=true
@@ -120,4 +130,8 @@ fi
 # Restart the app
 log "Restarting sentinel..."
 sudo systemctl restart sentinel
+if systemctl is-active --quiet sentinel-forecasting 2>/dev/null; then
+    log "Restarting sentinel-forecasting..."
+    sudo systemctl restart sentinel-forecasting
+fi
 log "Deploy complete ($(git rev-parse --short HEAD))"

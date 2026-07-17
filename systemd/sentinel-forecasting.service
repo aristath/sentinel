@@ -1,0 +1,17 @@
+[Unit]
+Description=Sentinel Time-Series Forecasting Service
+After=network.target
+
+[Service]
+Type=simple
+User=arduino
+WorkingDirectory=/home/arduino/sentinel
+ExecStart=/home/arduino/sentinel/.venv/bin/uvicorn sentinel.forecasting.service:app --host 127.0.0.1 --port 8010
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+Environment=FORECASTING_PROVIDER=toto2
+Environment=FORECASTING_MODEL_ID=Datadog/Toto-2.0-1B
+
+[Install]
+WantedBy=multi-user.target

@@ -23,3 +23,26 @@ export function buildSmoothPath(pts) {
 
   return d;
 }
+
+export function buildUsefulYAxisDomain(
+  values,
+  {
+    paddingRatio = 0.04,
+    minPadding = 0,
+    fallback = [0, 1],
+  } = {}
+) {
+  const finiteValues = (Array.isArray(values) ? values : []).filter((value) => Number.isFinite(value));
+  if (finiteValues.length === 0) return fallback;
+
+  const minValue = Math.min(...finiteValues);
+  const maxValue = Math.max(...finiteValues);
+
+  if (minValue === maxValue) {
+    const padding = Math.max(Math.abs(minValue) * paddingRatio, minPadding, 1);
+    return [minValue - padding, maxValue + padding];
+  }
+
+  const padding = Math.max((maxValue - minValue) * paddingRatio, minPadding);
+  return [minValue - padding, maxValue + padding];
+}

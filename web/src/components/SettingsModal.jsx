@@ -14,8 +14,9 @@ import {
   Group,
   Button,
   Divider,
+  Switch,
 } from '@mantine/core';
-import { IconSettings, IconCoin, IconBrain, IconKey, IconCloudUpload } from '@tabler/icons-react';
+import { IconSettings, IconCoin, IconBrain, IconKey, IconCloudUpload, IconChartLine } from '@tabler/icons-react';
 import { getSettings, updateSetting, updateSettingsBatch } from '../api/client';
 
 export function SettingsModal({ opened, onClose }) {
@@ -94,6 +95,9 @@ export function SettingsModal({ opened, onClose }) {
             </Tabs.Tab>
             <Tabs.Tab value="strategy" leftSection={<IconBrain size={16} />}>
               Strategy
+            </Tabs.Tab>
+            <Tabs.Tab value="forecasting" leftSection={<IconChartLine size={16} />}>
+              Forecasts
             </Tabs.Tab>
             <Tabs.Tab value="api" leftSection={<IconKey size={16} />}>
               API
@@ -407,6 +411,117 @@ export function SettingsModal({ opened, onClose }) {
                 onChange={(value) => handleChange('strategy_rotation_time_stop_days', value)}
                 min={1}
                 max={365}
+              />
+            </Stack>
+          </Tabs.Panel>
+
+          <Tabs.Panel value="forecasting" pt="md">
+            <Stack gap="md">
+              <Switch
+                label="Forecast timing"
+                description="Use stored time-series forecasts as a bounded opportunity-score modifier"
+                checked={Boolean(settings?.forecasting_enabled ?? true)}
+                onChange={(event) => handleChange('forecasting_enabled', event.currentTarget.checked)}
+              />
+
+              <TextInput
+                label="Forecasting Service URL"
+                value={settings?.forecasting_service_url || 'http://127.0.0.1:8010'}
+                onChange={(e) => handleChange('forecasting_service_url', e.target.value)}
+              />
+
+              <Select
+                label="Provider"
+                value={settings?.forecasting_provider || 'toto2'}
+                onChange={(value) => handleChange('forecasting_provider', value)}
+                data={[
+                  { value: 'toto2', label: 'Toto 2.0' },
+                  { value: 'naive', label: 'Naive local test provider' },
+                ]}
+              />
+
+              <TextInput
+                label="Model ID"
+                value={settings?.forecasting_model_id || 'Datadog/Toto-2.0-1B'}
+                onChange={(e) => handleChange('forecasting_model_id', e.target.value)}
+              />
+
+              <NumberInput
+                label="Horizon"
+                description="Forecast horizon in weekly steps"
+                value={settings?.forecasting_horizon_weeks ?? 4}
+                onChange={(value) => handleChange('forecasting_horizon_weeks', value)}
+                min={1}
+                max={52}
+                suffix=" weeks"
+              />
+
+              <NumberInput
+                label="Context"
+                description="Maximum weekly return history sent to the model"
+                value={settings?.forecasting_context_weeks ?? 520}
+                onChange={(value) => handleChange('forecasting_context_weeks', value)}
+                min={104}
+                max={1040}
+                suffix=" weeks"
+              />
+
+              <NumberInput
+                label="Minimum History"
+                value={settings?.forecasting_min_history_weeks ?? 104}
+                onChange={(value) => handleChange('forecasting_min_history_weeks', value)}
+                min={52}
+                max={520}
+                suffix=" weeks"
+              />
+
+              <NumberInput
+                label="Max Group Variates"
+                description="Maximum securities in one grouped multivariate request"
+                value={settings?.forecasting_max_group_variates ?? 32}
+                onChange={(value) => handleChange('forecasting_max_group_variates', value)}
+                min={1}
+                max={256}
+              />
+
+              <NumberInput
+                label="Stale Price Limit"
+                value={settings?.forecasting_stale_after_days ?? 21}
+                onChange={(value) => handleChange('forecasting_stale_after_days', value)}
+                min={1}
+                max={120}
+                suffix=" days"
+              />
+
+              <NumberInput
+                label="Max Missing Input"
+                description="Forecast run fails above this unusable-symbol ratio"
+                value={(settings?.forecasting_max_missing_ratio ?? 0.25) * 100}
+                onChange={(value) => handleChange('forecasting_max_missing_ratio', (value ?? 0) / 100)}
+                min={0}
+                max={100}
+                decimalScale={1}
+                suffix="%"
+              />
+
+              <NumberInput
+                label="Score Freshness"
+                description="Planner ignores forecast scores older than this"
+                value={settings?.forecasting_score_max_age_days ?? 14}
+                onChange={(value) => handleChange('forecasting_score_max_age_days', value)}
+                min={1}
+                max={90}
+                suffix=" days"
+              />
+
+              <NumberInput
+                label="Timing Weight"
+                description="Maximum absolute opportunity-score adjustment from stored forecasts"
+                value={settings?.forecasting_timing_weight ?? 0.15}
+                onChange={(value) => handleChange('forecasting_timing_weight', value)}
+                min={0}
+                max={0.5}
+                decimalScale={3}
               />
             </Stack>
           </Tabs.Panel>

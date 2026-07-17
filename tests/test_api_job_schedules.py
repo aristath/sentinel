@@ -39,7 +39,7 @@ async def test_get_job_schedules_returns_all(db):
     """GET /api/jobs/schedules should return all schedules."""
     schedules = await db.get_job_schedules()
 
-    assert len(schedules) == 17
+    assert len(schedules) == 19
 
     # Check structure (no longer has enabled, dependencies, is_parameterized fields)
     schedule = schedules[0]
@@ -190,6 +190,8 @@ async def test_all_job_types_present(db):
         "trading:execute",
         "trading:rebalance",
         "planning:refresh",
+        "forecast:run",
+        "forecast:evaluate",
         "backup:r2",
     ]
 
@@ -206,5 +208,5 @@ async def test_categories_present(db):
     schedules = await db.get_job_schedules()
     categories = set(s["category"] for s in schedules)
 
-    expected = {"sync", "trading", "backup"}
+    expected = {"sync", "trading", "forecast", "backup"}
     assert categories == expected

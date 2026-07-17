@@ -13,6 +13,7 @@ from typing import Any
 from sentinel.broker import Broker
 from sentinel.currency import Currency
 from sentinel.database import Database
+from sentinel.forecasting.scoring import adjusted_opportunity_score
 from sentinel.portfolio import Portfolio
 from sentinel.price_validator import PriceValidator, check_trade_blocking
 from sentinel.settings import DEFAULTS, Settings
@@ -132,6 +133,9 @@ class RebalanceEngine:
             "strategy_fallback_wait_days": DEFAULTS["strategy_fallback_wait_days"],
             "strategy_coarse_max_new_lots_per_cycle": DEFAULTS["strategy_coarse_max_new_lots_per_cycle"],
             "cooldown_enabled": DEFAULTS["cooldown_enabled"],
+            "forecasting_enabled": DEFAULTS["forecasting_enabled"],
+            "forecasting_score_max_age_days": DEFAULTS["forecasting_score_max_age_days"],
+            "forecasting_timing_weight": DEFAULTS["forecasting_timing_weight"],
         }
         keys = list(defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, defaults[k]) for k in keys])
@@ -214,6 +218,16 @@ class RebalanceEngine:
         security_data = {}
 
         all_symbols = list(set(list(ideal.keys()) + list(current.keys())))
+        forecast_scores: dict[str, dict] = {}
+        if as_of_date is None and bool(settings_ctx.get("forecasting_enabled", True)):
+            forecast_getter = getattr(self._db, "get_latest_forecast_scores", None)
+            if callable(forecast_getter):
+                max_age_seconds = int(settings_ctx["forecasting_score_max_age_days"] * 86400)
+                maybe_scores = forecast_getter(all_symbols, scope="combined", max_age_seconds=max_age_seconds)
+                if inspect.isawaitable(maybe_scores):
+                    maybe_scores = await maybe_scores
+                if isinstance(maybe_scores, dict):
+                    forecast_scores = maybe_scores
 
         # Fetch all data in parallel for performance
         if as_of_date is not None:
@@ -337,6 +351,8 @@ class RebalanceEngine:
                 signal = dict(cached_signal)
                 raw_score = float(signal.get("opp_score_raw", signal.get("opp_score", 0.0)) or 0.0)
                 effective_score = float(signal.get("opp_score", 0.0) or 0.0)
+                if "opp_score_pre_forecast" in signal:
+                    effective_score = float(signal.get("opp_score_pre_forecast", effective_score) or 0.0)
                 if "dd252_recent_min" not in signal:
                     signal["dd252_recent_min"] = recent_dd252_min(closes, window_days=entry_memory_days)
                 signal["memory_boosted"] = int(signal.get("memory_boosted", 0) or 0)
@@ -354,8 +370,23 @@ class RebalanceEngine:
                     max_boost=memory_max_boost,
                 )
                 signal["opp_score_raw"] = raw_score
-                signal["opp_score"] = effective_score
                 signal["memory_boosted"] = 1 if effective_score > raw_score else 0
+            signal["opp_score_pre_forecast"] = effective_score
+            forecast = forecast_scores.get(symbol) or {}
+            forecast_score = forecast.get("score")
+            adjusted_score = effective_score
+            if int(signal.get("freefall_block", 0) or 0) != 1:
+                adjusted_score = adjusted_opportunity_score(
+                    current_opp_score=effective_score,
+                    forecast_score=float(forecast_score) if forecast_score is not None else None,
+                    weight=settings_ctx["forecasting_timing_weight"],
+                )
+            signal["opp_score"] = adjusted_score
+            if forecast:
+                signal["forecast_score"] = float(forecast.get("score") or 0.5)
+                signal["forecast_return_4w"] = float(forecast.get("forecast_return_4w") or 0.0)
+                signal["forecast_updated_at"] = int(forecast.get("updated_at") or 0)
+            effective_score = adjusted_score
             contrarian_scores[symbol] = effective_score
 
             # Check for price anomaly using already prepared close series.

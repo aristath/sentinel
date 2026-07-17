@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 from sentinel.currency import Currency
 from sentinel.database import Database
+from sentinel.forecasting.scoring import adjusted_opportunity_score
 from sentinel.planner.preferences import (
     apply_max_cap,
     normalize_user_multiplier,
@@ -76,6 +77,9 @@ class AllocationCalculator:
             "clara_preference_strength": DEFAULTS["clara_preference_strength"],
             "user_multiplier_decay_factor": DEFAULTS["user_multiplier_decay_factor"],
             "user_multiplier_decay_interval_days": DEFAULTS["user_multiplier_decay_interval_days"],
+            "forecasting_enabled": DEFAULTS["forecasting_enabled"],
+            "forecasting_score_max_age_days": DEFAULTS["forecasting_score_max_age_days"],
+            "forecasting_timing_weight": DEFAULTS["forecasting_timing_weight"],
         }
         keys = list(keys_defaults.keys())
         values = await asyncio.gather(*[self._settings.get(k, keys_defaults[k]) for k in keys])
@@ -117,12 +121,24 @@ class AllocationCalculator:
         memory_max_boost = config["strategy_memory_max_boost"]
         preference_strength = config["clara_preference_strength"]
         ideal_qualifying_threshold = config["strategy_ideal_qualifying_threshold"]
+        forecasting_enabled = bool(config["forecasting_enabled"])
+        forecast_timing_weight = config["forecasting_timing_weight"]
 
         symbol_signals: dict[str, dict[str, float | int | str]] = {}
         rebalance_signals: dict[str, dict[str, float | int | str]] = {}
         clara_raw_weights: dict[str, float] = {}
         preference_details: dict[str, dict[str, float]] = {}
         symbols = [sec["symbol"] for sec in securities]
+        forecast_scores: dict[str, dict] = {}
+        if as_of_date is None and forecasting_enabled:
+            forecast_getter = getattr(self._db, "get_latest_forecast_scores", None)
+            if callable(forecast_getter):
+                max_age_seconds = int(config["forecasting_score_max_age_days"] * 86400)
+                maybe_scores = forecast_getter(symbols, scope="combined", max_age_seconds=max_age_seconds)
+                if inspect.isawaitable(maybe_scores):
+                    maybe_scores = await maybe_scores
+                if isinstance(maybe_scores, dict):
+                    forecast_scores = maybe_scores
         prices_by_symbol: dict[str, list[dict]] | None = None
         get_prices_multi = getattr(self._db, "get_prices_for_symbols", None)
         if callable(get_prices_multi):
@@ -163,7 +179,21 @@ class AllocationCalculator:
             )
             signal["opp_score_raw"] = raw_opp
             signal["dd252_recent_min"] = recent_min
-            signal["opp_score"] = effective_opp
+            signal["opp_score_pre_forecast"] = effective_opp
+            forecast = forecast_scores.get(symbol) or {}
+            forecast_score = forecast.get("score")
+            adjusted_opp = effective_opp
+            if int(signal.get("freefall_block", 0) or 0) != 1:
+                adjusted_opp = adjusted_opportunity_score(
+                    current_opp_score=effective_opp,
+                    forecast_score=float(forecast_score) if forecast_score is not None else None,
+                    weight=forecast_timing_weight,
+                )
+            signal["opp_score"] = adjusted_opp
+            if forecast:
+                signal["forecast_score"] = float(forecast.get("score") or 0.5)
+                signal["forecast_return_4w"] = float(forecast.get("forecast_return_4w") or 0.0)
+                signal["forecast_updated_at"] = int(forecast.get("updated_at") or 0)
             signal["memory_boosted"] = 1 if effective_opp > raw_opp else 0
 
             symbol_signals[symbol] = signal

@@ -4,6 +4,7 @@ Each router handles a specific domain of the API.
 """
 
 from sentinel.api.routers.backup import router as backup_router
+from sentinel.api.routers.forecasts import router as forecasts_router
 from sentinel.api.routers.jobs import router as jobs_router
 from sentinel.api.routers.jobs import set_scheduler
 from sentinel.api.routers.planner import router as planner_router
@@ -40,6 +41,7 @@ __all__ = [
     "jobs_router",
     "set_scheduler",
     "backup_router",
+    "forecasts_router",
     "system_router",
     "cache_router",
     "backtest_router",

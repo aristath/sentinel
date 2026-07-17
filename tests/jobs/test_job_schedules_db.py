@@ -200,7 +200,7 @@ async def test_seed_default_job_schedules_inserts_all(db):
     await db.seed_default_job_schedules()
 
     schedules = await db.get_job_schedules()
-    assert len(schedules) == 17
+    assert len(schedules) == 19
 
     # Check some specific defaults
     portfolio = await db.get_job_schedule("sync:portfolio")
@@ -213,6 +213,10 @@ async def test_seed_default_job_schedules_inserts_all(db):
     rebalance = await db.get_job_schedule("trading:rebalance")
     assert rebalance is not None
     assert rebalance["category"] == "trading"
+
+    forecast = await db.get_job_schedule("forecast:run")
+    assert forecast is not None
+    assert forecast["category"] == "forecast"
 
 
 @pytest.mark.asyncio

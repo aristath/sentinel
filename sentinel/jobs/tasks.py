@@ -12,6 +12,7 @@ import time
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import Any
 
 from sentinel.markets import get_open_market_symbols
 from sentinel.planner.models import TradeRecommendation
@@ -22,6 +23,17 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 SUBMITTED_TRADE_STATE_KEY = "submitted_trade"
 HISTORICAL_PRICE_SYNC_CHUNK_SIZE = 8
+FORECAST_QUANTILE_KEYS = {
+    "0.1": "q10",
+    "0.2": "q20",
+    "0.3": "q30",
+    "0.4": "q40",
+    "0.5": "q50",
+    "0.6": "q60",
+    "0.7": "q70",
+    "0.8": "q80",
+    "0.9": "q90",
+}
 
 
 # -----------------------------------------------------------------------------
@@ -543,6 +555,259 @@ async def snapshot_backfill(db, currency) -> None:
 
     service = SnapshotService(db, currency)
     await service.backfill()
+
+
+# -----------------------------------------------------------------------------
+# Forecast Tasks
+# -----------------------------------------------------------------------------
+
+
+def _forecast_group_key(security: dict) -> tuple[str, str]:
+    return (
+        str(security.get("geography") or "unknown"),
+        str(security.get("industry") or "unknown"),
+    )
+
+
+def _forecast_batches(
+    securities: list[dict],
+    series_by_symbol: dict[str, list],
+    *,
+    context_weeks: int,
+    max_group_variates: int,
+) -> list[dict]:
+    from sentinel.forecasting import align_weekly_return_series
+
+    batches = []
+    for symbol, series in series_by_symbol.items():
+        values = [point.value for point in series[-context_weeks:]]
+        batches.append(
+            {
+                "scope": "solo",
+                "symbols": [symbol],
+                "values": [values],
+                "masks": [[True] * len(values)],
+            }
+        )
+
+    grouped: dict[tuple[str, str], list[str]] = {}
+    for sec in securities:
+        symbol = sec["symbol"]
+        if symbol in series_by_symbol:
+            grouped.setdefault(_forecast_group_key(sec), []).append(symbol)
+
+    max_group_variates = max(1, int(max_group_variates))
+    for symbols in grouped.values():
+        symbols = sorted(symbols)
+        if len(symbols) < 2:
+            continue
+        for chunk in _chunks(symbols, max_group_variates):
+            aligned = align_weekly_return_series(
+                {symbol: series_by_symbol[symbol] for symbol in chunk},
+                max_points=context_weeks,
+            )
+            batches.append(
+                {
+                    "scope": "grouped",
+                    "symbols": chunk,
+                    "values": [[float(row["value"]) for row in aligned[symbol]] for symbol in chunk],
+                    "masks": [[bool(row["mask"]) for row in aligned[symbol]] for symbol in chunk],
+                }
+            )
+    return batches
+
+
+def _points_and_scores_from_forecast(run_id: int, payload: dict, horizon_steps: int) -> tuple[list[dict], list[dict]]:
+    import math
+
+    from sentinel.forecasting import combine_forecast_scores, score_forecast_return
+
+    points: list[dict] = []
+    scope_scores_by_symbol: dict[str, dict[str, dict[str, Any]]] = {}
+
+    for batch in payload.get("batches", []):
+        scope = batch.get("scope")
+        forecasts = batch.get("forecasts") or {}
+        if scope not in {"solo", "grouped"} or not isinstance(forecasts, dict):
+            continue
+        for symbol, rows in forecasts.items():
+            cumulative = {key: 0.0 for key in FORECAST_QUANTILE_KEYS.values()}
+            final_point = None
+            for row in rows:
+                step = int(row.get("step") or 0)
+                quantiles = row.get("quantiles") or {}
+                point = {"run_id": run_id, "symbol": symbol, "scope": scope, "horizon_step": step}
+                for level, key in FORECAST_QUANTILE_KEYS.items():
+                    value = float(quantiles.get(level, 0.0) or 0.0)
+                    cumulative[key] += value
+                    point[key] = value
+                    point[f"cumulative_{key}"] = math.exp(cumulative[key]) - 1.0
+                points.append(point)
+                if step == horizon_steps:
+                    final_point = point
+            if final_point is None and rows:
+                final_point = points[-1]
+            if final_point is None:
+                continue
+
+            scored = score_forecast_return(
+                median_return=final_point.get("cumulative_q50"),
+            )
+            scope_score = {
+                "run_id": run_id,
+                "symbol": symbol,
+                "scope": scope,
+                "forecast_return_4w": final_point.get("cumulative_q50"),
+                "q10_return_4w": final_point.get("cumulative_q10"),
+                "q90_return_4w": final_point.get("cumulative_q90"),
+                "score": scored["score"],
+                "agreement": 1.0,
+            }
+            scope_scores_by_symbol.setdefault(symbol, {})[scope] = scope_score
+
+    scores: list[dict[str, Any]] = [
+        score for by_scope in scope_scores_by_symbol.values() for score in by_scope.values()
+    ]
+    for symbol, by_scope in scope_scores_by_symbol.items():
+        combined = combine_forecast_scores(by_scope)
+        if combined is None:
+            continue
+        scores.append({"run_id": run_id, "symbol": symbol, "scope": "combined", **combined})
+    return points, scores
+
+
+async def forecast_run(db) -> None:
+    """Generate scheduled time-series forecasts for active securities."""
+    from sentinel.forecasting import build_weekly_return_series
+    from sentinel.forecasting.client import ForecastingClient
+    from sentinel.settings import Settings
+
+    settings = Settings()
+    enabled = bool(await settings.get("forecasting_enabled", True))
+    if not enabled:
+        logger.info("Forecasting disabled")
+        return
+
+    provider = str(await settings.get("forecasting_provider", "toto2") or "toto2")
+    model_id = str(await settings.get("forecasting_model_id", "Datadog/Toto-2.0-1B") or "Datadog/Toto-2.0-1B")
+    service_url = str(await settings.get("forecasting_service_url", "http://127.0.0.1:8010") or "")
+    horizon_weeks = int(await settings.get("forecasting_horizon_weeks", 4) or 4)
+    context_weeks = int(await settings.get("forecasting_context_weeks", 520) or 520)
+    min_history_weeks = int(await settings.get("forecasting_min_history_weeks", 104) or 104)
+    max_group_variates = int(await settings.get("forecasting_max_group_variates", 32) or 32)
+    stale_after_days = int(await settings.get("forecasting_stale_after_days", 21) or 21)
+    max_missing_ratio = float(await settings.get("forecasting_max_missing_ratio", 0.25) or 0.25)
+
+    if not service_url:
+        raise RuntimeError("forecasting_service_url is empty")
+
+    run_id = await db.create_forecast_run(
+        provider=provider,
+        model_id=model_id,
+        model_version=None,
+        input_frequency="1w_log_return",
+        horizon_steps=horizon_weeks,
+        context_weeks=context_weeks,
+        metadata={"scope": "solo+grouped"},
+    )
+
+    try:
+        securities = await db.get_all_securities(active_only=True)
+        symbols = [sec["symbol"] for sec in securities]
+        if not symbols:
+            raise RuntimeError("No active securities available for forecasting")
+
+        price_rows = await db.get_prices_bulk(symbols, days=(context_weeks + 2) * 7)
+        today = datetime.now(timezone.utc).date()
+        series_by_symbol = {}
+        missing_symbols: list[str] = []
+        stale_symbols: list[str] = []
+        for symbol in symbols:
+            series = build_weekly_return_series(price_rows.get(symbol, []), max_points=context_weeks)
+            if len(series) < min_history_weeks:
+                missing_symbols.append(symbol)
+                continue
+            last_seen = datetime.fromisoformat(series[-1].week_end).date()
+            if (today - last_seen).days > stale_after_days:
+                stale_symbols.append(symbol)
+                continue
+            series_by_symbol[symbol] = series
+
+        unusable = sorted(set(missing_symbols + stale_symbols))
+        missing_ratio = len(unusable) / len(symbols)
+        if missing_ratio > max_missing_ratio:
+            raise RuntimeError(
+                f"Forecast input coverage too low: {len(unusable)}/{len(symbols)} unusable symbols "
+                f"(missing={missing_symbols}, stale={stale_symbols})"
+            )
+        if not series_by_symbol:
+            raise RuntimeError("No securities have enough fresh history for forecasting")
+
+        batches = _forecast_batches(
+            securities,
+            series_by_symbol,
+            context_weeks=context_weeks,
+            max_group_variates=max_group_variates,
+        )
+        client = ForecastingClient(base_url=service_url)
+        payload = await client.forecast(
+            provider=provider,
+            model_id=model_id,
+            horizon_steps=horizon_weeks,
+            batches=batches,
+        )
+        points, scores = _points_and_scores_from_forecast(run_id, payload, horizon_weeks)
+        if not points or not scores:
+            raise RuntimeError("Forecasting service returned no usable forecast points")
+        await db.store_forecast_points(points)
+        await db.store_forecast_scores(scores)
+        await db.finish_forecast_run(run_id, status="completed", model_version=payload.get("model_version"))
+        await db.invalidate_planner_cache()
+        logger.info(
+            "Forecast run complete: run=%s, symbols=%s, batches=%s, unusable=%s",
+            run_id,
+            len(series_by_symbol),
+            len(batches),
+            len(unusable),
+        )
+    except Exception as exc:
+        await db.finish_forecast_run(run_id, status="failed", error=str(exc))
+        raise
+
+
+async def forecast_evaluate(db) -> None:
+    """Evaluate matured forecasts against realized 4-week returns."""
+    from sentinel.forecasting import realized_return_after_weeks
+    from sentinel.settings import Settings
+
+    settings = Settings()
+    horizon_weeks = int(await settings.get("forecasting_horizon_weeks", 4) or 4)
+    candidates = await db.get_mature_forecasts_for_evaluation(horizon_steps=horizon_weeks)
+    if not candidates:
+        logger.info("No matured forecasts to evaluate")
+        return
+
+    symbols = sorted({row["symbol"] for row in candidates})
+    price_rows = await db.get_prices_bulk(symbols, days=36500)
+    evaluated = 0
+    for row in candidates:
+        actual = realized_return_after_weeks(
+            price_rows.get(row["symbol"], []),
+            start_ts=int(row["started_at"]),
+            horizon_weeks=horizon_weeks,
+        )
+        if actual is None:
+            continue
+        await db.store_forecast_evaluation(
+            run_id=int(row["run_id"]),
+            symbol=row["symbol"],
+            scope=row["scope"],
+            horizon_steps=horizon_weeks,
+            forecast_return=float(row["forecast_return"]),
+            actual_return=float(actual),
+        )
+        evaluated += 1
+    logger.info("Forecast evaluation complete: %s/%s evaluated", evaluated, len(candidates))
 
 
 # Trading Tasks

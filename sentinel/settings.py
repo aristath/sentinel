@@ -73,6 +73,20 @@ DEFAULTS = {
     "strategy_max_funding_sells_per_cycle": 2,
     "strategy_max_funding_turnover_pct": 0.12,
     "strategy_funding_conviction_bias": 1.0,
+    # Model-agnostic time-series forecasting layer. The first provider is Toto
+    # 2.0, but planner/database/API names stay provider-neutral.
+    "forecasting_enabled": True,
+    "forecasting_service_url": "http://127.0.0.1:8010",
+    "forecasting_provider": "toto2",
+    "forecasting_model_id": "Datadog/Toto-2.0-1B",
+    "forecasting_horizon_weeks": 4,
+    "forecasting_context_weeks": 520,
+    "forecasting_min_history_weeks": 104,
+    "forecasting_max_group_variates": 32,
+    "forecasting_stale_after_days": 21,
+    "forecasting_max_missing_ratio": 0.25,
+    "forecasting_score_max_age_days": 14,
+    "forecasting_timing_weight": 0.15,
     # User-conviction target. The stored `user_multiplier` slider value defines
     # long-term relative weights and decays toward neutral (0.5) by
     # `user_multiplier_decay_factor` every

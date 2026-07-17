@@ -16,6 +16,10 @@ python main.py
 # Run web server + background scheduler
 python main.py --all
 
+# Optional: run the model-agnostic forecasting service
+pip install '.[forecasting]'
+uvicorn sentinel.forecasting.service:app --host 127.0.0.1 --port 8010
+
 # Run tests
 pytest
 
@@ -47,6 +51,7 @@ npm run dev  # http://localhost:5173
 - 📊 **Contrarian Strategy** - Deterministic signals based on price cycles
 - 🎯 **Smart Rebalancing** - Patience-first approach with deposit-aware scheduling
 - 📈 **Portfolio Analytics** - Risk/return metrics, composition breakdowns
+- 🔭 **Time-Series Forecasts** - Optional forecast service for monthly timing signals
 - 🔒 **Safety Guards** - Price anomaly detection, position limits, fee awareness
 - 🌍 **Multi-Currency** - Automatic FX conversion and multi-currency support
 
@@ -68,6 +73,12 @@ npm run dev  # http://localhost:5173
 │   Broker    │   Planner    │   Strategy   │   Cache     │
 │  (TraderNet)│ (Rebalance)  │(Contrarian)  │   (TTL)     │
 └─────────────┴──────────────┴──────────────┴─────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│          Optional Forecasting Service (port 8010)        │
+│      model-agnostic API; first provider is Toto 2.0      │
+└─────────────────────────────────────────────────────────┘
                             │
                             ▼
 ┌─────────────────────────────────────────────────────────┐
@@ -105,6 +116,7 @@ Live execution treats each `trading:execute` run as a fresh decision window: syn
 | `PortfolioComposition` | Analytics: country/industry breakdowns, risk metrics |
 | `Planner` | Clara-weighted twelve-month targets with opportunity-timed recommendations |
 | `Contrarian` | Deterministic cycle-based trading signals |
+| `Forecasting` | Scheduled weekly-return forecasts that gently modify timing |
 | `DepositHistory` | Cashflow analytics for self-correction timing |
 | `PriceValidator` | Anomaly detection and interpolation |
 | `Broker` | TraderNet API wrapper with rate limiting |
@@ -112,7 +124,7 @@ Live execution treats each `trading:execute` run as a fresh decision window: syn
 ## Deployment
 
 - **Docker**: `docker-compose.yml` for Arduino UNO Q
-- **Systemd**: Service files in `systemd/`
+- **Systemd**: Service files in `systemd/`; `sentinel-forecasting.service` is optional
 - **Auto-deploy**: Direct to main branch
 
 ## License

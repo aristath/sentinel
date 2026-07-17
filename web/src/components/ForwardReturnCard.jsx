@@ -2,8 +2,8 @@
  * Forward Return Card
  *
  * Visualises `initial.return[]` from the freedom24 PRAAMS analysis: indexed
- * portfolio value (Today = 100) projected 1-5 years ahead, with the
- * confidence band drawn behind the central total-return line.
+ * portfolio value (Today = 100) projected 1-5 years ahead, with the range band
+ * drawn behind the central total-return line.
  *
  * Renders nothing if structure data isn't available (no creds / upstream
  * down).
@@ -22,6 +22,7 @@ import {
 } from 'recharts';
 import { catppuccin } from '../theme';
 import { usePortfolioStructure } from '../hooks/usePortfolioStructure';
+import { buildUsefulYAxisDomain } from '../utils/chartUtils';
 
 function fmt(v) {
   return typeof v === 'number' ? v.toFixed(1) : v;
@@ -46,7 +47,7 @@ function ChartTooltip({ active, payload, label }) {
         Total return: {fmt(row.totalReturn)}
       </div>
       <div style={{ color: 'var(--mantine-color-gray-5)' }}>
-        Range: {fmt(row.confidenceLow)} – {fmt(row.confidenceHigh)}
+        Range: {fmt(row.rangeLow)} – {fmt(row.rangeHigh)}
       </div>
     </div>
   );
@@ -62,15 +63,20 @@ export function ForwardReturnCard() {
       .map((p) => ({
         label: p.label,
         totalReturn: p.totalReturn,
-        confidenceLow: p.confidenceLow,
-        confidenceHigh: p.confidenceHigh,
+        rangeLow: p.confidenceLow,
+        rangeHigh: p.confidenceHigh,
         // Recharts area requires a single value; we synthesize a "spread"
-        // by stacking confidenceLow + (high - low) so the Area sits between
-        // the two confidence bounds.
+        // by stacking low + (high - low) so the Area sits between bounds.
         bandLow: p.confidenceLow,
         bandSpread: Math.max(0, (p.confidenceHigh ?? 0) - (p.confidenceLow ?? 0)),
       }));
   }, [data]);
+  const yDomain = useMemo(
+    () => buildUsefulYAxisDomain(series.flatMap((point) => [point.rangeLow, point.totalReturn, point.rangeHigh]), {
+      minPadding: 1,
+    }),
+    [series]
+  );
 
   if (isLoading || isError || !data || series.length === 0) return null;
 
@@ -100,7 +106,7 @@ export function ForwardReturnCard() {
           <Stack gap={0}>
             <Text size="xs" c="dimmed">5Y range</Text>
             <Text size="md" fw={500}>
-              {fmt(last?.confidenceLow - 100)}% to {fmt(last?.confidenceHigh - 100)}%
+              {fmt(last?.rangeLow - 100)}% to {fmt(last?.rangeHigh - 100)}%
             </Text>
           </Stack>
         </Group>
@@ -115,12 +121,12 @@ export function ForwardReturnCard() {
               />
               <YAxis
                 tick={{ fontSize: 10, fill: 'var(--mantine-color-gray-5)' }}
-                domain={['dataMin - 5', 'dataMax + 5']}
+                domain={yDomain}
+                allowDataOverflow
                 tickFormatter={(v) => `${Math.round(v)}`}
               />
               <Tooltip content={<ChartTooltip />} />
-              {/* Confidence band: stack the low + spread so the visible area
-                  occupies [low, high]. The low layer is transparent. */}
+              {/* Range band: stack the low + spread so the visible area occupies [low, high]. */}
               <Area
                 type="monotone"
                 dataKey="bandLow"

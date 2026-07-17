@@ -21,6 +21,7 @@ from sentinel.api.routers import (
     cache_router,
     cashflows_router,
     exchange_rates_router,
+    forecasts_router,
     jobs_router,
     led_router,
     markets_router,
@@ -198,6 +199,7 @@ app.include_router(cashflows_router, prefix="/api")
 app.include_router(trading_actions_router, prefix="/api")
 app.include_router(planner_router, prefix="/api")
 app.include_router(jobs_router, prefix="/api")
+app.include_router(forecasts_router, prefix="/api")
 app.include_router(backup_router, prefix="/api")
 app.include_router(system_router, prefix="/api")
 app.include_router(cache_router, prefix="/api")

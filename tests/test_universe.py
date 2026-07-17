@@ -50,9 +50,7 @@ def _broker_with_favorites(*symbols: str):
         }
     )
     broker.get_historical_prices_bulk = AsyncMock(
-        side_effect=lambda symbols, years=20: {
-            symbol: [{"date": "2026-01-01", "close": 100.0}] for symbol in symbols
-        }
+        side_effect=lambda symbols, years=20: {symbol: [{"date": "2026-01-01", "close": 100.0}] for symbol in symbols}
     )
     return broker
 

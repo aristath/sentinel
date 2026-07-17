@@ -762,6 +762,8 @@ class Database(BaseDatabase):
             ("trading:rebalance", 60, 60, 0, "trading", "Check portfolio rebalance needs"),
             ("trading:balance_fix", 15, 15, 0, "trading", "Fix negative currency balances"),
             ("planning:refresh", 60, 30, 0, "trading", "Refresh trading plan and recommendations"),
+            ("forecast:run", 10080, 10080, 3, "forecast", "Generate weekly time-series forecasts"),
+            ("forecast:evaluate", 1440, 1440, 0, "forecast", "Evaluate matured time-series forecasts"),
             ("backup:r2", 1440, 1440, 0, "backup", "Backup data folder to Cloudflare R2"),
         ]
 
@@ -799,6 +801,261 @@ class Database(BaseDatabase):
             (job_type + "%", limit),
         )
         return [dict(row) for row in await cursor.fetchall()]
+
+    # -------------------------------------------------------------------------
+    # Forecasting
+    # -------------------------------------------------------------------------
+
+    async def create_forecast_run(
+        self,
+        *,
+        provider: str,
+        model_id: str,
+        model_version: str | None,
+        input_frequency: str,
+        horizon_steps: int,
+        context_weeks: int,
+        metadata: dict[str, Any] | None = None,
+    ) -> int:
+        now = int(datetime.now(timezone.utc).timestamp())
+        cursor = await self.conn.execute(
+            """INSERT INTO forecast_runs
+               (provider, model_id, model_version, input_frequency, horizon_steps, context_weeks,
+                status, started_at, metadata)
+               VALUES (?, ?, ?, ?, ?, ?, 'running', ?, ?)""",
+            (
+                provider,
+                model_id,
+                model_version,
+                input_frequency,
+                horizon_steps,
+                context_weeks,
+                now,
+                json.dumps(metadata or {}),
+            ),
+        )
+        await self.conn.commit()
+        if cursor.lastrowid is None:
+            raise RuntimeError("Failed to create forecast run")
+        return int(cursor.lastrowid)
+
+    async def finish_forecast_run(
+        self,
+        run_id: int,
+        *,
+        status: str,
+        error: str | None = None,
+        model_version: str | None = None,
+    ) -> None:
+        now = int(datetime.now(timezone.utc).timestamp())
+        await self.conn.execute(
+            """UPDATE forecast_runs
+                  SET status = ?, completed_at = ?, error = ?, model_version = COALESCE(?, model_version)
+                WHERE id = ?""",
+            (status, now, error, model_version, run_id),
+        )
+        await self.conn.commit()
+
+    async def store_forecast_points(self, points: list[dict[str, Any]]) -> None:
+        if not points:
+            return
+        rows = []
+        for point in points:
+            rows.append(
+                (
+                    int(point["run_id"]),
+                    point["symbol"],
+                    point["scope"],
+                    int(point["horizon_step"]),
+                    point.get("q10"),
+                    point.get("q20"),
+                    point.get("q30"),
+                    point.get("q40"),
+                    point.get("q50"),
+                    point.get("q60"),
+                    point.get("q70"),
+                    point.get("q80"),
+                    point.get("q90"),
+                    point.get("cumulative_q10"),
+                    point.get("cumulative_q20"),
+                    point.get("cumulative_q30"),
+                    point.get("cumulative_q40"),
+                    point.get("cumulative_q50"),
+                    point.get("cumulative_q60"),
+                    point.get("cumulative_q70"),
+                    point.get("cumulative_q80"),
+                    point.get("cumulative_q90"),
+                )
+            )
+        await self.conn.executemany(
+            """INSERT OR REPLACE INTO forecast_points
+               (run_id, symbol, scope, horizon_step,
+                q10, q20, q30, q40, q50, q60, q70, q80, q90,
+                cumulative_q10, cumulative_q20, cumulative_q30, cumulative_q40, cumulative_q50,
+                cumulative_q60, cumulative_q70, cumulative_q80, cumulative_q90)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows,
+        )
+        await self.conn.commit()
+
+    async def store_forecast_scores(self, scores: list[dict[str, Any]]) -> None:
+        if not scores:
+            return
+        now = int(datetime.now(timezone.utc).timestamp())
+        rows = [
+            (
+                score["symbol"],
+                score["scope"],
+                int(score["run_id"]),
+                score.get("forecast_return_4w"),
+                score.get("q10_return_4w"),
+                score.get("q90_return_4w"),
+                score.get("agreement"),
+                score.get("score"),
+                now,
+            )
+            for score in scores
+        ]
+        await self.conn.executemany(
+            """INSERT OR REPLACE INTO forecast_scores
+               (symbol, scope, run_id, forecast_return_4w, q10_return_4w, q90_return_4w,
+                agreement, score, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            rows,
+        )
+        await self.conn.commit()
+
+    async def get_latest_forecast_scores(
+        self,
+        symbols: list[str] | None = None,
+        *,
+        scope: str = "combined",
+        max_age_seconds: int | None = None,
+    ) -> dict[str, dict]:
+        where = ["fs.scope = ?"]
+        params: list[Any] = [scope]
+        if symbols:
+            placeholders = ",".join("?" for _ in symbols)
+            where.append(f"fs.symbol IN ({placeholders})")  # noqa: S608
+            params.extend(symbols)
+        if max_age_seconds is not None:
+            cutoff = int(datetime.now(timezone.utc).timestamp()) - int(max_age_seconds)
+            where.append("fs.updated_at >= ?")
+            params.append(cutoff)
+        cursor = await self.conn.execute(
+            f"""SELECT fs.*, fr.provider, fr.model_id, fr.model_version, fr.started_at, fr.completed_at
+                  FROM forecast_scores fs
+                  JOIN forecast_runs fr ON fr.id = fs.run_id
+                 WHERE {" AND ".join(where)}
+                 ORDER BY fs.updated_at DESC""",  # noqa: S608
+            params,
+        )
+        result = {}
+        for row in await cursor.fetchall():
+            item = dict(row)
+            item.pop("confidence", None)
+            result[row["symbol"]] = item
+        return result
+
+    async def get_latest_forecast_run(self) -> dict | None:
+        cursor = await self.conn.execute("SELECT * FROM forecast_runs ORDER BY started_at DESC, id DESC LIMIT 1")
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def get_forecast_status_counts(self) -> dict[str, int]:
+        cursor = await self.conn.execute(
+            """SELECT status, COUNT(*) AS count FROM forecast_runs
+               GROUP BY status"""
+        )
+        return {row["status"]: int(row["count"]) for row in await cursor.fetchall()}
+
+    async def get_latest_forecast_points(self, symbol: str) -> dict[str, list[dict]]:
+        cursor = await self.conn.execute(
+            """WITH latest AS (
+                   SELECT scope, MAX(run_id) AS run_id
+                     FROM forecast_points
+                    WHERE symbol = ?
+                    GROUP BY scope
+               )
+               SELECT fp.*
+                 FROM forecast_points fp
+                 JOIN latest l ON l.scope = fp.scope AND l.run_id = fp.run_id
+                WHERE fp.symbol = ?
+                ORDER BY fp.scope, fp.horizon_step""",
+            (symbol, symbol),
+        )
+        grouped: dict[str, list[dict]] = {}
+        for row in await cursor.fetchall():
+            grouped.setdefault(row["scope"], []).append(dict(row))
+        return grouped
+
+    async def get_forecast_evaluation_summary(self, symbol: str) -> dict:
+        cursor = await self.conn.execute(
+            """SELECT COUNT(*) AS count,
+                      AVG(abs_error) AS mean_abs_error,
+                      AVG(direction_hit) AS direction_hit_rate
+                 FROM forecast_evaluations
+                WHERE symbol = ?""",
+            (symbol,),
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else {"count": 0, "mean_abs_error": None, "direction_hit_rate": None}
+
+    async def get_mature_forecasts_for_evaluation(self, *, horizon_steps: int) -> list[dict]:
+        now = int(datetime.now(timezone.utc).timestamp())
+        cutoff = now - (int(horizon_steps) * 7 * 86400)
+        cursor = await self.conn.execute(
+            """SELECT fp.run_id, fp.symbol, fp.scope, fp.cumulative_q50 AS forecast_return,
+                      fr.started_at, fr.horizon_steps
+                 FROM forecast_points fp
+                 JOIN forecast_runs fr ON fr.id = fp.run_id
+                 LEFT JOIN forecast_evaluations fe
+                   ON fe.run_id = fp.run_id
+                  AND fe.symbol = fp.symbol
+                  AND fe.scope = fp.scope
+                  AND fe.horizon_steps = fp.horizon_step
+                WHERE fp.horizon_step = ?
+                  AND fr.status = 'completed'
+                  AND fr.started_at <= ?
+                  AND fe.run_id IS NULL""",
+            (horizon_steps, cutoff),
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def store_forecast_evaluation(
+        self,
+        *,
+        run_id: int,
+        symbol: str,
+        scope: str,
+        horizon_steps: int,
+        forecast_return: float,
+        actual_return: float,
+    ) -> None:
+        now = int(datetime.now(timezone.utc).timestamp())
+        error = forecast_return - actual_return
+        direction_hit = int(
+            (forecast_return >= 0 and actual_return >= 0) or (forecast_return < 0 and actual_return < 0)
+        )
+        await self.conn.execute(
+            """INSERT OR REPLACE INTO forecast_evaluations
+               (run_id, symbol, scope, horizon_steps, forecast_return, actual_return,
+                error, abs_error, direction_hit, evaluated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                run_id,
+                symbol,
+                scope,
+                horizon_steps,
+                forecast_return,
+                actual_return,
+                error,
+                abs(error),
+                direction_hit,
+                now,
+            ),
+        )
+        await self.conn.commit()
 
     # -------------------------------------------------------------------------
     # Schema
@@ -1018,6 +1275,85 @@ CREATE INDEX IF NOT EXISTS idx_cash_flows_date ON cash_flows(date);
 CREATE INDEX IF NOT EXISTS idx_cash_flows_type ON cash_flows(type_id);
 CREATE INDEX IF NOT EXISTS idx_job_history_job_type_executed_at ON job_history(job_type, executed_at DESC);
 CREATE INDEX IF NOT EXISTS idx_job_history_job_id_executed_at ON job_history(job_id, executed_at DESC);
+
+-- Model-agnostic time-series forecasts. Forecasts are generated on a schedule
+-- and treated as dated artifacts, never as live planner side effects.
+CREATE TABLE IF NOT EXISTS forecast_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    model_version TEXT,
+    input_frequency TEXT NOT NULL,
+    horizon_steps INTEGER NOT NULL,
+    context_weeks INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'failed')),
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    error TEXT,
+    metadata TEXT NOT NULL DEFAULT '{}'
+);
+
+CREATE TABLE IF NOT EXISTS forecast_points (
+    run_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK(scope IN ('solo', 'grouped')),
+    horizon_step INTEGER NOT NULL,
+    q10 REAL,
+    q20 REAL,
+    q30 REAL,
+    q40 REAL,
+    q50 REAL,
+    q60 REAL,
+    q70 REAL,
+    q80 REAL,
+    q90 REAL,
+    cumulative_q10 REAL,
+    cumulative_q20 REAL,
+    cumulative_q30 REAL,
+    cumulative_q40 REAL,
+    cumulative_q50 REAL,
+    cumulative_q60 REAL,
+    cumulative_q70 REAL,
+    cumulative_q80 REAL,
+    cumulative_q90 REAL,
+    PRIMARY KEY (run_id, symbol, scope, horizon_step),
+    FOREIGN KEY (run_id) REFERENCES forecast_runs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS forecast_scores (
+    symbol TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK(scope IN ('solo', 'grouped', 'combined')),
+    run_id INTEGER NOT NULL,
+    forecast_return_4w REAL,
+    q10_return_4w REAL,
+    q90_return_4w REAL,
+    confidence REAL,
+    agreement REAL,
+    score REAL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (symbol, scope),
+    FOREIGN KEY (run_id) REFERENCES forecast_runs(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS forecast_evaluations (
+    run_id INTEGER NOT NULL,
+    symbol TEXT NOT NULL,
+    scope TEXT NOT NULL CHECK(scope IN ('solo', 'grouped')),
+    horizon_steps INTEGER NOT NULL,
+    forecast_return REAL NOT NULL,
+    actual_return REAL NOT NULL,
+    error REAL NOT NULL,
+    abs_error REAL NOT NULL,
+    direction_hit INTEGER NOT NULL,
+    evaluated_at INTEGER NOT NULL,
+    PRIMARY KEY (run_id, symbol, scope, horizon_steps),
+    FOREIGN KEY (run_id) REFERENCES forecast_runs(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_forecast_runs_started_at ON forecast_runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS idx_forecast_points_symbol_scope ON forecast_points(symbol, scope, run_id DESC);
+CREATE INDEX IF NOT EXISTS idx_forecast_scores_symbol_scope ON forecast_scores(symbol, scope);
+CREATE INDEX IF NOT EXISTS idx_forecast_evaluations_symbol ON forecast_evaluations(symbol, evaluated_at DESC);
 
 -- Portfolio snapshots (daily composition tracking — JSON blob)
 CREATE TABLE IF NOT EXISTS portfolio_snapshots (
