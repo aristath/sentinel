@@ -87,6 +87,36 @@ const DEFAULT_COLLAPSED_WIDGETS = {
   'forward-return': true,
 };
 
+export function hasDisabledTradePermission(security) {
+  return Number(security.allow_buy ?? 1) === 0 || Number(security.allow_sell ?? 1) === 0;
+}
+
+export function shouldShowSecurityForFilter(security, filter) {
+  switch (filter) {
+    case 'review': {
+      const allocationGap = Math.abs((security.ideal_allocation || 0) - (security.current_allocation || 0));
+      return (
+        Boolean(security.recommendation) ||
+        Boolean(security.price_warning) ||
+        hasDisabledTradePermission(security) ||
+        allocationGap > 0.5
+      );
+    }
+    case 'positions':
+      return Boolean(security.has_position);
+    case 'buys':
+      return security.recommendation?.action === 'buy';
+    case 'sells':
+      return security.recommendation?.action === 'sell';
+    case 'underweight':
+      return security.ideal_allocation - security.current_allocation > 0.5;
+    case 'overweight':
+      return security.current_allocation - security.ideal_allocation > 0.5;
+    default:
+      return true;
+  }
+}
+
 function readCollapsedWidgets() {
   if (typeof window === 'undefined') return {};
   try {
@@ -294,34 +324,7 @@ function UnifiedPage() {
       );
     }
 
-    // Apply filter
-    switch (filter) {
-      case 'review':
-        result = result.filter((s) => {
-          const allocationGap = Math.abs((s.ideal_allocation || 0) - (s.current_allocation || 0));
-          return (
-            Boolean(s.recommendation) ||
-            Boolean(s.price_warning) ||
-            allocationGap > 0.5
-          );
-        });
-        break;
-      case 'positions':
-        result = result.filter((s) => s.has_position);
-        break;
-      case 'buys':
-        result = result.filter((s) => s.recommendation?.action === 'buy');
-        break;
-      case 'sells':
-        result = result.filter((s) => s.recommendation?.action === 'sell');
-        break;
-      case 'underweight':
-        result = result.filter((s) => s.ideal_allocation - s.current_allocation > 0.5);
-        break;
-      case 'overweight':
-        result = result.filter((s) => s.current_allocation - s.ideal_allocation > 0.5);
-        break;
-    }
+    result = result.filter((s) => shouldShowSecurityForFilter(s, filter));
 
     // Apply sort
     result.sort((a, b) => {
