@@ -697,6 +697,7 @@ async def forecast_run(db) -> None:
     max_group_variates = int(await settings.get("forecasting_max_group_variates", 32) or 32)
     stale_after_days = int(await settings.get("forecasting_stale_after_days", 21) or 21)
     max_missing_ratio = float(await settings.get("forecasting_max_missing_ratio", 0.25) or 0.25)
+    timeout_seconds = max(1.0, float(await settings.get("forecasting_request_timeout_seconds", 840) or 840))
 
     if not service_url:
         raise RuntimeError("forecasting_service_url is empty")
@@ -749,7 +750,7 @@ async def forecast_run(db) -> None:
             context_weeks=context_weeks,
             max_group_variates=max_group_variates,
         )
-        client = ForecastingClient(base_url=service_url)
+        client = ForecastingClient(base_url=service_url, timeout_seconds=timeout_seconds)
         payload = await client.forecast(
             provider=provider,
             model_id=model_id,

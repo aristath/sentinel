@@ -117,6 +117,7 @@ class TestSettingsDefaults:
             "forecasting_max_missing_ratio",
             "forecasting_score_max_age_days",
             "forecasting_timing_weight",
+            "forecasting_request_timeout_seconds",
             "clara_preference_strength",
             "user_multiplier_decay_factor",
             "user_multiplier_decay_interval_days",

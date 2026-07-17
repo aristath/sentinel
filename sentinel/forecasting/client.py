@@ -44,5 +44,8 @@ class ForecastingClient:
                 response = await client.post("/forecast", json=payload)
                 response.raise_for_status()
                 return response.json()
+        except httpx.TimeoutException as exc:
+            raise ForecastingClientError(f"Forecasting service timed out after {self.timeout_seconds:g}s") from exc
         except httpx.HTTPError as exc:
-            raise ForecastingClientError(str(exc)) from exc
+            message = str(exc) or exc.__class__.__name__
+            raise ForecastingClientError(message) from exc

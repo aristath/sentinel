@@ -87,6 +87,7 @@ DEFAULTS = {
     "forecasting_max_missing_ratio": 0.25,
     "forecasting_score_max_age_days": 14,
     "forecasting_timing_weight": 0.15,
+    "forecasting_request_timeout_seconds": 840,
     # User-conviction target. The stored `user_multiplier` slider value defines
     # long-term relative weights and decays toward neutral (0.5) by
     # `user_multiplier_decay_factor` every
