@@ -81,6 +81,12 @@ def _serialize_plan(plan: LongTermPlan) -> dict:
                     else target.target_value_eur
                 ),
                 "sell_locked": target.sell_locked,
+                "current_quantity": target.current_quantity,
+                "target_quantity": target.target_quantity,
+                "quantity_delta": target.quantity_delta,
+                "price": target.price,
+                "currency": target.currency,
+                "lot_size": target.lot_size,
             }
             for target in plan.targets
         ],
@@ -117,7 +123,7 @@ async def get_recommendations(
         valid_for_minutes = schedule.get("interval_market_open_minutes") or schedule.get("interval_minutes")
 
     # Calculate summary with transaction fees
-    current_cash = await portfolio.total_cash_eur()
+    current_cash = long_term_plan.current_cash_eur
     fee_calc = FeeCalculator()
     trades = [{"action": r.action, "value_eur": abs(r.value_delta_eur)} for r in recommendations]
     fee_summary = await fee_calc.calculate_batch(trades)

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from sentinel.planner import Planner
-from sentinel.planner.models import PlannerState
+from sentinel.planner.models import PlannerState, TradeRecommendation
 from sentinel.planner.rebalance import RebalanceEngine
 from sentinel.settings import Settings
 
@@ -19,6 +19,42 @@ def clear_settings_singleton():
 
 
 class TestPlannerStateInputs:
+    @pytest.mark.asyncio
+    async def test_live_recommendations_use_portfolio_status_valuation(self, monkeypatch):
+        planner = Planner(db=MagicMock(), broker=MagicMock(), portfolio=MagicMock())
+        valuation = {
+            "positions": [
+                {
+                    "symbol": "AAA",
+                    "quantity": 4,
+                    "current_price": 125.0,
+                    "currency": "EUR",
+                    "value_eur": 500.0,
+                }
+            ],
+            "total_cash_eur": 250.0,
+        }
+        valuation_service = MagicMock()
+        valuation_service.current = AsyncMock(return_value=valuation)
+        monkeypatch.setattr(
+            "sentinel.planner.planner.PortfolioValuationService",
+            MagicMock(return_value=valuation_service),
+        )
+        planner._allocation_calculator.calculate_ideal_portfolio = AsyncMock(return_value={"AAA": 1.0})
+        planner._allocation_calculator.get_last_signal_bundle = MagicMock(return_value={})
+        planner._portfolio_analyzer.get_current_allocations = AsyncMock(side_effect=AssertionError("stale valuation"))
+        planner._portfolio_analyzer.get_total_value = AsyncMock(side_effect=AssertionError("stale valuation"))
+        planner._rebalance_engine.get_recommendations = AsyncMock(return_value=[])
+
+        await planner.get_recommendations()
+
+        planner._rebalance_engine.get_recommendations.assert_awaited_once()
+        call = cast(Any, planner._rebalance_engine.get_recommendations.await_args).kwargs
+        assert call["total_value"] == pytest.approx(750.0)
+        assert call["current"] == {"AAA": pytest.approx(2 / 3)}
+        assert call["state"].positions == valuation["positions"]
+        assert call["state"].cash_eur() == pytest.approx(250.0)
+
     @pytest.mark.asyncio
     async def test_get_recommendations_uses_supplied_eur_state(self):
         planner = Planner(db=MagicMock(), broker=MagicMock(), portfolio=MagicMock())
@@ -173,7 +209,7 @@ class TestRebalanceEngineStateInputs:
 
 
 class TestLongTermPlan:
-    def test_plan_projects_contributions_once_and_includes_zero_targets(self):
+    def test_plan_deploys_contributions_in_whole_lots_and_conserves_value(self):
         plan = Planner._build_long_term_plan(
             ideal={"AAA": 0.5},
             current={"AAA": 0.4, "LEGACY": 0.5},
@@ -186,6 +222,11 @@ class TestLongTermPlan:
             },
             avg_monthly_net_deposit_eur=500.0,
             as_of_date="2026-01-31",
+            security_data={
+                "AAA": {"price": 1_000.0, "fx_rate": 1.0, "lot_size": 1, "current_qty": 4},
+                "LEGACY": {"price": 500.0, "fx_rate": 1.0, "lot_size": 1, "current_qty": 10},
+            },
+            min_trade_value=400.0,
         )
 
         assert plan.horizon_months == 12
@@ -193,19 +234,21 @@ class TestLongTermPlan:
         assert plan.expected_contributions_eur == 6_000.0
         assert plan.terminal_portfolio_value_eur == 16_000.0
         assert plan.current_cash_eur == pytest.approx(1_000.0)
-        assert plan.target_cash_allocation == pytest.approx(0.5)
-        assert plan.target_cash_value_eur == pytest.approx(8_000.0)
+        assert plan.target_cash_allocation == pytest.approx(3_000.0 / 16_000.0)
+        assert plan.target_cash_value_eur == pytest.approx(3_000.0)
         assert sum(target.target_value_eur for target in plan.targets) + plan.target_cash_value_eur == pytest.approx(
             plan.terminal_portfolio_value_eur
         )
-        assert plan.cash_gap_eur == pytest.approx(7_000.0)
+        assert plan.cash_gap_eur == pytest.approx(2_000.0)
         targets = {target.symbol: target for target in plan.targets}
         assert targets["AAA"].target_value_eur == 8_000.0
         assert targets["AAA"].gap_eur == 4_000.0
-        assert targets["LEGACY"].target_value_eur == 0.0
-        assert targets["LEGACY"].gap_eur == -5_000.0
+        assert targets["AAA"].quantity_delta == 4
+        assert targets["AAA"].target_quantity == 8
+        assert targets["LEGACY"].target_value_eur == 5_000.0
+        assert targets["LEGACY"].gap_eur == 0.0
 
-    def test_plan_treats_no_sell_overweight_as_floor(self):
+    def test_plan_never_reduces_a_position_without_an_explicit_sell(self):
         plan = Planner._build_long_term_plan(
             ideal={"LOCKED": 0.4, "BUYME": 0.4},
             current={"LOCKED": 0.7, "BUYME": 0.1, "OTHER": 0.1},
@@ -224,6 +267,12 @@ class TestLongTermPlan:
                 "BUYME": {"allow_sell": 1},
                 "OTHER": {"allow_sell": 1},
             },
+            security_data={
+                "LOCKED": {"price": 100.0, "fx_rate": 1.0, "lot_size": 1, "current_qty": 70},
+                "BUYME": {"price": 100.0, "fx_rate": 1.0, "lot_size": 1, "current_qty": 10},
+                "OTHER": {"price": 100.0, "fx_rate": 1.0, "lot_size": 1, "current_qty": 10},
+            },
+            min_trade_value=400.0,
         )
 
         targets = {target.symbol: target for target in plan.targets}
@@ -235,41 +284,94 @@ class TestLongTermPlan:
 
         assert targets["BUYME"].target_value_eur == pytest.approx(2_000.0)
         assert targets["BUYME"].gap_eur == pytest.approx(1_000.0)
-        assert plan.target_cash_value_eur == pytest.approx(1_000.0)
+        assert targets["OTHER"].target_value_eur == pytest.approx(1_000.0)
+        assert targets["OTHER"].gap_eur == pytest.approx(0.0)
+        assert plan.target_cash_value_eur == pytest.approx(0.0)
         assert (sum(target.target_value_eur for target in plan.targets) + plan.target_cash_value_eur) == pytest.approx(
             plan.terminal_portfolio_value_eur
         )
 
-    def test_plan_rechecks_no_sell_floors_after_rescaling(self):
+    def test_plan_only_counts_explicit_sell_proceeds_and_applies_the_sell(self):
+        sell = TradeRecommendation(
+            symbol="OTHER",
+            action="sell",
+            current_allocation=0.2,
+            target_allocation=0.0,
+            allocation_delta=-0.05,
+            current_value_eur=2_000.0,
+            target_value_eur=0.0,
+            value_delta_eur=-500.0,
+            quantity=5,
+            price=100.0,
+            currency="EUR",
+            lot_size=1,
+            contrarian_score=0.0,
+            priority=1.0,
+            reason="test sell",
+        )
         plan = Planner._build_long_term_plan(
-            ideal={"LOCKED": 0.4, "SECOND": 0.1, "BUYME": 0.4},
-            current={"LOCKED": 0.7, "SECOND": 0.15, "BUYME": 0.05},
+            ideal={"LOCKED": 0.4, "BUYME": 0.4},
+            current={"LOCKED": 0.7, "OTHER": 0.2},
             total_value=10_000.0,
             signal_bundle={
                 "rebalance_signals": {
                     "LOCKED": {"user_multiplier": 0.8, "opp_score": 0.1},
-                    "SECOND": {"user_multiplier": 0.7, "opp_score": 0.2},
                     "BUYME": {"user_multiplier": 0.9, "opp_score": 0.8},
+                    "OTHER": {"user_multiplier": 0.5, "opp_score": 0.2},
                 }
             },
             avg_monthly_net_deposit_eur=0.0,
             as_of_date="2026-01-31",
             security_constraints={
                 "LOCKED": {"allow_sell": 0},
-                "SECOND": {"allow_sell": 0},
                 "BUYME": {"allow_sell": 1},
+                "OTHER": {"allow_sell": 1},
             },
+            security_data={
+                "LOCKED": {"price": 100.0, "fx_rate": 1.0, "lot_size": 1, "current_qty": 70},
+                "BUYME": {"price": 500.0, "fx_rate": 1.0, "lot_size": 1, "current_qty": 0},
+                "OTHER": {"price": 100.0, "fx_rate": 1.0, "lot_size": 1, "current_qty": 20},
+            },
+            recommendations=[sell],
+            min_trade_value=400.0,
         )
 
         targets = {target.symbol: target for target in plan.targets}
         assert targets["LOCKED"].sell_locked is True
         assert targets["LOCKED"].target_value_eur == pytest.approx(7_000.0)
         assert targets["LOCKED"].gap_eur == pytest.approx(0.0)
-        assert targets["SECOND"].sell_locked is True
-        assert targets["SECOND"].target_value_eur == pytest.approx(1_500.0)
-        assert targets["SECOND"].gap_eur == pytest.approx(0.0)
-        assert targets["BUYME"].target_value_eur == pytest.approx(1_200.0)
-        assert plan.target_cash_value_eur == pytest.approx(300.0)
+        assert targets["OTHER"].target_value_eur == pytest.approx(1_500.0)
+        assert targets["OTHER"].gap_eur == pytest.approx(-500.0)
+        assert targets["OTHER"].quantity_delta == pytest.approx(-5.0)
+        assert targets["BUYME"].target_value_eur == pytest.approx(1_500.0)
+        assert targets["BUYME"].quantity_delta == pytest.approx(3.0)
+        assert plan.target_cash_value_eur == pytest.approx(0.0)
         assert (sum(target.target_value_eur for target in plan.targets) + plan.target_cash_value_eur) == pytest.approx(
             plan.terminal_portfolio_value_eur
         )
+
+    def test_plan_never_publishes_a_fractional_unaffordable_asml_target(self):
+        plan = Planner._build_long_term_plan(
+            ideal={"ASML.EU": 755.69 / 10_000.0},
+            current={},
+            total_value=10_000.0,
+            signal_bundle={"rebalance_signals": {}},
+            avg_monthly_net_deposit_eur=0.0,
+            as_of_date="2026-07-20",
+            security_data={
+                "ASML.EU": {
+                    "price": 1_551.0,
+                    "fx_rate": 1.0,
+                    "lot_size": 1,
+                    "current_qty": 0,
+                    "allow_buy": 1,
+                }
+            },
+            min_trade_value=400.0,
+        )
+
+        target = plan.targets[0]
+        assert target.model_target_value_eur == pytest.approx(755.69)
+        assert target.target_value_eur == pytest.approx(0.0)
+        assert target.quantity_delta == pytest.approx(0.0)
+        assert plan.target_cash_value_eur == pytest.approx(10_000.0)

@@ -8,7 +8,7 @@ PLANNING_HORIZON_MONTHS = 12
 
 @dataclass(frozen=True)
 class LongTermTarget:
-    """Terminal target and current distance for one security."""
+    """Executable terminal target and current distance for one security."""
 
     symbol: str
     clara_score: float
@@ -20,11 +20,17 @@ class LongTermTarget:
     model_target_allocation: float | None = None
     model_target_value_eur: float | None = None
     sell_locked: bool = False
+    current_quantity: float = 0.0
+    target_quantity: float = 0.0
+    quantity_delta: float = 0.0
+    price: float | None = None
+    currency: str | None = None
+    lot_size: int | None = None
 
 
 @dataclass(frozen=True)
 class LongTermPlan:
-    """A fresh twelve-month portfolio destination, not a future trade schedule."""
+    """A whole-lot twelve-month deployment target seeded by today's trades."""
 
     as_of_date: str
     horizon_end_date: str

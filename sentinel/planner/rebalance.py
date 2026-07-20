@@ -83,6 +83,11 @@ class RebalanceEngine:
         self._settings = settings or Settings()
         self._currency = currency or Currency()
         self._deposit_history = DepositHistoryHelper(db=self._db, currency=self._currency)
+        self._last_security_data: dict[str, dict[str, Any]] = {}
+
+    def get_last_security_data(self) -> dict[str, dict[str, Any]]:
+        """Return the market context built by the most recent recommendation run."""
+        return {symbol: dict(data) for symbol, data in self._last_security_data.items()}
 
     async def _calculate_months_to_self_correct(
         self,
@@ -193,6 +198,8 @@ class RebalanceEngine:
         Returns:
             List of TradeRecommendation, sorted by priority
         """
+        self._last_security_data = {}
+
         # Get min_trade_value from settings if not provided
         if min_trade_value is None:
             setting_value = await self._settings.get("min_trade_value", default=100.0)
@@ -432,6 +439,8 @@ class RebalanceEngine:
                 "state": strategy_states.get(symbol) or {},
                 "is_downgrade": is_explicit_downgrade(sec) if sec else False,
             }
+
+        self._last_security_data = {symbol: dict(data) for symbol, data in security_data.items()}
 
         # Net contribution rate drives retirement-fund planning: target EUR
         # values are sized against the portfolio we expect after contributions.

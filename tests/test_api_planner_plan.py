@@ -29,6 +29,12 @@ def _plan() -> LongTermPlan:
                 current_value_eur=2_000.0,
                 target_value_eur=8_000.0,
                 gap_eur=6_000.0,
+                current_quantity=20,
+                target_quantity=80,
+                quantity_delta=60,
+                price=100.0,
+                currency="EUR",
+                lot_size=1,
             )
         ],
     )
@@ -99,12 +105,20 @@ async def test_recommendations_endpoint_includes_fixed_plan_snapshot():
         "model_target_allocation_pct": 50.0,
         "model_target_value_eur": 8_000.0,
         "sell_locked": False,
+        "current_quantity": 20,
+        "target_quantity": 80,
+        "quantity_delta": 60,
+        "price": 100.0,
+        "currency": "EUR",
+        "lot_size": 1,
     }
     assert result["recommendations"][0]["timing_eligible"] is True
     assert result["recommendations"][0]["target_gap_ratio"] == 0.75
     assert result["recommendations"][0]["is_fallback"] is False
     assert result["recommendations"][0]["reason_code"] is None
     assert result["summary"]["valid_for_minutes"] == 20
+    assert result["summary"]["current_cash"] == 1_000.0
+    portfolio.total_cash_eur.assert_not_awaited()
     planner.get_recommendations_with_plan.assert_awaited_once_with(
         min_trade_value=100.0,
         eligible_symbols={"AAA"},

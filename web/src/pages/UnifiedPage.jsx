@@ -773,19 +773,22 @@ function PlannerTape({ recommendations, longTermPlan, planSummary }) {
     ? [...securityTargets, cashTarget]
     : securityTargets;
   const targetItems = [...allTargets]
+    .filter((target) => Math.abs(Number(target.gap_eur || 0)) > 0.005)
     .sort((a, b) => Math.abs(Number(b.gap_eur || 0)) - Math.abs(Number(a.gap_eur || 0)))
     .slice(0, 6)
     .map((target) => {
       const gap = Number(target.gap_eur || 0);
-      const gapText = target.sell_locked ? 'locked' : `${gap >= 0 ? '+' : '-'}${formatEur(Math.abs(gap))}`;
+      const quantityDelta = Number(target.quantity_delta || 0);
+      const quantityText = !target.isCash && Math.abs(quantityDelta) > 0.0001
+        ? ` · ${quantityDelta > 0 ? '+' : '-'}${Math.abs(quantityDelta).toLocaleString()} sh`
+        : '';
+      const gapText = `${gap >= 0 ? '+' : '-'}${formatEur(Math.abs(gap))}${quantityText}`;
       return {
         key: `target-${target.symbol}`,
         tone: 'target',
         label: `${target.symbol} ${formatEur(target.target_value_eur)} (${gapText})`,
         title: target.isCash
-          ? 'Explicit cash allocation required by the target and position constraints'
-          : target.sell_locked
-            ? `No-sell floor; model target ${formatEur(target.model_target_value_eur || 0)}`
+          ? 'Cash left after deploying all affordable whole-lot purchases'
           : `Clara ${Number(target.clara_score || 0).toFixed(2)}, opportunity ${Number(target.opportunity_score || 0).toFixed(2)}`,
       };
     });

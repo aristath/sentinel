@@ -10,12 +10,14 @@ from __future__ import annotations
 
 from calendar import monthrange
 from datetime import date
+from math import ceil
 from typing import Any, Optional
 
 from sentinel.broker import Broker
 from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.portfolio import Portfolio
+from sentinel.services.valuation import PortfolioValuationService
 
 from .allocation import AllocationCalculator
 from .analyzer import PortfolioAnalyzer
@@ -106,6 +108,7 @@ class Planner:
         Returns:
             List of TradeRecommendation, sorted by priority
         """
+        state = await self._resolve_live_state(as_of_date=as_of_date, state=state)
         ideal, current, total_value, signal_bundle = await self._planning_inputs(
             as_of_date=as_of_date,
             state=state,
@@ -131,7 +134,8 @@ class Planner:
         track_fallback_state: bool = False,
         state: PlannerState | None = None,
     ) -> tuple[list[TradeRecommendation], LongTermPlan]:
-        """Generate today's actions and the twelve-month destination behind them."""
+        """Generate today's actions and a whole-lot twelve-month deployment target."""
+        state = await self._resolve_live_state(as_of_date=as_of_date, state=state)
         ideal, current, total_value, signal_bundle = await self._planning_inputs(
             as_of_date=as_of_date,
             state=state,
@@ -163,8 +167,31 @@ class Planner:
             avg_monthly_net_deposit_eur=avg_monthly_net_deposit_eur,
             as_of_date=as_of_date,
             security_constraints=security_constraints,
+            security_data=self._rebalance_engine.get_last_security_data(),
+            recommendations=recommendations,
+            min_trade_value=float(min_trade_value or 0.0),
+            current_cash_eur=state.cash_eur() if state is not None else None,
         )
         return recommendations, plan
+
+    async def _resolve_live_state(
+        self,
+        *,
+        as_of_date: str | None,
+        state: PlannerState | None,
+    ) -> PlannerState | None:
+        """Use the same account-and-quote valuation as the portfolio status API."""
+        if state is not None or as_of_date is not None:
+            return state
+        valuation = await PortfolioValuationService(
+            db=self._db,
+            broker=self._broker,
+            currency=self._currency,
+        ).current()
+        return PlannerState(
+            positions=list(valuation.get("positions") or []),
+            cash_balances={"EUR": float(valuation.get("total_cash_eur", 0.0) or 0.0)},
+        )
 
     async def _load_security_constraints(self) -> dict[str, dict[str, Any]]:
         securities = await self._db.get_all_securities(active_only=False)
@@ -197,6 +224,10 @@ class Planner:
         avg_monthly_net_deposit_eur: float,
         as_of_date: str | None,
         security_constraints: dict[str, dict[str, Any]] | None = None,
+        security_data: dict[str, dict[str, Any]] | None = None,
+        recommendations: list[TradeRecommendation] | None = None,
+        min_trade_value: float = 0.0,
+        current_cash_eur: float | None = None,
     ) -> LongTermPlan:
         plan_date = date.fromisoformat(as_of_date) if as_of_date else date.today()
         horizon_end = cls._add_months(plan_date, PLANNING_HORIZON_MONTHS)
@@ -207,74 +238,119 @@ class Planner:
             expected_contributions = 0.0
 
         signals = signal_bundle.get("rebalance_signals") or {}
-        current_invested_allocation = max(0.0, sum(float(value or 0.0) for value in current.values()))
-        current_cash_eur = max(0.0, total_value * (1.0 - current_invested_allocation))
-        model_invested_allocation = max(0.0, sum(float(value or 0.0) for value in ideal.values()))
-        model_cash_allocation = max(0.0, min(1.0, 1.0 - model_invested_allocation))
-        model_cash_value_eur = model_cash_allocation * terminal_value
+        if current_cash_eur is None:
+            current_invested_allocation = sum(float(value or 0.0) for value in current.values())
+            current_cash_eur = total_value * (1.0 - current_invested_allocation)
         security_constraints = security_constraints or {}
-        target_specs: list[dict[str, Any]] = []
-        for symbol in set(ideal) | set(current):
+        security_data = security_data or {}
+        recommendations = recommendations or []
+        recommendation_symbols = {recommendation.symbol for recommendation in recommendations}
+        target_specs: dict[str, dict[str, Any]] = {}
+        for symbol in set(ideal) | set(current) | recommendation_symbols:
             signal = signals.get(symbol) or {}
             raw_clara_score = signal.get("user_multiplier", 0.5)
             model_target_allocation = float(ideal.get(symbol, 0.0) or 0.0)
             current_value_eur = float(current.get(symbol, 0.0) or 0.0) * total_value
             model_target_value_eur = model_target_allocation * terminal_value
-            sec = security_constraints.get(symbol) or {}
+            sec = {**(security_constraints.get(symbol) or {}), **(security_data.get(symbol) or {})}
             allow_sell_raw = sec.get("allow_sell", 1)
             allow_sell = bool(1 if allow_sell_raw is None else int(allow_sell_raw))
-            target_specs.append(
-                {
-                    "symbol": symbol,
-                    "clara_score": float(0.5 if raw_clara_score is None else raw_clara_score),
-                    "opportunity_score": float(signal.get("opp_score", 0.0) or 0.0),
-                    "current_value_eur": current_value_eur,
-                    "model_target_allocation": model_target_allocation,
-                    "model_target_value_eur": model_target_value_eur,
-                    "sell_floor_value_eur": current_value_eur if not allow_sell else 0.0,
-                }
-            )
-
-        locked_indexes: set[int] = set()
-        unlocked_scale = 1.0
-        remaining_target_value_eur = terminal_value
-        unlocked_model_value_eur = model_cash_value_eur
-        while True:
-            locked_target_value_eur = sum(
-                float(target_specs[index]["sell_floor_value_eur"]) for index in locked_indexes
-            )
-            remaining_target_value_eur = max(0.0, terminal_value - locked_target_value_eur)
-            unlocked_model_value_eur = model_cash_value_eur + sum(
-                float(spec["model_target_value_eur"])
-                for index, spec in enumerate(target_specs)
-                if index not in locked_indexes
-            )
-            unlocked_scale = (
-                remaining_target_value_eur / unlocked_model_value_eur if unlocked_model_value_eur > 0 else 0.0
-            )
-            newly_locked = {
-                index
-                for index, spec in enumerate(target_specs)
-                if index not in locked_indexes
-                and float(spec["sell_floor_value_eur"]) > 0
-                and float(spec["model_target_value_eur"]) * unlocked_scale < float(spec["sell_floor_value_eur"])
+            allow_buy_raw = sec.get("allow_buy", 1)
+            allow_buy = bool(1 if allow_buy_raw is None else int(allow_buy_raw))
+            price = float(sec.get("price", 0.0) or 0.0)
+            fx_rate = float(sec.get("fx_rate", 1.0) or 1.0)
+            lot_size = max(1, int(sec.get("lot_size", sec.get("min_lot", 1)) or 1))
+            current_quantity = float(sec.get("current_qty", 0.0) or 0.0)
+            if current_quantity <= 0 and price > 0 and fx_rate > 0 and current_value_eur > 0:
+                current_quantity = current_value_eur / (price * fx_rate)
+            target_specs[symbol] = {
+                "symbol": symbol,
+                "clara_score": float(0.5 if raw_clara_score is None else raw_clara_score),
+                "opportunity_score": float(signal.get("opp_score", 0.0) or 0.0),
+                "current_value_eur": current_value_eur,
+                "target_value_eur": current_value_eur,
+                "current_quantity": current_quantity,
+                "target_quantity": current_quantity,
+                "model_target_allocation": model_target_allocation,
+                "model_target_value_eur": model_target_value_eur,
+                "allow_buy": allow_buy,
+                "sell_locked": not allow_sell,
+                "trade_blocked": bool(sec.get("trade_blocked", False)),
+                "price": price,
+                "currency": str(sec.get("currency", "EUR") or "EUR"),
+                "fx_rate": fx_rate,
+                "lot_size": lot_size,
+                "planned_buy_value_eur": 0.0,
             }
-            if not newly_locked:
-                break
-            locked_indexes.update(newly_locked)
 
-        target_cash_value_eur = (
-            model_cash_value_eur * unlocked_scale if unlocked_model_value_eur > 0 else remaining_target_value_eur
-        )
+        # The deployable budget consists only of cash, forecast contributions,
+        # and proceeds from the explicit sells in today's executable plan.
+        available_budget_eur = current_cash_eur + expected_contributions
+        for recommendation in recommendations:
+            if recommendation.action != "sell":
+                continue
+            spec = target_specs[recommendation.symbol]
+            sell_value = min(spec["target_value_eur"], abs(float(recommendation.value_delta_eur)))
+            sell_quantity = min(spec["target_quantity"], float(recommendation.quantity))
+            spec["target_value_eur"] -= sell_value
+            spec["target_quantity"] -= sell_quantity
+            available_budget_eur += sell_value
+
+        # Preserve today's explicit buys in the twelve-month target, then use
+        # the remaining horizon budget for additional whole-lot deployment.
+        for recommendation in recommendations:
+            if recommendation.action != "buy":
+                continue
+            spec = target_specs[recommendation.symbol]
+            buy_value = abs(float(recommendation.value_delta_eur))
+            if buy_value > available_budget_eur + 1e-9:
+                continue
+            spec["target_value_eur"] += buy_value
+            spec["target_quantity"] += float(recommendation.quantity)
+            spec["planned_buy_value_eur"] += buy_value
+            available_budget_eur -= buy_value
+
+        while available_budget_eur > 0:
+            best: tuple[float, str, float, int] | None = None
+            for symbol, spec in target_specs.items():
+                if not spec["allow_buy"] or spec["trade_blocked"]:
+                    continue
+                lot_value_eur = spec["price"] * spec["fx_rate"] * spec["lot_size"]
+                if lot_value_eur <= 0:
+                    continue
+                increment_lots = 1
+                if spec["planned_buy_value_eur"] <= 0 and min_trade_value > lot_value_eur:
+                    increment_lots = ceil(min_trade_value / lot_value_eur)
+                increment_value_eur = lot_value_eur * increment_lots
+                if increment_value_eur > available_budget_eur + 1e-9:
+                    continue
+                before_error = spec["model_target_value_eur"] - spec["target_value_eur"]
+                after_error = before_error - increment_value_eur
+                improvement = before_error**2 - after_error**2
+                if improvement <= 1e-9:
+                    continue
+                candidate = (improvement, symbol, increment_value_eur, increment_lots)
+                if (
+                    best is None
+                    or candidate[0] > best[0] + 1e-9
+                    or (abs(candidate[0] - best[0]) <= 1e-9 and candidate[1] < best[1])
+                ):
+                    best = candidate
+            if best is None:
+                break
+            _, symbol, increment_value_eur, increment_lots = best
+            spec = target_specs[symbol]
+            spec["target_value_eur"] += increment_value_eur
+            spec["target_quantity"] += increment_lots * spec["lot_size"]
+            spec["planned_buy_value_eur"] += increment_value_eur
+            available_budget_eur -= increment_value_eur
+
+        target_cash_value_eur = available_budget_eur
         target_cash_allocation = target_cash_value_eur / terminal_value if terminal_value > 0 else 0.0
 
         targets: list[LongTermTarget] = []
-        for index, spec in enumerate(target_specs):
-            sell_locked = index in locked_indexes
-            if sell_locked:
-                target_value_eur = spec["sell_floor_value_eur"]
-            else:
-                target_value_eur = spec["model_target_value_eur"] * unlocked_scale
+        for spec in target_specs.values():
+            target_value_eur = spec["target_value_eur"]
             target_allocation = target_value_eur / terminal_value if terminal_value > 0 else 0.0
             targets.append(
                 LongTermTarget(
@@ -287,7 +363,13 @@ class Planner:
                     gap_eur=target_value_eur - spec["current_value_eur"],
                     model_target_allocation=spec["model_target_allocation"],
                     model_target_value_eur=spec["model_target_value_eur"],
-                    sell_locked=sell_locked,
+                    sell_locked=spec["sell_locked"],
+                    current_quantity=spec["current_quantity"],
+                    target_quantity=spec["target_quantity"],
+                    quantity_delta=spec["target_quantity"] - spec["current_quantity"],
+                    price=spec["price"] or None,
+                    currency=spec["currency"],
+                    lot_size=spec["lot_size"],
                 )
             )
         targets.sort(key=lambda target: (-target.target_allocation, target.symbol))

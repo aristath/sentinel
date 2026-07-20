@@ -66,6 +66,7 @@ export function SecurityAllocationCard({ securities, recommendations, longTermPl
           postPlanAllocation: s.post_plan_allocation ?? s.current_allocation ?? 0,
           idealAllocation: target?.target_allocation_pct ?? s.ideal_allocation ?? 0,
           targetGap: Number(target?.gap_eur || 0),
+          quantityDelta: Number(target?.quantity_delta || 0),
           modelIdeal,
           sellLocked: Boolean(target?.sell_locked),
           isBuy,
@@ -150,9 +151,12 @@ export function SecurityAllocationCard({ securities, recommendations, longTermPl
                   const deltaWidth = maxValue > 0 ? (Math.abs(row.delta) / maxValue) * 100 : 0;
                   const idealPct = maxValue > 0 ? (row.ideal / maxValue) * 100 : 0;
                   const targetGapText = `${row.targetGap >= 0 ? '+' : '-'}${formatEur(Math.abs(row.targetGap))}`;
+                  const quantityText = Math.abs(row.quantityDelta || 0) > 0.0001
+                    ? `; ${row.quantityDelta > 0 ? '+' : '-'}${Math.abs(row.quantityDelta).toLocaleString()} shares`
+                    : '';
                   const idealTitle = row.sellLocked
-                    ? `No-sell floor: ${formatEur(row.ideal)}; model target: ${formatEur(row.modelIdeal)}`
-                    : `12-month target: ${formatEur(row.ideal)}; gap: ${targetGapText}`;
+                    ? `No-sell holding remains unchanged; model target: ${formatEur(row.modelIdeal)}`
+                    : `12-month target: ${formatEur(row.ideal)}; gap: ${targetGapText}${quantityText}`;
 
                   return (
                     <tr key={row.symbol}>
@@ -196,7 +200,7 @@ export function SecurityAllocationCard({ securities, recommendations, longTermPl
                           <span className="allocation-table__target">/ {formatPct(row.idealAllocation)}</span>
                         </div>
                         <div className="allocation-table__target-value">
-                          {formatEur(row.ideal)} · {row.sellLocked ? 'locked' : targetGapText}
+                          {formatEur(row.ideal)} · {row.sellLocked ? 'unchanged' : targetGapText}
                         </div>
                       </td>
                     </tr>
