@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/portfolio", tags=["portfolio"])
 
 PERIOD_WINDOWS = {"1D": 1, "1W": 7, "1M": 30, "3M": 90, "6M": 180, "1Y": 365}
+PNL_HISTORY_WINDOWS = {"3M": 90, "6M": 180, "1Y": 365, "ALL": None}
 BENCHMARK_MAX_STALENESS_DAYS = 5
 
 
@@ -479,9 +480,10 @@ async def get_portfolio_cagr(
 @router.get("/pnl-history")
 async def get_portfolio_pnl_history(
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+    period: str = "1Y",
 ) -> dict[str, Any]:
     """
-    Get portfolio P&L history for charting (hardcoded 1Y).
+    Get portfolio P&L history for the selected chart range.
 
     Snapshots store only positions + cash. All derived metrics
     (total_value, net_deposits, returns) are computed at query time via
@@ -489,11 +491,17 @@ async def get_portfolio_pnl_history(
     """
     from sentinel.portfolio_composition import build_daily_pnl
 
-    days = 365
+    period = period.upper()
+    if period not in PNL_HISTORY_WINDOWS:
+        allowed = ", ".join(PNL_HISTORY_WINDOWS)
+        raise HTTPException(status_code=400, detail=f"Invalid P&L period. Expected one of: {allowed}")
+    days = PNL_HISTORY_WINDOWS[period]
 
-    # Get daily snapshots (need extra 365 days for 1-year rolling window).
+    # Bounded ranges need an extra year to calculate the first rolling return.
+    # ALL deliberately reads the complete snapshot history.
     # Snapshot maintenance is handled by scheduled jobs; avoid backfill work on request path.
-    snapshots = await deps.db.get_portfolio_snapshots(days + 365)
+    snapshot_days = days + 365 if days is not None else None
+    snapshots = await deps.db.get_portfolio_snapshots(snapshot_days)
 
     if not snapshots:
         return {"snapshots": [], "summary": None}
@@ -532,14 +540,17 @@ async def get_portfolio_pnl_history(
             daily.append(live_point)
 
     # --- Build output with rolling TWR ---
-    start_date = (date_type.today() - timedelta(days=days)).isoformat()
-    output_start = 0
-    for idx, d in enumerate(daily):
-        if d["date"] >= start_date:
-            output_start = idx
-            break
     window = 365
-    output_start = max(output_start, window)
+    if days is None:
+        output_start = window
+    else:
+        start_date = (date_type.today() - timedelta(days=days)).isoformat()
+        output_start = 0
+        for idx, d in enumerate(daily):
+            if d["date"] >= start_date:
+                output_start = idx
+                break
+        output_start = max(output_start, window)
 
     last_daily_idx = len(daily) - 1
 
@@ -602,7 +613,8 @@ async def get_portfolio_pnl_history(
 
     benchmark_symbol = await deps.settings.get("performance_benchmark_symbol", "VWCE.EU")
     # The benchmark is an investable ETF held in the `prices` table (e.g. VWCE.EU).
-    benchmark_rows = await deps.db.get_prices(benchmark_symbol, days=days + 365 + 10)
+    benchmark_days = days + 365 + 10 if days is not None else None
+    benchmark_rows = await deps.db.get_prices(benchmark_symbol, days=benchmark_days)
     benchmark_returns = benchmark_rolling_returns(
         benchmark_rows or [],
         [s["date"] for s in result_snapshots],

@@ -61,6 +61,8 @@ const PERIODS = [
   { value: '10Y', label: '10Y' },
 ];
 
+const PNL_PERIODS = ['3M', '6M', '1Y', 'ALL'].map((value) => ({ value, label: value }));
+
 const FILTERS = [
   { value: 'review', label: 'Review' },
   { value: 'all', label: 'All Securities' },
@@ -138,6 +140,7 @@ function writeCollapsedWidgets(collapsedWidgets) {
 
 function UnifiedPage() {
   const [period, setPeriod] = useState('1Y');
+  const [pnlPeriod, setPnlPeriod] = useState('1Y');
   const [filter, setFilter] = useState('review');
   const [sort, setSort] = useState('priority');
   const [search, setSearch] = useState('');
@@ -187,8 +190,8 @@ function UnifiedPage() {
   });
 
   const { data: pnlData } = useQuery({
-    queryKey: ['portfolio-pnl'],
-    queryFn: () => getPortfolioPnLHistory(),
+    queryKey: ['portfolio-pnl', pnlPeriod],
+    queryFn: () => getPortfolioPnLHistory(pnlPeriod),
     refetchInterval: 300000, // Refresh every 5 minutes
   });
 
@@ -521,6 +524,17 @@ function UnifiedPage() {
             <Card shadow="sm" padding="sm" withBorder className="unified__pnl-chart">
               <Text size="sm" fw={500} mb="xs">Portfolio P&L</Text>
               <PeriodStatsTable stats={periodStats?.period_stats} />
+              <Group justify="flex-end" gap="xs" mt="xs" wrap="wrap">
+                <Text size="xs" c="dimmed">Chart range</Text>
+                <SegmentedControl
+                  aria-label="P/L chart period"
+                  value={pnlPeriod}
+                  onChange={setPnlPeriod}
+                  data={PNL_PERIODS}
+                  size="xs"
+                  className="unified__pnl-period-selector"
+                />
+              </Group>
               <PortfolioPnLChart
                 snapshots={pnlData?.snapshots || []}
                 summary={pnlData?.summary}

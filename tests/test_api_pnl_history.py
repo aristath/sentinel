@@ -34,6 +34,36 @@ class TestPnlHistoryResponseFormat:
     """Verify the response shape matches frontend expectations."""
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("period", "expected_snapshot_days"),
+        [("3M", 455), ("6M", 545), ("1Y", 730), ("ALL", None)],
+    )
+    async def test_chart_period_controls_snapshot_window(self, period, expected_snapshot_days):
+        from sentinel.api.routers.portfolio import get_portfolio_pnl_history
+
+        deps = MagicMock()
+        deps.db.get_portfolio_snapshots = AsyncMock(return_value=[])
+
+        result = await get_portfolio_pnl_history(deps, period=period)
+
+        assert result == {"snapshots": [], "summary": None}
+        deps.db.get_portfolio_snapshots.assert_awaited_once_with(expected_snapshot_days)
+
+    @pytest.mark.asyncio
+    async def test_chart_period_rejects_unknown_value(self):
+        from fastapi import HTTPException
+
+        from sentinel.api.routers.portfolio import get_portfolio_pnl_history
+
+        deps = MagicMock()
+
+        with pytest.raises(HTTPException, match="Invalid P&L period") as exc:
+            await get_portfolio_pnl_history(deps, period="5Y")
+
+        assert exc.value.status_code == 400
+        deps.db.get_portfolio_snapshots.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_empty_db_returns_empty(self, temp_db):
         """No snapshots returns empty response."""
         from sentinel.api.routers.portfolio import get_portfolio_pnl_history
