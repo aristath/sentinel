@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BB2SwyAS.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-DO5p6AJO.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2945,7 +2945,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-BB2SwyAS.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-DO5p6AJO.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6233,6 +6233,10 @@ customElements.define("sentinel-portfolio-status", SentinelPortfolioStatus);
 //#region src/sentinel-portfolio-value.js
 var CHECKPOINT_COUNT = 5;
 var CHECKPOINT_INTERVAL = 5;
+function formatSignedCurrency(value, currency = "EUR", fractionDigits = 0) {
+	if (value === null || value === void 0) return "-";
+	return `${value > 0 ? "+" : ""}${formatCurrency(value, currency, fractionDigits)}`;
+}
 function checkpointDates(currentDate) {
 	const current = /* @__PURE__ */ new Date(`${currentDate}T00:00:00Z`);
 	if (Number.isNaN(current.getTime())) return [];
@@ -6280,9 +6284,12 @@ var SentinelPortfolioValue = class extends i {
 		return b`
       <tui-flex wrap>
         <span style="white-space: nowrap">${startYear} to ${endYear}</span>
-        <span style="white-space: nowrap"
-          >&nbsp;&nbsp;P/L&nbsp;<tui-text variant=${pnlVariant}
-            >${formatPercent(summary.total_pnl_pct, 1)}</tui-text
+        <span
+          title="Cumulative profit: current portfolio value minus net funding; the percentage is relative to deposits minus withdrawals"
+          style="white-space: nowrap"
+          >&nbsp;&nbsp;Total P/L&nbsp;<tui-text variant=${pnlVariant}
+            >${formatSignedCurrency(summary.total_pnl_eur)}
+            (${formatPercent(summary.total_pnl_pct, 1)} of net funding)</tui-text
           ></span
         >
         <span style="white-space: nowrap"

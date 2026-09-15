@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-ByPMn19-.js","assets/dist-CFtxRP70.js","assets/dist-CzEUVXDC.js","assets/dist-Dp7zcg8q.js","assets/dist-n09HnSQH.js","assets/dist-CtgMfojb.js","assets/dist-CWt5MqEz.js","assets/dist-BCDxotJ1.js","assets/dist-BtjFFX5g.js","assets/dist-D8zCp1Lk.js","assets/dist-CYliqEuh.js","assets/dist-DOjPMnBQ.js","assets/dist-au17DMQY.js","assets/dist-B2J_1-Na.js","assets/dist-DwDnwnlH.js","assets/dist-CtvrPQL3.js","assets/dist-q1OvipzT.js","assets/dist-BLURfKbJ.js","assets/dist-CgAoKeyx.js","assets/dist-B1nGpcQK.js","assets/dist-jFV8Q6Ck.js","assets/dist-CvCpFeRI.js","assets/dist-Bj2N8gQv.js","assets/dockerfile-CIE65g0n.js","assets/simple-mode-BApxjfXS.js","assets/factor-BKz8VQZ5.js","assets/nsis-Bcd8y5Bg.js","assets/pug-DXvAcW6A.js","assets/javascript-vc8XVW5V.js","assets/dist-BpX2EKOq.js","assets/dist-BrlS-zD6.js"])))=>i.map(i=>d[i]);
-import { t as __vitePreload } from "./index-DaYFyqJa.js";
+import { t as __vitePreload } from "./index-D7x865b5.js";
 import { LanguageDescription, LanguageSupport, StreamLanguage } from "./dist-CFtxRP70.js";
 //#region node_modules/@codemirror/language-data/dist/index.js
 function legacy(parser) {

@@ -6,6 +6,18 @@ import { LiveResource } from "./live-resource.js";
 const CHECKPOINT_COUNT = 5;
 const CHECKPOINT_INTERVAL = 5;
 
+function formatSignedCurrency(value, currency = "EUR", fractionDigits = 0) {
+  if (value === null || value === undefined) {
+    return "-";
+  }
+
+  return `${value > 0 ? "+" : ""}${formatCurrency(
+    value,
+    currency,
+    fractionDigits,
+  )}`;
+}
+
 function checkpointDates(currentDate) {
   const current = new Date(`${currentDate}T00:00:00Z`);
 
@@ -87,9 +99,12 @@ class SentinelPortfolioValue extends LitElement {
     return html`
       <tui-flex wrap>
         <span style="white-space: nowrap">${startYear} to ${endYear}</span>
-        <span style="white-space: nowrap"
-          >&nbsp;&nbsp;P/L&nbsp;<tui-text variant=${pnlVariant}
-            >${formatPercent(summary.total_pnl_pct, 1)}</tui-text
+        <span
+          title="Cumulative profit: current portfolio value minus net funding; the percentage is relative to deposits minus withdrawals"
+          style="white-space: nowrap"
+          >&nbsp;&nbsp;Total P/L&nbsp;<tui-text variant=${pnlVariant}
+            >${formatSignedCurrency(summary.total_pnl_eur)}
+            (${formatPercent(summary.total_pnl_pct, 1)} of net funding)</tui-text
           ></span
         >
         <span style="white-space: nowrap"
