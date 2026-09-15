@@ -6,7 +6,9 @@ Base path: `/api/cashflows`
 
 ## `GET /api/cashflows`
 
-Returns an aggregated cash flow summary converted to EUR.
+Returns an aggregated cash flow summary converted to EUR. Deposits,
+withdrawals, dividends, and taxes use the exchange rate from each transaction
+date so historical totals do not drift with today's FX rate.
 
 **Response**
 ```json
@@ -29,7 +31,7 @@ Returns an aggregated cash flow summary converted to EUR.
 | `taxes` | Total taxes paid in EUR (positive number) |
 | `fees` | Total trading fees paid in EUR (positive number) |
 | `net_deposits` | `deposits - withdrawals` |
-| `total_profit` | Current portfolio value minus net deposits. Dividends and fees are already reflected in the portfolio value/cash balance. |
+| `total_profit` | Shared live portfolio value minus transaction-date net deposits. Dividends and fees are already reflected in the portfolio value/cash balance. |
 
 ---
 

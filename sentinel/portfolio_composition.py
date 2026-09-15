@@ -517,8 +517,8 @@ def daily_hprs(daily: list[dict], filter_outliers: bool = False) -> list[float]:
         hpr_t = (value_t - value_(t-1) - net_deposit_change_t) / value_(t-1)
 
     Skips days where the prior value is non-positive (the portfolio was
-    empty so there's no return to speak of). This is the same per-day
-    return formula `/api/portfolio/pnl-history` uses for its rolling TWR.
+    empty so there's no return to speak of). These daily approximations are
+    used for risk statistics, not the P&L chart's money-weighted return.
 
     `filter_outliers=True` drops HPRs above `HPR_RECONSTRUCTION_OUTLIER`
     in magnitude — see the constant's doc for why this is needed for vol
@@ -540,9 +540,9 @@ def daily_hprs(daily: list[dict], filter_outliers: bool = False) -> list[float]:
 def rolling_twr(daily: list[dict], window_days: int) -> float | None:
     """Time-weighted return over the most recent `window_days` of the series.
 
-    Compounds the deposit-adjusted daily HPRs the same way the pnl-history
-    endpoint does. Returns None when the window has fewer than 2 data points
-    or any prior value in the window is non-positive (the chain is undefined).
+    Compounds deposit-adjusted daily HPRs for the composition risk metrics.
+    Returns None when the window has fewer than 2 data points or any prior
+    value in the window is non-positive (the chain is undefined).
     """
     if len(daily) < 2:
         return None
@@ -629,8 +629,8 @@ def benchmark_rolling_returns(
 ) -> dict[str, float | None]:
     """Trailing-`window_days` price return (%) of a benchmark at each target date.
 
-    Mirrors the portfolio's rolling-1Y TWR line so the two can be plotted on the
-    same axis. For each target date `d` the return is
+    Provides the market-return context overlaid on the P&L chart. For each
+    target date `d` the return is
     `(close(d) / close(d - window_days) - 1) * 100`, using the most recent
     benchmark close on or before each point (the benchmark trades on different
     days than our snapshots). Returns `None` for a date when there isn't enough
@@ -639,7 +639,7 @@ def benchmark_rolling_returns(
     Args:
         benchmark_rows: ``[{"date": "YYYY-MM-DD", "close": float}, ...]`` (any order).
         target_dates: dates to evaluate the trailing return at.
-        window_days: lookback window (default 365, matching `actual_ann_return`).
+        window_days: lookback window (default 365).
     """
     points = sorted(
         ((r["date"], float(r["close"])) for r in benchmark_rows if r.get("close") is not None),

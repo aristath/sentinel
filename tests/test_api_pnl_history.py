@@ -129,6 +129,7 @@ class TestPnlHistoryResponseFormat:
             "pnl_eur",
             "pnl_pct",
             "actual_ann_return",
+            "rolling_365d_money_weighted_return_pct",
             "benchmark_ann_return",
         }
         assert expected_keys == set(snap.keys())
@@ -141,10 +142,47 @@ class TestPnlHistoryResponseFormat:
         assert "target_ann_return" in summary
         assert summary["target_ann_return"] == 11.0
         assert summary["benchmark_symbol"] == "VWCE.EU"
+        assert summary["trailing_365d_money_weighted_return_pct"] == summary["actual_ann_return"]
 
 
 class TestPnlHistoryComputations:
     """Verify derived values are computed correctly from JSON snapshots."""
+
+    @pytest.mark.asyncio
+    async def test_current_net_deposits_use_transaction_date_fx(self):
+        from sentinel.api.routers.portfolio import _current_net_deposits_eur
+
+        cash_flows = [
+            {
+                "date": "2025-01-01",
+                "type_id": "card",
+                "amount": 100.0,
+                "currency": "USD",
+            },
+            {
+                "date": "2025-06-01",
+                "type_id": "card_payout",
+                "amount": -10.0,
+                "currency": "USD",
+            },
+            {
+                "date": "2025-07-01",
+                "type_id": "dividend",
+                "amount": 5.0,
+                "currency": "USD",
+            },
+        ]
+        deps = MagicMock()
+        deps.db.get_cash_flows = AsyncMock(return_value=cash_flows)
+        rates = {"2025-01-01": 0.9, "2025-06-01": 0.8, "2025-07-01": 0.7}
+        deps.currency.to_eur_for_date = AsyncMock(
+            side_effect=lambda amount, currency, iso_date: amount * rates[iso_date]
+        )
+
+        result = await _current_net_deposits_eur(deps)
+
+        assert result == pytest.approx(82.0)
+        assert deps.currency.to_eur_for_date.await_count == 2
 
     @pytest.mark.asyncio
     async def test_total_value_from_positions_and_cash(self, temp_db):
@@ -217,6 +255,46 @@ class TestPnlHistoryComputations:
         for snap in result["snapshots"]:
             if snap["net_deposits_eur"] is not None:
                 assert snap["net_deposits_eur"] == 5000.0
+
+    @pytest.mark.asyncio
+    async def test_endpoint_365d_return_uses_opening_value_and_all_external_flows(self, temp_db):
+        from sentinel.api.routers.portfolio import get_portfolio_pnl_history
+
+        today = datetime.now(tz=timezone.utc).date()
+        start = today - timedelta(days=365)
+        deposit_date = start + timedelta(days=182)
+        for flow_date, flow_id in ((start, "initial"), (deposit_date, "later")):
+            await temp_db.upsert_cash_flow(
+                date=flow_date.isoformat(),
+                type_id="card",
+                amount=1000.0,
+                currency="EUR",
+                comment=None,
+                raw_data={"test": True, "id": flow_id},
+            )
+
+        for offset in range(366):
+            point_date = start + timedelta(days=offset)
+            value = 1000.0 if point_date < deposit_date else 2000.0
+            await temp_db.upsert_portfolio_snapshot(
+                _midnight_utc(point_date.isoformat()),
+                {"positions": {"TEST.EU": {"quantity": 1, "value_eur": value}}, "cash_eur": 0.0},
+            )
+
+        await temp_db.upsert_position("TEST.EU", quantity=1, current_price=2200.0, currency="EUR")
+        await temp_db.set_cash_balances({})
+        currency = MagicMock()
+        currency.to_eur_for_date = AsyncMock(side_effect=lambda amount, currency, date: amount)
+        currency.to_eur = AsyncMock(side_effect=lambda amount, currency: amount)
+        deps = MagicMock()
+        deps.db = temp_db
+        deps.currency = currency
+        deps.settings.get = AsyncMock(side_effect=lambda key, default=None: default)
+
+        result = await get_portfolio_pnl_history(deps)
+
+        rate = result["summary"]["trailing_365d_money_weighted_return_pct"] / 100.0
+        assert 1000.0 * (1.0 + rate) + 1000.0 * ((1.0 + rate) ** (183.0 / 365.0)) == pytest.approx(2200.0, abs=0.2)
 
     @pytest.mark.asyncio
     async def test_latest_point_uses_live_portfolio_value(self, temp_db):
@@ -348,6 +426,69 @@ class TestPnlHistoryComputations:
 
 class TestValueProjection:
     """Verify portfolio value history plus 10-year projection."""
+
+    def test_projection_run_rate_is_unavailable_without_external_contributions(self):
+        from sentinel.api.routers.portfolio import _projection_monthly_return
+
+        daily = [
+            {"date": "2025-01-01", "total_value_eur": 1000.0, "net_deposits_eur": 0.0},
+            {"date": "2026-01-01", "total_value_eur": 1100.0, "net_deposits_eur": 0.0},
+        ]
+
+        monthly_return, annualized_return, elapsed_months = _projection_monthly_return(daily)
+
+        assert monthly_return is None
+        assert annualized_return is None
+        assert elapsed_months == pytest.approx(12.0, abs=0.02)
+
+    def test_trailing_return_uses_opening_value_and_dated_deposit(self):
+        from sentinel.api.routers.portfolio import _trailing_money_weighted_return
+
+        daily = [
+            {"date": "2025-01-01", "total_value_eur": 1000.0, "net_deposits_eur": 1000.0},
+            {"date": "2025-07-02", "total_value_eur": 2050.0, "net_deposits_eur": 2000.0},
+            {"date": "2026-01-01", "total_value_eur": 2200.0, "net_deposits_eur": 2000.0},
+        ]
+
+        annualized_return = _trailing_money_weighted_return(daily, 2)
+
+        assert annualized_return is not None
+        # Opening capital and the later deposit must grow to the closing value.
+        assert 1000.0 * (1.0 + annualized_return) + 1000.0 * (
+            (1.0 + annualized_return) ** (183.0 / 365.0)
+        ) == pytest.approx(2200.0, abs=0.01)
+
+    def test_trailing_return_accounts_for_withdrawal(self):
+        from sentinel.api.routers.portfolio import _trailing_money_weighted_return
+
+        daily = [
+            {"date": "2025-01-01", "total_value_eur": 1000.0, "net_deposits_eur": 1000.0},
+            {"date": "2026-01-01", "total_value_eur": 900.0, "net_deposits_eur": 800.0},
+        ]
+
+        annualized_return = _trailing_money_weighted_return(daily, 1)
+
+        assert annualized_return == pytest.approx(0.1, abs=0.001)
+
+    def test_projection_run_rate_compounds_lump_sum_over_three_years(self):
+        from sentinel.api.routers.portfolio import _projection_monthly_return
+
+        daily = [
+            {
+                "date": "2023-01-01",
+                "total_value_eur": 1000.0,
+                "net_deposits_eur": 1000.0,
+            },
+            {
+                "date": "2026-01-01",
+                "total_value_eur": 1331.0,
+                "net_deposits_eur": 1000.0,
+            },
+        ]
+
+        _monthly_return, annualized_return, _elapsed_months = _projection_monthly_return(daily)
+
+        assert annualized_return == pytest.approx(0.1, abs=0.0001)
 
     def test_projection_run_rate_uses_money_weighted_cash_flow_timing(self):
         from sentinel.api.routers.portfolio import _projection_monthly_return

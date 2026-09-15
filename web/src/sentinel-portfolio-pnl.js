@@ -61,6 +61,8 @@ class SentinelPortfolioPnl extends LitElement {
       ]);
 
       return {
+        sinceInceptionMoneyWeightedReturn:
+          periods.since_inception_money_weighted_return_pct,
         periodStats: periods.period_stats,
         snapshots: history.snapshots,
         summary: history.summary,
@@ -81,21 +83,38 @@ class SentinelPortfolioPnl extends LitElement {
       : html`<span>${formatted}</span>`;
   }
 
-  renderSummary(summary) {
+  renderSummary(summary, sinceInceptionMoneyWeightedReturn) {
     return html`
-      <tui-flex wrap>
-        <span style="white-space: nowrap"
-          >Annualized&nbsp;${this.renderValue(
-            summary.actual_ann_return,
-            formatPercent(summary.actual_ann_return, 2),
-          )}</span
-        >
-        <span style="white-space: nowrap"
-          >&nbsp;│&nbsp;Target&nbsp;${this.renderValue(
+      <tui-flex align="baseline" justify="between" wrap>
+        <span
+          title="Annual investor-return target"
+          style="white-space: nowrap"
+          >Target p.a.&nbsp;${this.renderValue(
             summary.target_ann_return,
-            formatPercent(summary.target_ann_return, 2),
+            formatPercent(summary.target_ann_return, 1),
           )}</span
         >
+        <tui-flex align="baseline" wrap>
+          <span
+            title="Money-weighted annual return using the date and amount of every deposit and withdrawal"
+            style="white-space: nowrap"
+            >Overall yearly return&nbsp;${this.renderValue(
+              sinceInceptionMoneyWeightedReturn,
+              formatPercent(sinceInceptionMoneyWeightedReturn, 1),
+            )}</span
+          >
+          <span
+            title="Money-weighted annual return over the last 365 days, using the opening value and every deposit and withdrawal"
+            style="white-space: nowrap"
+            >&nbsp;│&nbsp;Last 365 days&nbsp;${this.renderValue(
+              summary.trailing_365d_money_weighted_return_pct,
+              formatPercent(
+                summary.trailing_365d_money_weighted_return_pct,
+                1,
+              ),
+            )}</span
+          >
+        </tui-flex>
       </tui-flex>
     `;
   }
@@ -199,9 +218,9 @@ class SentinelPortfolioPnl extends LitElement {
     }
 
     const actual = snapshots.map((snapshot) =>
-      snapshot.actual_ann_return === null
+      snapshot.rolling_365d_money_weighted_return_pct === null
         ? undefined
-        : Number(snapshot.actual_ann_return),
+        : Number(snapshot.rolling_365d_money_weighted_return_pct),
     );
     const target = Number(summary.target_ann_return);
     const scaleValues = actual.filter(Number.isFinite);
@@ -214,7 +233,7 @@ class SentinelPortfolioPnl extends LitElement {
     const actualLatest = lastFinite(actual);
 
     return this.renderChartRow(
-      "Actual",
+      "365d MWR",
       actual,
       actualLatest,
       minimum,
@@ -239,7 +258,10 @@ class SentinelPortfolioPnl extends LitElement {
       content = html`<span>Not enough data yet</span>`;
     } else {
       content = html`
-        ${this.renderSummary(this.performance.value.summary)}
+        ${this.renderSummary(
+          this.performance.value.summary,
+          this.performance.value.sinceInceptionMoneyWeightedReturn,
+        )}
         ${this.renderControls()}
         ${this.renderChart(
           this.performance.value.snapshots,

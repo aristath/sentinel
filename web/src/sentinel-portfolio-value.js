@@ -78,7 +78,11 @@ class SentinelPortfolioValue extends LitElement {
   renderMetrics(summary, startYear, endYear) {
     const pnlVariant = summary.total_pnl_pct >= 0 ? "success" : "error";
     const runRateVariant =
-      summary.annualized_total_pnl_pct >= 0 ? "success" : "error";
+      Number.isFinite(summary.annualized_total_pnl_pct)
+        ? summary.annualized_total_pnl_pct >= 0
+          ? "success"
+          : "error"
+        : undefined;
 
     return html`
       <tui-flex wrap>
@@ -96,8 +100,10 @@ class SentinelPortfolioValue extends LitElement {
             0,
           )}</span
         >
-        <span style="white-space: nowrap"
-          >&nbsp;&nbsp;Run-rate&nbsp;<tui-text variant=${runRateVariant}
+        <span
+          title="Since-inception money-weighted annual return used as the projection growth assumption"
+          style="white-space: nowrap"
+          >&nbsp;&nbsp;Historical MWR p.a.&nbsp;<tui-text variant=${runRateVariant}
             >${formatPercent(summary.annualized_total_pnl_pct, 1)}</tui-text
           ></span
         >

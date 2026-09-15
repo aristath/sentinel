@@ -52,7 +52,8 @@ Lightweight CAGR from inception for ambient display.
 
 ## `GET /api/portfolio/pnl-history`
 
-Daily P&L history for the past 365 days with 365-day rolling time-weighted return (TWR).
+Daily P&L history with a rolling 365-day money-weighted investor return that
+uses the opening value plus every dated deposit and withdrawal.
 
 ---
 

@@ -27,6 +27,7 @@ VALUE_PROJECTION_YEARS = {5, 10, 15, 20, 25}
 DEFAULT_VALUE_PROJECTION_YEARS = 10
 MONTHS_PER_YEAR = 12
 AVG_DAYS_PER_MONTH = 365.25 / 12
+MWR_DAYS_PER_YEAR = 365.0
 
 
 def _empty_period_stat() -> dict[str, float | None]:
@@ -232,15 +233,24 @@ async def _external_cashflow_delta_eur(deps: CommonDependencies, cashflow: dict)
     return -abs(amount_eur) if cashflow["type_id"] == "card_payout" else amount_eur
 
 
-async def _current_net_deposits_eur(deps: CommonDependencies) -> float:
+async def _current_net_deposits_eur(
+    deps: CommonDependencies,
+    cash_flows: list[dict] | None = None,
+) -> float:
+    """Return cumulative external funding using transaction-date FX.
+
+    Historical portfolio points value each contribution on its transaction
+    date. The live point must use the same basis; converting currency totals at
+    today's rate creates a synthetic cash flow whenever FX moves.
+    """
+    if cash_flows is None:
+        cash_flows = await deps.db.get_cash_flows()
+
     current_net_deposits = 0.0
-    summary = await deps.db.get_cash_flow_summary()
-    for type_id, currencies in summary.items():
-        if type_id not in ("card", "card_payout"):
+    for cash_flow in cash_flows:
+        if cash_flow["type_id"] not in ("card", "card_payout"):
             continue
-        for curr, total in currencies.items():
-            amount_eur = await deps.currency.to_eur(total, curr)
-            current_net_deposits += amount_eur if type_id == "card" else -abs(amount_eur)
+        current_net_deposits += await _external_cashflow_delta_eur(deps, cash_flow)
     return current_net_deposits
 
 
@@ -265,24 +275,30 @@ async def _daily_portfolio_value_history(
     deps: CommonDependencies,
     snapshots: list[dict],
     cash_flows: list[dict],
+    *,
+    current_value: float | None = None,
+    current_net_deposits: float | None = None,
 ) -> list[dict]:
     """Build daily value history and splice in the live current value for today."""
     from sentinel.portfolio_composition import build_daily_pnl
 
     deposits_by_date = await _cumulative_external_deposits_by_date(deps, cash_flows)
     daily = build_daily_pnl(snapshots, deposits_by_date)
-    valuation = await PortfolioValuationService(db=deps.db, broker=deps.broker, currency=deps.currency).current()
-    current_value = valuation["total_value_eur"]
+    if current_value is None:
+        valuation = await PortfolioValuationService(db=deps.db, broker=deps.broker, currency=deps.currency).current()
+        current_value = float(valuation["total_value_eur"])
     if current_value > 0:
-        current_net_deposits = await _current_net_deposits_eur(deps)
+        live_net_deposits = (
+            await _current_net_deposits_eur(deps, cash_flows) if current_net_deposits is None else current_net_deposits
+        )
         today_iso = date_type.today().isoformat()
-        pnl_eur = current_value - current_net_deposits
+        pnl_eur = current_value - live_net_deposits
         live_point = {
             "date": today_iso,
             "total_value_eur": round(current_value, 2),
-            "net_deposits_eur": round(current_net_deposits, 2),
+            "net_deposits_eur": round(live_net_deposits, 2),
             "pnl_eur": round(pnl_eur, 2),
-            "pnl_pct": round((pnl_eur / current_net_deposits * 100), 2) if current_net_deposits > 0 else 0.0,
+            "pnl_pct": round((pnl_eur / live_net_deposits * 100), 2) if live_net_deposits > 0 else 0.0,
         }
         if daily and daily[-1]["date"] == today_iso:
             daily[-1] = live_point
@@ -291,56 +307,126 @@ async def _daily_portfolio_value_history(
     return daily
 
 
-def _projection_monthly_return(daily: list[dict]) -> tuple[float, float, float]:
-    """Annualize dated net contributions into a monthly money-weighted return."""
+def _annualized_money_weighted_return(
+    daily: list[dict],
+    *,
+    opening_value_as_contribution: bool,
+) -> float | None:
+    """Return the XIRR-style annual rate implied by dated external funding.
+
+    Since-inception calculations use every deposit and withdrawal. Bounded
+    periods additionally treat the opening portfolio value as the capital
+    invested at the start of the period, then apply only later external flows.
+    """
     if len(daily) < 2:
-        return 0.0, 0.0, 0.0
+        return None
 
     start = date_type.fromisoformat(daily[0]["date"])
     end = date_type.fromisoformat(daily[-1]["date"])
-    elapsed_months = max((end - start).days / AVG_DAYS_PER_MONTH, 1.0)
+    if end <= start:
+        return None
+
     current_value = float(daily[-1]["total_value_eur"] or 0.0)
     if current_value <= 0:
-        return 0.0, 0.0, elapsed_months
+        return None
 
     contributions: list[tuple[date_type, float]] = []
-    previous_net_deposits = 0.0
-    for point in daily:
+    if opening_value_as_contribution:
+        opening_value = float(daily[0]["total_value_eur"] or 0.0)
+        if opening_value <= 0:
+            return None
+        contributions.append((start, opening_value))
+        previous_net_deposits = float(daily[0]["net_deposits_eur"] or 0.0)
+        cash_flow_points = daily[1:]
+    else:
+        previous_net_deposits = 0.0
+        cash_flow_points = daily
+
+    for point in cash_flow_points:
         net_deposits = float(point["net_deposits_eur"] or 0.0)
         contribution = net_deposits - previous_net_deposits
         if abs(contribution) >= 0.01:
             contributions.append((date_type.fromisoformat(point["date"]), contribution))
         previous_net_deposits = net_deposits
 
-    if not contributions or sum(amount for _date, amount in contributions) <= 0:
-        return 0.0, 0.0, elapsed_months
+    if not contributions or not any(amount > 0 for _date, amount in contributions):
+        return None
 
     def accumulated_value(annual_return: float) -> float:
         growth_base = max(0.000001, 1.0 + annual_return)
         total = 0.0
         for contribution_date, contribution in contributions:
-            years_until_end = max((end - contribution_date).days / 365.25, 0.0)
+            years_until_end = max((end - contribution_date).days / MWR_DAYS_PER_YEAR, 0.0)
             total += contribution * (growth_base**years_until_end)
         return total
 
     low = -0.999999
     high = 1.0
-    while accumulated_value(high) < current_value and high < 100.0:
+    low_residual = accumulated_value(low) - current_value
+    high_residual = accumulated_value(high) - current_value
+    while low_residual * high_residual > 0 and high < 100.0:
         high = (high * 2.0) + 1.0
+        high_residual = accumulated_value(high) - current_value
 
-    if accumulated_value(low) > current_value or accumulated_value(high) < current_value:
-        return 0.0, 0.0, elapsed_months
+    if low_residual * high_residual > 0:
+        return None
 
     for _iteration in range(100):
         mid = (low + high) / 2.0
-        if accumulated_value(mid) < current_value:
-            low = mid
-        else:
+        mid_residual = accumulated_value(mid) - current_value
+        if low_residual * mid_residual <= 0:
             high = mid
+        else:
+            low = mid
+            low_residual = mid_residual
 
-    annualized_return = (low + high) / 2.0
+    return (low + high) / 2.0
+
+
+def _projection_monthly_return(daily: list[dict]) -> tuple[float | None, float | None, float]:
+    """Annualize dated net contributions into a monthly money-weighted return."""
+    if len(daily) < 2:
+        return None, None, 0.0
+
+    start = date_type.fromisoformat(daily[0]["date"])
+    end = date_type.fromisoformat(daily[-1]["date"])
+    elapsed_months = max((end - start).days / AVG_DAYS_PER_MONTH, 1.0)
+    annualized_return = _annualized_money_weighted_return(
+        daily,
+        opening_value_as_contribution=False,
+    )
+    if annualized_return is None:
+        return None, None, elapsed_months
+
     monthly_return = ((1.0 + annualized_return) ** (1.0 / MONTHS_PER_YEAR)) - 1.0
     return monthly_return, annualized_return, elapsed_months
+
+
+def _trailing_money_weighted_return(
+    daily: list[dict],
+    end_index: int,
+    *,
+    window_days: int = 365,
+) -> float | None:
+    """Annualized investor return ending at one point over a bounded window."""
+    if end_index <= 0 or end_index >= len(daily):
+        return None
+
+    end = date_type.fromisoformat(daily[end_index]["date"])
+    target_start = end - timedelta(days=window_days)
+    dates = [point["date"] for point in daily[: end_index + 1]]
+    start_index = bisect.bisect_right(dates, target_start.isoformat()) - 1
+    if start_index < 0:
+        return None
+
+    actual_start = date_type.fromisoformat(daily[start_index]["date"])
+    if (target_start - actual_start).days > BENCHMARK_MAX_STALENESS_DAYS:
+        return None
+
+    return _annualized_money_weighted_return(
+        daily[start_index : end_index + 1],
+        opening_value_as_contribution=True,
+    )
 
 
 def _compound_projected_value(
@@ -427,29 +513,17 @@ async def _period_stats_from_reconstructed_starts(
     return result
 
 
-async def _snapshot_adjusted_period_stats(
-    deps: CommonDependencies,
+def _snapshot_adjusted_period_stats(
     benchmark_rows: list[dict],
     *,
+    daily: list[dict],
     current_value: float,
     current_net_deposits: float,
-    cash_flows: list[dict],
     as_of_date: date_type,
 ) -> dict[str, dict[str, float | None]]:
     """Long-window stats from snapshots, adjusted to the live endpoint value."""
-    from sentinel.portfolio_composition import build_daily_pnl
-
-    snapshots = await deps.db.get_portfolio_snapshots()
-    if not snapshots:
+    if not daily:
         return {}
-
-    deposits_by_date: dict[str, float] = {}
-    running = 0.0
-    for cf in sorted([cf for cf in cash_flows if cf["type_id"] in ("card", "card_payout")], key=lambda cf: cf["date"]):
-        running += await _external_cashflow_delta_eur(deps, cf)
-        deposits_by_date[cf["date"]] = running
-
-    daily = build_daily_pnl(snapshots, deposits_by_date)
     dates = [point["date"] for point in daily]
     as_of_iso = as_of_date.isoformat()
 
@@ -611,8 +685,6 @@ async def get_portfolio_pnl_history(
     (total_value, net_deposits, returns) are computed at query time via
     the shared helpers in `sentinel.portfolio_composition`.
     """
-    from sentinel.portfolio_composition import build_daily_pnl
-
     period = period.upper()
     if period not in PNL_HISTORY_WINDOWS:
         allowed = ", ".join(PNL_HISTORY_WINDOWS)
@@ -631,36 +703,11 @@ async def get_portfolio_pnl_history(
     # Cumulative net-deposits lookup keyed by ISO date. Card deposits +
     # withdrawals (card_payout) only — that's what funds the account.
     cash_flows = await deps.db.get_cash_flows()
-    cf_sorted = sorted(
-        [cf for cf in cash_flows if cf["type_id"] in ("card", "card_payout")],
-        key=lambda cf: cf["date"],
-    )
-    deposits_by_date: dict[str, float] = {}
-    running = 0.0
-    for cf in cf_sorted:
-        running += await _external_cashflow_delta_eur(deps, cf)
-        deposits_by_date[cf["date"]] = running
+    daily = await _daily_portfolio_value_history(deps, snapshots, cash_flows)
 
-    daily = build_daily_pnl(snapshots, deposits_by_date)
-    valuation = await PortfolioValuationService(db=deps.db, broker=deps.broker, currency=deps.currency).current()
-    current_value = valuation["total_value_eur"]
-    if current_value > 0:
-        current_net_deposits = await _current_net_deposits_eur(deps)
-        today_iso = date_type.today().isoformat()
-        pnl_eur = current_value - current_net_deposits
-        live_point = {
-            "date": today_iso,
-            "total_value_eur": round(current_value, 2),
-            "net_deposits_eur": round(current_net_deposits, 2),
-            "pnl_eur": round(pnl_eur, 2),
-            "pnl_pct": round((pnl_eur / current_net_deposits * 100), 2) if current_net_deposits > 0 else 0.0,
-        }
-        if daily and daily[-1]["date"] == today_iso:
-            daily[-1] = live_point
-        elif not daily or daily[-1]["date"] < today_iso:
-            daily.append(live_point)
-
-    # --- Build output with rolling TWR ---
+    # Build the rolling 365-day investor return. This uses the opening value,
+    # every later deposit/withdrawal, and the closing value; it does not chain
+    # day-to-day holding-period returns.
     window = 365
     if days is None:
         output_start = window
@@ -700,26 +747,11 @@ async def get_portfolio_pnl_history(
                 "pnl_pct": d["pnl_pct"],
             }
 
-        # Actual: 365-day rolling TWR
-        if not in_future and i >= window:
-            cumulative = 1.0
-            valid = True
-            for j in range(i - window + 1, i + 1):
-                prev_val = daily[j - 1]["total_value_eur"]
-                curr_val = daily[j]["total_value_eur"]
-                cash_flow = daily[j]["net_deposits_eur"] - daily[j - 1]["net_deposits_eur"]
-                if prev_val and prev_val > 0:
-                    hpr = (curr_val - prev_val - cash_flow) / prev_val
-                    cumulative *= 1.0 + hpr
-                else:
-                    valid = False
-                    break
-            if valid:
-                point["actual_ann_return"] = round((cumulative - 1.0) * 100.0, 2)
-            else:
-                point["actual_ann_return"] = None
-        else:
-            point["actual_ann_return"] = None
+        annualized_mwr = None if in_future else _trailing_money_weighted_return(daily, i, window_days=window)
+        rolling_mwr_pct = round(annualized_mwr * 100.0, 2) if annualized_mwr is not None else None
+        point["rolling_365d_money_weighted_return_pct"] = rolling_mwr_pct
+        # Backward-compatible generic field used by older clients.
+        point["actual_ann_return"] = rolling_mwr_pct
 
         result_snapshots.append(point)
         i += 1
@@ -727,9 +759,8 @@ async def get_portfolio_pnl_history(
     if not result_snapshots:
         return {"snapshots": [], "summary": None}
 
-    # Overlay the benchmark's trailing-1Y return on the same axis as the
-    # portfolio's rolling TWR — the honest "would a plain all-world ETF have
-    # done better?" comparison. Degrades to nulls if the benchmark has no data.
+    # Overlay the benchmark's trailing-1Y market return as context. The
+    # portfolio series itself is money-weighted using the investor's cash flows.
     from sentinel.portfolio_composition import benchmark_rolling_returns
 
     benchmark_symbol = await deps.settings.get("performance_benchmark_symbol", "VWCE.EU")
@@ -764,6 +795,7 @@ async def get_portfolio_pnl_history(
         "benchmark_symbol": benchmark_symbol,
         "benchmark_ann_return": last_benchmark,
         "actual_ann_return": last.get("actual_ann_return"),
+        "trailing_365d_money_weighted_return_pct": last.get("rolling_365d_money_weighted_return_pct"),
     }
 
     return {"snapshots": result_snapshots, "summary": summary}
@@ -812,6 +844,7 @@ async def get_portfolio_value_projection(
         else actual_avg_monthly_net_deposit
     )
     monthly_return, annualized_return, elapsed_months = _projection_monthly_return(daily)
+    projection_monthly_return = monthly_return if monthly_return is not None else 0.0
 
     projection: list[dict[str, Any]] = [
         {
@@ -824,7 +857,7 @@ async def get_portfolio_value_projection(
     projection_months = years * MONTHS_PER_YEAR
     today = date_type.fromisoformat(today_iso)
     for month in range(1, projection_months + 1):
-        projected_value = max(0.0, projected_value * (1.0 + monthly_return) + avg_monthly_net_deposit)
+        projected_value = max(0.0, projected_value * (1.0 + projection_monthly_return) + avg_monthly_net_deposit)
         projected_date = today + timedelta(days=round(month * AVG_DAYS_PER_MONTH))
         projection.append(
             {
@@ -838,7 +871,7 @@ async def get_portfolio_value_projection(
         if avg_monthly_net_deposit_eur is None
         else _compound_projected_value(
             current_value,
-            monthly_return,
+            projection_monthly_return,
             actual_avg_monthly_net_deposit,
             projection_months,
         )
@@ -855,7 +888,7 @@ async def get_portfolio_value_projection(
         "current_net_deposits_eur": round(current_net_deposits, 2),
         "total_pnl_eur": round(total_pnl_eur, 2),
         "total_pnl_pct": round(total_pnl_pct, 2),
-        "annualized_total_pnl_pct": round(annualized_return * 100.0, 2),
+        "annualized_total_pnl_pct": round(annualized_return * 100.0, 2) if annualized_return is not None else None,
         "monthly_return_rate": monthly_return,
         "avg_monthly_net_deposit_eur": round(avg_monthly_net_deposit, 2),
         "actual_avg_monthly_net_deposit_eur": round(actual_avg_monthly_net_deposit, 2),
@@ -897,11 +930,24 @@ async def get_portfolio_period_stats(
     """Table-only portfolio period stats using live current value as the endpoint."""
     cash_flows = await deps.db.get_cash_flows()
 
-    current_net_deposits = await _current_net_deposits_eur(deps)
+    current_net_deposits = await _current_net_deposits_eur(deps, cash_flows)
     benchmark_symbol = await deps.settings.get("performance_benchmark_symbol", "VWCE.EU")
     benchmark_rows = await deps.db.get_prices(benchmark_symbol)
     valuation = await PortfolioValuationService(db=deps.db, broker=deps.broker, currency=deps.currency).current()
     current_value = valuation["total_value_eur"]
+    snapshots = await deps.db.get_portfolio_snapshots()
+    daily = await _daily_portfolio_value_history(
+        deps,
+        snapshots,
+        cash_flows,
+        current_value=current_value,
+        current_net_deposits=current_net_deposits,
+    )
+    since_inception_money_weighted_return_pct = None
+    if len(daily) >= 2:
+        _monthly_return, annualized_return, _elapsed_months = _projection_monthly_return(daily)
+        if annualized_return is not None:
+            since_inception_money_weighted_return_pct = round(annualized_return * 100.0, 2)
 
     as_of_date = date_type.today()
     period_stats = await _period_stats_from_reconstructed_starts(
@@ -913,12 +959,11 @@ async def get_portfolio_period_stats(
         as_of_date=as_of_date,
     )
     period_stats.update(
-        await _snapshot_adjusted_period_stats(
-            deps,
+        _snapshot_adjusted_period_stats(
             benchmark_rows or [],
+            daily=daily,
             current_value=current_value,
             current_net_deposits=current_net_deposits,
-            cash_flows=cash_flows,
             as_of_date=as_of_date,
         )
     )
@@ -928,5 +973,6 @@ async def get_portfolio_period_stats(
     return {
         "as_of_date": as_of_date.isoformat(),
         "benchmark_symbol": benchmark_symbol,
+        "since_inception_money_weighted_return_pct": since_inception_money_weighted_return_pct,
         "period_stats": period_stats,
     }

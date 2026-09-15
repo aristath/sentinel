@@ -120,6 +120,38 @@ async def test_period_stats_use_live_current_value_and_adjust_period_deposits(mo
     assert result["period_stats"]["1W"]["benchmark_pct"] == pytest.approx(10.0)
     assert result["period_stats"]["All"]["portfolio_eur"] == 150.0
     assert result["period_stats"]["All"]["portfolio_pct"] == pytest.approx(13.64)
+    assert result["since_inception_money_weighted_return_pct"] is None
+
+
+@pytest.mark.asyncio
+async def test_period_stats_include_money_weighted_annualized_since_inception(monkeypatch):
+    from sentinel.api.routers.portfolio import get_portfolio_period_stats
+
+    today = date.today()
+    inception = today - timedelta(days=365)
+    _fake_valuation(monkeypatch, 1100.0)
+
+    deps = _deps(
+        cash_flows=[
+            {
+                "date": inception.isoformat(),
+                "type_id": "card",
+                "amount": 1000.0,
+                "currency": "EUR",
+            }
+        ],
+        cash_flow_summary={"card": {"EUR": 1000.0}},
+        positions=[],
+        cash={"EUR": 1100.0},
+        snapshots=[
+            _snapshot(inception.isoformat(), 1000.0),
+            _snapshot(today.isoformat(), 1100.0),
+        ],
+    )
+
+    result = await get_portfolio_period_stats(deps)
+
+    assert result["since_inception_money_weighted_return_pct"] == pytest.approx(10.0, abs=0.02)
 
 
 @pytest.mark.asyncio

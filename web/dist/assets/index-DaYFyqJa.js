@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-CxEbk_mi.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BB2SwyAS.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2945,7 +2945,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-CxEbk_mi.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-BB2SwyAS.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6001,6 +6001,7 @@ var SentinelPortfolioPnl = class extends i {
 	performance = new LiveResource(this, async (signal) => {
 		const [periods, history] = await Promise.all([getJson("/api/portfolio/period-stats", { signal }), getJson(`/api/portfolio/pnl-history?period=${this.pnlPeriod}`, { signal })]);
 		return {
+			sinceInceptionMoneyWeightedReturn: periods.since_inception_money_weighted_return_pct,
 			periodStats: periods.period_stats,
 			snapshots: history.snapshots,
 			summary: history.summary
@@ -6013,15 +6014,26 @@ var SentinelPortfolioPnl = class extends i {
 		const variant = valueVariant(value);
 		return variant ? b`<tui-text variant=${variant}>${formatted}</tui-text>` : b`<span>${formatted}</span>`;
 	}
-	renderSummary(summary) {
+	renderSummary(summary, sinceInceptionMoneyWeightedReturn) {
 		return b`
-      <tui-flex wrap>
-        <span style="white-space: nowrap"
-          >Annualized&nbsp;${this.renderValue(summary.actual_ann_return, formatPercent(summary.actual_ann_return, 2))}</span
+      <tui-flex align="baseline" justify="between" wrap>
+        <span
+          title="Annual investor-return target"
+          style="white-space: nowrap"
+          >Target p.a.&nbsp;${this.renderValue(summary.target_ann_return, formatPercent(summary.target_ann_return, 1))}</span
         >
-        <span style="white-space: nowrap"
-          >&nbsp;│&nbsp;Target&nbsp;${this.renderValue(summary.target_ann_return, formatPercent(summary.target_ann_return, 2))}</span
-        >
+        <tui-flex align="baseline" wrap>
+          <span
+            title="Money-weighted annual return using the date and amount of every deposit and withdrawal"
+            style="white-space: nowrap"
+            >Overall yearly return&nbsp;${this.renderValue(sinceInceptionMoneyWeightedReturn, formatPercent(sinceInceptionMoneyWeightedReturn, 1))}</span
+          >
+          <span
+            title="Money-weighted annual return over the last 365 days, using the opening value and every deposit and withdrawal"
+            style="white-space: nowrap"
+            >&nbsp;│&nbsp;Last 365 days&nbsp;${this.renderValue(summary.trailing_365d_money_weighted_return_pct, formatPercent(summary.trailing_365d_money_weighted_return_pct, 1))}</span
+          >
+        </tui-flex>
       </tui-flex>
     `;
 	}
@@ -6106,7 +6118,7 @@ var SentinelPortfolioPnl = class extends i {
 	}
 	renderChart(snapshots, summary) {
 		if (!snapshots || snapshots.length < 2) return b`<span>Not enough data yet</span>`;
-		const actual = snapshots.map((snapshot) => snapshot.actual_ann_return === null ? void 0 : Number(snapshot.actual_ann_return));
+		const actual = snapshots.map((snapshot) => snapshot.rolling_365d_money_weighted_return_pct === null ? void 0 : Number(snapshot.rolling_365d_money_weighted_return_pct));
 		const target = Number(summary.target_ann_return);
 		const scaleValues = actual.filter(Number.isFinite);
 		const dataMinimum = Math.min(...scaleValues, target);
@@ -6115,7 +6127,7 @@ var SentinelPortfolioPnl = class extends i {
 		const minimum = target - extent;
 		const maximum = target + extent;
 		const actualLatest = lastFinite(actual);
-		return this.renderChartRow("Actual", actual, actualLatest, minimum, maximum, target);
+		return this.renderChartRow("365d MWR", actual, actualLatest, minimum, maximum, target);
 	}
 	render() {
 		let content;
@@ -6125,7 +6137,7 @@ var SentinelPortfolioPnl = class extends i {
       >`;
 		else if (!this.performance.value?.periodStats || !this.performance.value?.summary) content = b`<span>Not enough data yet</span>`;
 		else content = b`
-        ${this.renderSummary(this.performance.value.summary)}
+        ${this.renderSummary(this.performance.value.summary, this.performance.value.sinceInceptionMoneyWeightedReturn)}
         ${this.renderControls()}
         ${this.renderChart(this.performance.value.snapshots, this.performance.value.summary)}
         ${this.renderTable(this.performance.value.periodStats)}
@@ -6264,7 +6276,7 @@ var SentinelPortfolioValue = class extends i {
 	}
 	renderMetrics(summary, startYear, endYear) {
 		const pnlVariant = summary.total_pnl_pct >= 0 ? "success" : "error";
-		const runRateVariant = summary.annualized_total_pnl_pct >= 0 ? "success" : "error";
+		const runRateVariant = Number.isFinite(summary.annualized_total_pnl_pct) ? summary.annualized_total_pnl_pct >= 0 ? "success" : "error" : void 0;
 		return b`
       <tui-flex wrap>
         <span style="white-space: nowrap">${startYear} to ${endYear}</span>
@@ -6277,8 +6289,10 @@ var SentinelPortfolioValue = class extends i {
           >&nbsp;&nbsp;${summary.deposit_window_months}M
           net/mo&nbsp;${formatCurrency(summary.avg_monthly_net_deposit_eur, "EUR", 0)}</span
         >
-        <span style="white-space: nowrap"
-          >&nbsp;&nbsp;Run-rate&nbsp;<tui-text variant=${runRateVariant}
+        <span
+          title="Since-inception money-weighted annual return used as the projection growth assumption"
+          style="white-space: nowrap"
+          >&nbsp;&nbsp;Historical MWR p.a.&nbsp;<tui-text variant=${runRateVariant}
             >${formatPercent(summary.annualized_total_pnl_pct, 1)}</tui-text
           ></span
         >

@@ -37,8 +37,8 @@ DEFAULTS = {
     "ui_securities_table_columns": ["price", "security", "value", "pnl", "ideal", "plan", "trade"],
     # Rebalancing
     "rebalance_threshold_pct": 5,  # Rebalance when 5% off target
-    # Performance chart benchmark: trailing-1Y return overlaid on the portfolio's
-    # rolling TWR line. VWCE.EU (FTSE All-World ETF) = the "plain index" yardstick.
+    # Performance chart benchmark: trailing-1Y market return overlaid as context
+    # for the portfolio's rolling money-weighted investor return.
     "performance_benchmark_symbol": "VWCE.EU",
     # Dividend reinvestment
     "max_dividend_reinvestment_boost": 0.15,  # Max score boost for uninvested dividends

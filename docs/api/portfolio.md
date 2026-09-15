@@ -91,7 +91,7 @@ Returns a lightweight CAGR from inception for ambient display. Calculated from n
 
 ## `GET /api/portfolio/pnl-history`
 
-Returns daily P&L history with a 365-day rolling time-weighted return (TWR).
+Returns daily P&L history with a rolling 365-day money-weighted investor return.
 The `period` query is one of `3M`, `6M`, `1Y` (default), or `ALL`.
 
 **Response**
@@ -104,7 +104,8 @@ The `period` query is one of `3M`, `6M`, `1Y` (default), or `ALL`.
       "net_deposits_eur": 40000.00,
       "pnl_eur": 4200.00,
       "pnl_pct": 10.5,
-      "actual_ann_return": 9.8
+      "actual_ann_return": 9.8,
+      "rolling_365d_money_weighted_return_pct": 9.8
     }
   ],
   "summary": {
@@ -114,12 +115,20 @@ The `period` query is one of `3M`, `6M`, `1Y` (default), or `ALL`.
     "end_net_deposits": 40000.00,
     "pnl_absolute": 4200.00,
     "pnl_percent": 10.5,
-    "target_ann_return": 11.0
+    "target_ann_return": 11.0,
+    "actual_ann_return": 9.8,
+    "trailing_365d_money_weighted_return_pct": 9.8
   }
 }
 ```
 
-- `actual_ann_return` — 365-day rolling TWR annualised (null if insufficient history)
+- `rolling_365d_money_weighted_return_pct` — For each chart point, the annual
+  investor return implied by the opening portfolio value, every dated deposit
+  and withdrawal during the previous 365 days, and the closing value.
+- `trailing_365d_money_weighted_return_pct` — The latest rolling money-weighted
+  return. It is null when a supported result cannot be calculated.
+- `actual_ann_return` — Backward-compatible alias for the rolling money-weighted
+  return.
 
 ---
 
@@ -215,7 +224,9 @@ and overridden monthly contribution, horizon, and projected totals. With no
 snapshots, both series are empty and `summary` is null.
 
 The projection is a scenario based on the money-weighted inception run-rate and
-monthly contributions; it is not a market forecast.
+monthly contributions; it is not a market forecast. When the historical
+money-weighted rate cannot be calculated, the rate fields are null and the
+projection uses a neutral 0% growth assumption.
 
 ---
 
@@ -227,6 +238,7 @@ Returns table-ready performance for `1D`, `1W`, `1M`, `3M`, `6M`, and `1Y`:
 {
   "as_of_date": "2026-09-04",
   "benchmark_symbol": "VWCE.EU",
+  "since_inception_money_weighted_return_pct": 8.84,
   "period_stats": {
     "1D": {
       "portfolio_eur": 42.5,
@@ -242,3 +254,6 @@ Longer periods reconstruct their start value from positions, trades, cash, cash
 flows, historical prices, and FX. A missing/stale boundary produces null fields
 rather than fabricated performance. The `1D` row uses the shared live
 intraday valuation when available.
+`since_inception_money_weighted_return_pct` is the annual investor return
+implied by every dated deposit and withdrawal and the current portfolio value.
+It is null when no supported result can be calculated.

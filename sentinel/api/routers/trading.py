@@ -6,8 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
-from sentinel.portfolio import Portfolio
 from sentinel.security import Security
+from sentinel.services.valuation import PortfolioValuationService
 
 router = APIRouter(prefix="/trades", tags=["trades"])
 cashflows_router = APIRouter(prefix="/cashflows", tags=["cashflows"])
@@ -85,27 +85,30 @@ async def get_cashflows(
         net_deposits: deposits - withdrawals
         total_profit: Current portfolio value + cash - net_deposits
     """
-    # Get aggregated cash flows from database
-    summary = await deps.db.get_cash_flow_summary()
-
-    # Convert each type/currency combination to EUR
+    # Cash flows must be converted on their transaction dates. Aggregating by
+    # currency first and converting at today's rate makes historical funding
+    # and profit drift whenever FX moves.
+    cash_flows = await deps.db.get_cash_flows()
     deposits_eur = 0.0
     withdrawals_eur = 0.0
     dividends_eur = 0.0
     taxes_eur = 0.0
 
-    for type_id, currencies in summary.items():
-        for curr, total in currencies.items():
-            amount_eur = await deps.currency.to_eur(total, curr)
-
-            if type_id == "card":
-                deposits_eur += amount_eur
-            elif type_id == "card_payout":
-                withdrawals_eur += abs(amount_eur)
-            elif type_id == "dividend":
-                dividends_eur += amount_eur
-            elif type_id == "tax":
-                taxes_eur += abs(amount_eur)
+    for cash_flow in cash_flows:
+        amount_eur = await deps.currency.to_eur_for_date(
+            cash_flow["amount"],
+            cash_flow["currency"],
+            cash_flow["date"],
+        )
+        type_id = cash_flow["type_id"]
+        if type_id == "card":
+            deposits_eur += amount_eur
+        elif type_id == "card_payout":
+            withdrawals_eur += abs(amount_eur)
+        elif type_id == "dividend":
+            dividends_eur += amount_eur
+        elif type_id == "tax":
+            taxes_eur += abs(amount_eur)
 
     # Get trading fees efficiently (aggregated query)
     fees_by_currency = await deps.db.get_total_fees()
@@ -113,9 +116,14 @@ async def get_cashflows(
     for curr, total in fees_by_currency.items():
         fees_eur += await deps.currency.to_eur(total, curr)
 
-    # Get portfolio value for total profit calculation
-    portfolio_obj = Portfolio()
-    total_value = await portfolio_obj.total_value()
+    # Use the same live value as the portfolio and performance endpoints so
+    # total profit reconciles across every UI surface.
+    valuation = await PortfolioValuationService(
+        db=deps.db,
+        broker=deps.broker,
+        currency=deps.currency,
+    ).current()
+    total_value = valuation["total_value_eur"]
 
     net_deposits = deposits_eur - withdrawals_eur
     # Total profit = current value - what we put in (net deposits)

@@ -323,9 +323,7 @@ class TestDailyValueSeries:
 
 
 class TestDailyHprs:
-    """Daily holding-period returns derived from the pnl-history daily list.
-    Same math the /api/portfolio/pnl-history rolling TWR uses — kept in
-    sync via a single shared implementation."""
+    """Daily holding-period returns used by composition risk statistics."""
 
     def test_simple_two_day_no_deposit(self):
         daily = [
@@ -345,6 +343,15 @@ class TestDailyHprs:
         returns = daily_hprs(daily)
         assert math.isclose(returns[0], 0.2)
 
+    def test_withdrawal_stripped_from_return(self):
+        # Value falls 100 -> 85 after a 20 withdrawal, so investment return is +5%.
+        daily = [
+            {"date": "2024-01-01", "total_value_eur": 100.0, "net_deposits_eur": 0.0},
+            {"date": "2024-01-02", "total_value_eur": 85.0, "net_deposits_eur": -20.0},
+        ]
+        returns = daily_hprs(daily)
+        assert math.isclose(returns[0], 0.05)
+
     def test_skips_when_prior_value_zero(self):
         daily = [
             {"date": "2024-01-01", "total_value_eur": 0.0, "net_deposits_eur": 0.0},
@@ -354,7 +361,7 @@ class TestDailyHprs:
 
 
 class TestRollingTwr:
-    """The shared rolling-TWR helper /pnl-history and build_composition use."""
+    """The rolling-TWR helper used by portfolio-composition metrics."""
 
     def _series(self, values, deposits=None):
         deposits = deposits or [0.0] * len(values)
