@@ -120,6 +120,7 @@ order, preserving its validation, deduplication, and enqueue behavior.
 | Tool | Purpose |
 |---|---|
 | `ai_status_get` | Pipeline queue, running unit, staleness, and last run |
+| `ai_prompt` | Send a prompt to the configured LLM with Sentinel's inherited system prompt |
 | `ai_units_get` | List research units, optionally filtered or stale-only |
 | `ai_history_get` | Completed and failed research work |
 | `ai_artifact_get` | Read an allowlisted research artifact |
@@ -127,6 +128,9 @@ order, preserving its validation, deduplication, and enqueue behavior.
 | `ai_models_get` | Discover models available to the configured AI service |
 | `forecast_status_get` | Forecast service and recent-run status |
 | `forecast_get` | Latest path, scores, and evaluation for a symbol |
+
+`ai_prompt` accepts the user prompt and an optional temperature. It does not
+accept a system prompt; Sentinel always supplies its existing system prompt.
 
 ### Backups
 

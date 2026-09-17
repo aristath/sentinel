@@ -20,6 +20,22 @@ fail:
 
 On failure, `ok` is false, `models` is empty, and `error` contains the reason.
 
+## `POST /api/ai/prompt`
+
+Sends a prompt to the configured LLM using Sentinel's existing system prompt.
+The system prompt cannot be overridden. `temperature` is optional; when omitted,
+Sentinel leaves it out of the inference request so the backend default applies.
+
+```json
+{
+  "prompt": "Summarize the investment case for AIR.EU.",
+  "temperature": 0.2
+}
+```
+
+The response is `{ "output": "..." }`. An empty or non-string prompt returns
+400, and an LLM failure returns 502.
+
 ## `GET /api/ai/status`
 
 Returns the pipeline dashboard state:

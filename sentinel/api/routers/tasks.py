@@ -140,7 +140,7 @@ async def task_meta_save(task_id: str, body: dict[str, Any]) -> dict[str, Any]:
 async def task_run(task_id: str, body: dict[str, Any] | None = None) -> dict[str, Any]:
     body = body or {}
     try:
-        return await enqueue_task(task_id, body.get("inputs") or {}, run_mode=str(body.get("runMode") or "balanced"))
+        return await enqueue_task(task_id, body.get("inputs") or {})
     except Exception as exc:  # noqa: BLE001
         _raise_http(exc)
 
@@ -201,7 +201,6 @@ async def scheduler_enqueue(body: Annotated[Any, Body()]) -> dict[str, Any]:
                     raw.get("inputs") or {},
                     title=raw.get("title"),
                     dedupe_key=raw.get("dedupeKey") or raw.get("dedupe_key"),
-                    run_mode=str(raw.get("runMode") or raw.get("run_mode") or "balanced"),
                     priority=int(raw.get("priority") or 0),
                     eligible_at=eligible_at,
                     schedule_id=schedule_id,

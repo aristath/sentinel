@@ -14,7 +14,7 @@ is designed for its trusted local network.
 | Section | Prefix | Description |
 |---|---|---|
 | [Settings](settings.md) | `/api/settings` | Application configuration |
-| [AI research](ai.md) | `/api/ai` | Pipeline status, research units, requests, history, artifacts |
+| [AI research](ai.md) | `/api/ai` | Direct prompting, pipeline status, research units, requests, history, artifacts |
 | [AI memory](memory.md) | `/api/memory` | Deduplicated pgvector research memory |
 | [Editable tasks](tasks.md) | `/api/tasks`, `/api/task-runs`, `/api/scheduler` | Task definitions, files, execution, and queue |
 | [LED Display](led.md) | `/api/led` | Hardware LED controller and bridge health |

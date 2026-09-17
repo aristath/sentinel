@@ -190,6 +190,7 @@ async def test_queue_priority_dedupe_and_recovery_preserve_checkpoint(task_db):
     duplicate = await task_db.enqueue_task_work(alpha, "alpha", {"changed": "ignored"}, dedupe_key="alpha:once")
     high = await task_db.enqueue_task_work(beta, "beta", {}, priority=20)
     assert duplicate["id"] == low["id"]
+    assert "run_mode" not in low
 
     claimed = await task_db.claim_next_task_work()
     assert claimed["id"] == high["id"]
@@ -457,7 +458,7 @@ async def wait_for_file(path: Path, timeout: float = 5) -> None:
 
 
 @pytest.mark.asyncio
-async def test_prompt_call_forwards_one_selected_run_mode(tmp_path, monkeypatch):
+async def test_prompt_call_forwards_custom_system_prompt(tmp_path, monkeypatch):
     prompt_file = tmp_path / "prompt.md"
     prompt_file.write_text("Prompt", encoding="utf-8")
     captured = {}
@@ -477,11 +478,9 @@ async def test_prompt_call_forwards_one_selected_run_mode(tmp_path, monkeypatch)
         {},
         FakeClient(),
         FakeExecutors(),
-        "deep",
     )
 
     assert result == "done"
-    assert captured["run_mode"] == "deep"
     assert captured["system"] == "Custom instructions"
 
 

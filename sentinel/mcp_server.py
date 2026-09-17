@@ -406,6 +406,15 @@ async def ai_models_get() -> dict[str, Any]:
 
 
 @mcp.tool()
+async def ai_prompt(prompt: str, temperature: float | None = None) -> dict[str, str]:
+    """Send a prompt to Sentinel's configured LLM using its inherited system prompt."""
+    body: dict[str, Any] = {"prompt": prompt}
+    if temperature is not None:
+        body["temperature"] = temperature
+    return await _call(ai_api.create_ai_prompt(body, await _deps()))
+
+
+@mcp.tool()
 async def ai_units_get(kind: str | None = None, stale_only: bool = False) -> dict[str, Any]:
     """List portfolio, security, and macro subjects tracked by AI research.
 

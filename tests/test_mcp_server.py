@@ -69,6 +69,7 @@ EXPECTED_TOOLS = {
     "task_run_stop",
     "ai_status_get",
     "ai_models_get",
+    "ai_prompt",
     "ai_units_get",
     "ai_history_get",
     "ai_artifact_get",
@@ -343,6 +344,14 @@ BASE_CASES = [
     _case("task_run_stop", "tasks_api", "task_run_stop", {"run_id": "run-1"}, ("run-1",)),
     _case("ai_status_get", "ai_api", "get_ai_status", {}, (DEPS,)),
     _case("ai_models_get", "ai_api", "get_ai_models", {}, (DEPS,)),
+    _case(
+        "ai_prompt",
+        "ai_api",
+        "create_ai_prompt",
+        {"prompt": "Analyze AIR.EU"},
+        ({"prompt": "Analyze AIR.EU"}, DEPS),
+        result={"output": "Analysis"},
+    ),
     _case("ai_units_get", "ai_api", "get_ai_units", {}, (DEPS, None, False)),
     _case("ai_history_get", "ai_api", "get_ai_history", {}, (DEPS, 50)),
     _case(
@@ -484,7 +493,6 @@ VARIANT_CASES = [
                 {
                     "task": "rate-portfolio",
                     "eligibleAt": 1_788_480_000,
-                    "runMode": "deep",
                     "dedupeKey": "portfolio-1",
                     "future": {"preserved": True},
                 },
@@ -496,7 +504,6 @@ VARIANT_CASES = [
                 {
                     "task": "rate-portfolio",
                     "eligibleAt": 1_788_480_000,
-                    "runMode": "deep",
                     "dedupeKey": "portfolio-1",
                     "future": {"preserved": True},
                 },
@@ -520,6 +527,15 @@ VARIANT_CASES = [
         {"kind": "security", "stale_only": True},
         (DEPS, "security", True),
         suffix="filters",
+    ),
+    _case(
+        "ai_prompt",
+        "ai_api",
+        "create_ai_prompt",
+        {"prompt": "Analyze AIR.EU", "temperature": 0.2},
+        ({"prompt": "Analyze AIR.EU", "temperature": 0.2}, DEPS),
+        result={"output": "Analysis"},
+        suffix="temperature",
     ),
     _case(
         "ai_history_get",
@@ -810,7 +826,7 @@ async def test_required_arguments_are_enforced_before_endpoint_execution(monkeyp
                 checked += 1
             endpoint.assert_not_awaited()
 
-    assert checked == 42
+    assert checked == 43
 
 
 @pytest.mark.asyncio

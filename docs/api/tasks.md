@@ -85,9 +85,6 @@ Queues a run with status 202. The body is optional:
 }
 ```
 
-The runtime accepts a legacy `runMode` field but Sentinel currently exposes no
-fast/balanced/deep choice in the UI; callers should omit it.
-
 ## `GET /api/tasks/{task_id}/runs`
 
 Lists runs for one task. `limit` defaults to 50 and is clamped to 1 through 200.

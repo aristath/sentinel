@@ -144,7 +144,6 @@ class TaskDatabaseMixin:
         title: str | None = None,
         dedupe_key: str | None = None,
         priority: int = 0,
-        run_mode: str = "balanced",
         eligible_at: int | None = None,
     ) -> dict[str, Any]:
         async with self._task_transaction() as conn:
@@ -161,12 +160,11 @@ class TaskDatabaseMixin:
 
             now = int(time.time() * 1000)
             run_id = str(uuid.uuid4())
-            mode = run_mode if run_mode in {"fast", "balanced", "deep"} else "balanced"
             await conn.execute(
                 """INSERT INTO work_queue
                    (id, schedule_id, task_id, run_as_user_id, title, inputs_json, dedupe_key,
-                    priority, run_mode, status, eligible_at, created_at, updated_at)
-                   VALUES (?, ?, ?, 'sentinel', ?, ?, ?, ?, ?, 'queued', ?, ?, ?)""",
+                    priority, status, eligible_at, created_at, updated_at)
+                   VALUES (?, ?, ?, 'sentinel', ?, ?, ?, ?, 'queued', ?, ?, ?)""",
                 (
                     run_id,
                     schedule_id,
@@ -175,7 +173,6 @@ class TaskDatabaseMixin:
                     json.dumps(inputs),
                     dedupe_key,
                     max(-1000, min(1000, int(priority))),
-                    mode,
                     eligible_at or now,
                     now,
                     now,

@@ -102,7 +102,6 @@ async def _serialize_run(row: dict[str, Any], *, include_events: bool = False) -
         "title": row.get("title"),
         "inputs": inputs,
         "dedupeKey": row.get("dedupe_key"),
-        "runMode": row.get("run_mode") or "balanced",
         "status": status,
         "createdAt": _iso(row.get("created_at")),
         "startedAt": _iso(started),
@@ -120,7 +119,6 @@ async def enqueue_task(
     *,
     title: str | None = None,
     dedupe_key: str | None = None,
-    run_mode: str = "balanced",
     priority: int = 0,
     eligible_at: int | None = None,
     schedule_id: str | None = None,
@@ -136,7 +134,6 @@ async def enqueue_task(
         title=title,
         dedupe_key=dedupe_key,
         priority=priority,
-        run_mode=run_mode,
         eligible_at=eligible_at,
     )
     await _ensure_worker()
@@ -391,7 +388,6 @@ async def _execute(item: dict[str, Any]) -> None:
             env,
             client,
             executors,
-            str(item.get("run_mode") or "balanced"),
         )
         if timeout > 0:
             await asyncio.wait_for(serve, timeout=float(timeout))
@@ -446,7 +442,6 @@ async def _serve_bridge(
     env: dict[str, str],
     client: LLMClient,
     executors: Any,
-    run_mode: str,
 ) -> None:
     if process.stdout is None or process.stdin is None:
         raise RuntimeError("Task orchestrator pipes are unavailable")
@@ -481,9 +476,7 @@ async def _serve_bridge(
                 await _log(run_id, f"Replaying cached {method} {label} ({call_key})")
                 response["result"] = cached
             else:
-                result = await _handle_call(
-                    run_id, method, params, task, task_dir, work_root, env, client, executors, run_mode
-                )
+                result = await _handle_call(run_id, method, params, task, task_dir, work_root, env, client, executors)
                 if not await Database().save_task_checkpoint(run_id, call_key, method, label, result):
                     return
                 response["result"] = result
@@ -504,7 +497,6 @@ async def _handle_call(
     env: dict[str, str],
     client: LLMClient,
     executors: Any,
-    run_mode: str,
 ) -> str:
     raw_options = params.get("options")
     options: dict[str, Any] = raw_options if isinstance(raw_options, dict) else {}
@@ -521,7 +513,6 @@ async def _handle_call(
                 task_cwd=work_root,
                 context=options.get("context") if isinstance(options.get("context"), dict) else None,
                 system=str(options["systemPrompt"]) if options.get("systemPrompt") else None,
-                run_mode=run_mode,
                 as_json=options.get("outputType") == "json",
                 temperature=options.get("temperature"),
             )

@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import asyncio
+import math
 import time
 from datetime import datetime, timezone
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from sentinel.ai.llm import discover_models
+from sentinel.ai.errors import LLMError
+from sentinel.ai.llm import LLMClient, build_system_prompt, discover_models
 from sentinel.ai.memory import make_memory_store
 from sentinel.ai.universe import get_research_unit, load_research_units
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
-from sentinel.paths import TASK_ARTIFACTS_DIR
+from sentinel.paths import SENTINEL_HOME, TASK_ARTIFACTS_DIR
 from sentinel.tasks.definitions import list_tasks
 from sentinel.tasks.runtime import enqueue_task, list_runs_for_tasks
 
@@ -105,6 +107,37 @@ async def get_ai_models(deps: Annotated[CommonDependencies, Depends(get_common_d
         return {"ok": True, "models": await discover_models(base_url, api_key)}
     except Exception as exc:  # noqa: BLE001 - settings must remain usable while the endpoint is offline
         return {"ok": False, "models": [], "error": str(exc)}
+
+
+@router.post("/prompt")
+async def create_ai_prompt(
+    body: dict[str, Any],
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict[str, str]:
+    prompt = body.get("prompt")
+    if not isinstance(prompt, str) or not prompt.strip():
+        raise HTTPException(status_code=400, detail="prompt must be a non-empty string")
+
+    raw_temperature = body.get("temperature")
+    if raw_temperature is None:
+        temperature = None
+    elif isinstance(raw_temperature, bool) or not isinstance(raw_temperature, (int, float)):
+        raise HTTPException(status_code=400, detail="temperature must be a finite number")
+    else:
+        temperature = float(raw_temperature)
+        if not math.isfinite(temperature):
+            raise HTTPException(status_code=400, detail="temperature must be a finite number")
+
+    client = await LLMClient.from_settings(deps.settings)
+    workspace = client.ai_data_dir or SENTINEL_HOME
+    system = build_system_prompt(workspace, "ai-prompt", workspace)
+    try:
+        result = await client.chat(prompt, system=system, temperature=temperature)
+        return {"output": result.content}
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    finally:
+        await client.close()
 
 
 def _run_identity(run: dict[str, Any], units: list[dict[str, Any]]) -> dict[str, str]:

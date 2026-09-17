@@ -719,6 +719,21 @@ class TestSchemaInitialization:
         for table in required_tables:
             assert table in tables, f"Missing table: {table}"
 
+    @pytest.mark.asyncio
+    async def test_migration_removes_legacy_task_run_mode(self, temp_db):
+        source = await temp_db.ensure_task_queue_source("migration-task", "queue")
+        queued = await temp_db.enqueue_task_work(source, "migration-task", {"symbol": "AIR.EU"})
+        await temp_db.conn.execute("ALTER TABLE work_queue ADD COLUMN run_mode TEXT NOT NULL DEFAULT 'balanced'")
+        await temp_db.conn.commit()
+
+        await temp_db._migrate_schema()
+
+        cursor = await temp_db.conn.execute("PRAGMA table_info(work_queue)")
+        assert "run_mode" not in {row["name"] for row in await cursor.fetchall()}
+        preserved = await temp_db.get_task_work(queued["id"])
+        assert preserved is not None
+        assert json.loads(preserved["inputs_json"]) == {"symbol": "AIR.EU"}
+
 
 class TestCategories:
     """Tests for get_categories() which returns geography/industry values from securities."""

@@ -1181,6 +1181,11 @@ class Database(TaskDatabaseMixin, BaseDatabase):
         await self.conn.execute("DROP TABLE IF EXISTS ai_units")
         await self.conn.execute("DROP INDEX IF EXISTS idx_ai_units_status")
 
+        work_queue_cursor = await self.conn.execute("PRAGMA table_info(work_queue)")
+        work_queue_columns = {row["name"] for row in await work_queue_cursor.fetchall()}
+        if "run_mode" in work_queue_columns:
+            await self.conn.execute("ALTER TABLE work_queue DROP COLUMN run_mode")
+
         # One-shot backfill for the freshly-added `instr_kind_c` column. The
         # cached quote payload already carries the kind code (`kind` field) for
         # any security that's been quote-synced even once, so we can populate
@@ -1376,7 +1381,6 @@ CREATE TABLE IF NOT EXISTS work_queue (
     inputs_json TEXT NOT NULL DEFAULT '{}',
     dedupe_key TEXT,
     priority INTEGER NOT NULL DEFAULT 0,
-    run_mode TEXT NOT NULL DEFAULT 'balanced' CHECK(run_mode IN ('fast', 'balanced', 'deep')),
     status TEXT NOT NULL CHECK(status IN ('queued', 'claimed', 'running', 'done', 'error', 'cancelled')),
     eligible_at INTEGER NOT NULL,
     claimed_at INTEGER,

@@ -240,7 +240,6 @@ def build_system_prompt(
     ai_data_dir: str | Path,
     task_id: str,
     task_cwd: str | Path,
-    run_mode: str = "balanced",
 ) -> str:
     now = datetime.now()
     weekday = (
@@ -259,7 +258,6 @@ def build_system_prompt(
             f"Your profile workspace is {ai_data_dir}. Use @/ for Sentinel's data root and ~/ for the home directory.",
             f"Current task: {task_id}. During this task, TASK_CWD and Task_CWD() expand to {task_cwd}, "
             'and Task_CWD("task-id") expands to another task\'s working directory.',
-            f"Run mode: {run_mode if run_mode in {'fast', 'balanced', 'deep'} else 'balanced'}.",
         ]
     )
 
@@ -776,7 +774,6 @@ async def run_prompt(
     task_cwd: str | Path,
     context: dict[str, Any] | None = None,
     system: str | None = None,
-    run_mode: str = "balanced",
     temperature: float | None = None,
     as_json: bool = False,
     use_tools: bool = True,
@@ -793,7 +790,7 @@ async def run_prompt(
     if context:
         template = substitute(template, context)
     work_root = Path(task_cwd)
-    base_system = build_system_prompt(client.ai_data_dir or "", task_id, work_root, run_mode)
+    base_system = build_system_prompt(client.ai_data_dir or "", task_id, work_root)
     system_prompt = f"{base_system}\n\n{system}" if system else base_system
     executors = ai_tools.make_tool_executors(
         client.searxng_base_url,

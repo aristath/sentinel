@@ -485,7 +485,7 @@ class TestBuildSystemPrompt:
     def test_shape(self) -> None:
         prompt = build_system_prompt("/data", "analyze-security", "/work")
         lines = prompt.split("\n")
-        assert len(lines) == 4
+        assert len(lines) == 3
         assert re.fullmatch(
             r"Today's date and time is \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} "
             r"\((Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\)\.",
@@ -498,13 +498,6 @@ class TestBuildSystemPrompt:
             "Current task: analyze-security. During this task, TASK_CWD and Task_CWD() expand to /work, and "
             'Task_CWD("task-id") expands to another task\'s working directory.'
         )
-        assert lines[3] == "Run mode: balanced."
-
-    @pytest.mark.parametrize("mode", ["fast", "balanced", "deep"])
-    def test_selected_run_mode_appears_exactly_once(self, mode: str) -> None:
-        prompt = build_system_prompt("/data", "task", "/work", mode)
-        mode_lines = [line for line in prompt.splitlines() if line.startswith("Run mode:")]
-        assert mode_lines == [f"Run mode: {mode}."]
 
 
 # --- rate limit delay ---------------------------------------------------------------------

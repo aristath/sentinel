@@ -7,11 +7,13 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 import pytest_asyncio
+from fastapi import HTTPException
 
 from sentinel.ai import universe
 from sentinel.api.routers import ai as ai_router
 from sentinel.api.routers.ai import (
     _run_identity,
+    create_ai_prompt,
     create_ai_request,
     get_ai_artifact,
     get_ai_models,
@@ -285,3 +287,60 @@ async def test_model_discovery_endpoint_uses_settings_and_survives_offline_llm()
 
     with patch("sentinel.api.routers.ai.discover_models", new=AsyncMock(side_effect=RuntimeError("offline"))):
         assert await get_ai_models(deps) == {"ok": False, "models": [], "error": "offline"}
+
+
+@pytest.mark.asyncio
+async def test_direct_prompt_inherits_system_prompt_and_omits_temperature():
+    client = SimpleNamespace(
+        ai_data_dir=None,
+        chat=AsyncMock(return_value=SimpleNamespace(content="Answer")),
+        close=AsyncMock(),
+    )
+    deps = SimpleNamespace(settings=SimpleNamespace())
+    with patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock(return_value=client)):
+        result = await create_ai_prompt({"prompt": "Question"}, deps)
+
+    assert result == {"output": "Answer"}
+    _, kwargs = client.chat.await_args
+    assert kwargs["temperature"] is None
+    assert "Today's date and time is" in kwargs["system"]
+    assert "Current task: ai-prompt." in kwargs["system"]
+    client.close.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+async def test_direct_prompt_forwards_temperature_without_system_override():
+    client = SimpleNamespace(
+        ai_data_dir=None,
+        chat=AsyncMock(return_value=SimpleNamespace(content="Answer")),
+        close=AsyncMock(),
+    )
+    deps = SimpleNamespace(settings=SimpleNamespace())
+    with patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock(return_value=client)):
+        await create_ai_prompt({"prompt": "Question", "temperature": 0.25}, deps)
+
+    _, kwargs = client.chat.await_args
+    assert kwargs["temperature"] == 0.25
+    assert set(kwargs) == {"system", "temperature"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"prompt": ""},
+        {"prompt": "Question", "temperature": True},
+        {"prompt": "Question", "temperature": float("inf")},
+    ],
+)
+async def test_direct_prompt_rejects_invalid_input_before_opening_client(body):
+    deps = SimpleNamespace(settings=SimpleNamespace())
+    with (
+        patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock()) as create_client,
+        pytest.raises(HTTPException) as exc_info,
+    ):
+        await create_ai_prompt(body, deps)
+
+    assert exc_info.value.status_code == 400
+    create_client.assert_not_awaited()
