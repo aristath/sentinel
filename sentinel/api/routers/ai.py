@@ -6,10 +6,12 @@ import asyncio
 import math
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
+from sentinel.ai import tools as ai_tools
 from sentinel.ai.errors import LLMError
 from sentinel.ai.llm import LLMClient, build_system_prompt, discover_models
 from sentinel.ai.memory import make_memory_store
@@ -129,15 +131,32 @@ async def create_ai_prompt(
             raise HTTPException(status_code=400, detail="temperature must be a finite number")
 
     client = await LLMClient.from_settings(deps.settings)
-    workspace = client.ai_data_dir or SENTINEL_HOME
+    workspace = Path(client.ai_data_dir or SENTINEL_HOME)
     system = build_system_prompt(workspace, "ai-prompt", workspace)
+    executors = ai_tools.make_tool_executors(
+        client.searxng_base_url,
+        client.url_summarizer_base_url,
+        workspace,
+        client.browser_search_base_url,
+    )
     try:
-        result = await client.chat(prompt, system=system, temperature=temperature)
-        return {"output": result.content}
+        result = await client.chat(
+            prompt,
+            system=system,
+            tools=ai_tools.TOOL_DEFINITIONS,
+            executors=executors,
+            work_root=workspace,
+            temperature=temperature,
+        )
+        output = result.content if result.content.strip() else result.last_tool_result
+        return {"output": output}
     except LLMError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
-        await client.close()
+        try:
+            await executors.aclose()
+        finally:
+            await client.close()
 
 
 def _run_identity(run: dict[str, Any], units: list[dict[str, Any]]) -> dict[str, str]:

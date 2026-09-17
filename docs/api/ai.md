@@ -22,9 +22,11 @@ On failure, `ok` is false, `models` is empty, and `error` contains the reason.
 
 ## `POST /api/ai/prompt`
 
-Sends a prompt to the configured LLM using Sentinel's existing system prompt.
-The system prompt cannot be overridden. `temperature` is optional; when omitted,
-Sentinel leaves it out of the inference request so the backend default applies.
+Runs a prompt through the configured LLM and Sentinel's standard tool loop. The
+model can use the same search, browser fallback, URL-reading, and workspace file
+tools as editable AI tasks. Sentinel supplies its existing system prompt and it
+cannot be overridden. `temperature` is optional; when omitted, Sentinel leaves
+it out of the inference request so the backend default applies.
 
 ```json
 {

@@ -293,11 +293,18 @@ async def test_model_discovery_endpoint_uses_settings_and_survives_offline_llm()
 async def test_direct_prompt_inherits_system_prompt_and_omits_temperature():
     client = SimpleNamespace(
         ai_data_dir=None,
-        chat=AsyncMock(return_value=SimpleNamespace(content="Answer")),
+        searxng_base_url="http://search",
+        url_summarizer_base_url="http://summarizer",
+        browser_search_base_url="http://browser-search",
+        chat=AsyncMock(return_value=SimpleNamespace(content="Answer", last_tool_result="")),
         close=AsyncMock(),
     )
+    executors = SimpleNamespace(aclose=AsyncMock())
     deps = SimpleNamespace(settings=SimpleNamespace())
-    with patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock(return_value=client)):
+    with (
+        patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock(return_value=client)),
+        patch("sentinel.api.routers.ai.ai_tools.make_tool_executors", return_value=executors) as make_executors,
+    ):
         result = await create_ai_prompt({"prompt": "Question"}, deps)
 
     assert result == {"output": "Answer"}
@@ -305,6 +312,16 @@ async def test_direct_prompt_inherits_system_prompt_and_omits_temperature():
     assert kwargs["temperature"] is None
     assert "Today's date and time is" in kwargs["system"]
     assert "Current task: ai-prompt." in kwargs["system"]
+    assert kwargs["tools"] is ai_router.ai_tools.TOOL_DEFINITIONS
+    assert kwargs["executors"] is executors
+    assert kwargs["work_root"] == ai_router.SENTINEL_HOME
+    make_executors.assert_called_once_with(
+        "http://search",
+        "http://summarizer",
+        ai_router.SENTINEL_HOME,
+        "http://browser-search",
+    )
+    executors.aclose.assert_awaited_once_with()
     client.close.assert_awaited_once_with()
 
 
@@ -312,16 +329,46 @@ async def test_direct_prompt_inherits_system_prompt_and_omits_temperature():
 async def test_direct_prompt_forwards_temperature_without_system_override():
     client = SimpleNamespace(
         ai_data_dir=None,
-        chat=AsyncMock(return_value=SimpleNamespace(content="Answer")),
+        searxng_base_url="http://search",
+        url_summarizer_base_url="http://summarizer",
+        browser_search_base_url="http://browser-search",
+        chat=AsyncMock(return_value=SimpleNamespace(content="Answer", last_tool_result="")),
         close=AsyncMock(),
     )
+    executors = SimpleNamespace(aclose=AsyncMock())
     deps = SimpleNamespace(settings=SimpleNamespace())
-    with patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock(return_value=client)):
+    with (
+        patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock(return_value=client)),
+        patch("sentinel.api.routers.ai.ai_tools.make_tool_executors", return_value=executors),
+    ):
         await create_ai_prompt({"prompt": "Question", "temperature": 0.25}, deps)
 
     _, kwargs = client.chat.await_args
     assert kwargs["temperature"] == 0.25
-    assert set(kwargs) == {"system", "temperature"}
+    assert set(kwargs) == {"system", "tools", "executors", "work_root", "temperature"}
+
+
+@pytest.mark.asyncio
+async def test_direct_prompt_returns_last_tool_result_and_closes_resources_on_empty_final_content():
+    client = SimpleNamespace(
+        ai_data_dir=None,
+        searxng_base_url="http://search",
+        url_summarizer_base_url="http://summarizer",
+        browser_search_base_url="http://browser-search",
+        chat=AsyncMock(return_value=SimpleNamespace(content="", last_tool_result="Search evidence")),
+        close=AsyncMock(),
+    )
+    executors = SimpleNamespace(aclose=AsyncMock())
+    deps = SimpleNamespace(settings=SimpleNamespace())
+    with (
+        patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock(return_value=client)),
+        patch("sentinel.api.routers.ai.ai_tools.make_tool_executors", return_value=executors),
+    ):
+        result = await create_ai_prompt({"prompt": "Research this"}, deps)
+
+    assert result == {"output": "Search evidence"}
+    executors.aclose.assert_awaited_once_with()
+    client.close.assert_awaited_once_with()
 
 
 @pytest.mark.asyncio

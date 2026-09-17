@@ -120,7 +120,7 @@ order, preserving its validation, deduplication, and enqueue behavior.
 | Tool | Purpose |
 |---|---|
 | `ai_status_get` | Pipeline queue, running unit, staleness, and last run |
-| `ai_prompt` | Send a prompt to the configured LLM with Sentinel's inherited system prompt |
+| `ai_prompt` | Run a prompt through Sentinel's configured LLM and standard tool loop |
 | `ai_units_get` | List research units, optionally filtered or stale-only |
 | `ai_history_get` | Completed and failed research work |
 | `ai_artifact_get` | Read an allowlisted research artifact |
@@ -130,7 +130,10 @@ order, preserving its validation, deduplication, and enqueue behavior.
 | `forecast_get` | Latest path, scores, and evaluation for a symbol |
 
 `ai_prompt` accepts the user prompt and an optional temperature. It does not
-accept a system prompt; Sentinel always supplies its existing system prompt.
+accept a system prompt; Sentinel always supplies its existing system prompt. The
+model receives the same search, browser fallback, URL-reading, and workspace file
+tools used by editable AI tasks, so a prompt can gather current evidence instead
+of relying only on model knowledge.
 
 ### Backups
 
