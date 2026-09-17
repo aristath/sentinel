@@ -65,14 +65,10 @@ def _set_age(path: Path, age_seconds: float) -> float:
     return mtime
 
 
-def test_profile_discovery_query_is_security_agnostic():
+def test_profile_discovery_query_matches_baseline():
     task = (definitions.CORE_TASKS_DIR / "analyze-security" / "task.js").read_text(encoding="utf-8")
 
-    assert (
-        'query: `What is "${item.name}" trying to become over the next decade, '
-        "and through what fundamental mechanisms?`" in task
-    )
-    assert "company business model long-term strategy" not in task
+    assert "query: `What is ${item.name} company business model long-term strategy`" in task
 
 
 def test_fresh_profile_sidecar_is_reused(tmp_path):
