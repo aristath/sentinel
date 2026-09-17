@@ -6,7 +6,7 @@
  *
  *   1. resolve-security.py resolves the symbol, seeds a cached profile from prior
  *      artifacts if available, and prepares the scratch paths.
- *   2. Profile (only if not cached): search the company overview, fetch+summarise
+ *   2. Profile (only if not cached): search the security's long-term purpose, fetch+summarise
  *      sources, generate a factual profile, and save it.
  *   3. Generate 3-5 research queries from the profile.
  *   4. For each query (sequential): search, fetch+summarise sources, extract findings.
@@ -27,7 +27,7 @@ const itemJson = JSON.stringify(item);
 // 2. Build the factual profile, but only when one isn't already cached.
 if (!item.profileCacheHit) {
   const overview = await tool("searxng_web_search", {
-    query: `What is ${item.name} company business model long-term strategy`,
+    query: `What is "${item.name}" trying to become over the next decade, and through what fundamental mechanisms?`,
     language: "all",
     pageno: 1,
   }, { timeoutSeconds: 120 });

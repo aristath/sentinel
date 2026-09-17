@@ -54,6 +54,8 @@ expected_prefix = str(home / ".sentinel" / "tasks" / "artifacts" / "analyze-secu
 if not case_root.startswith(expected_prefix):
     raise SystemExit(f"Refusing to clean unexpected scratchpad path: {case_root}")
 
+PROFILE_MAX_AGE_SECONDS = 30 * 24 * 60 * 60
+
 
 def extract_section(text, heading):
     start = re.search(rf"^##\s+{re.escape(heading)}\s*$", text, re.M)
@@ -122,8 +124,16 @@ def profile_citation_numbers(profile):
     return sorted(refs)
 
 
+def profile_artifact_is_fresh(path):
+    try:
+        age_seconds = time.time() - path.stat().st_mtime
+    except OSError:
+        return False
+    return age_seconds <= PROFILE_MAX_AGE_SECONDS
+
+
 def sidecar_profile(path):
-    if not path.exists():
+    if not profile_artifact_is_fresh(path):
         return "", []
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
@@ -139,7 +149,7 @@ def sidecar_profile(path):
 
 
 def seed_profile_from_existing_artifacts(report_path, old_profile_index_path):
-    if not report_path.exists():
+    if not profile_artifact_is_fresh(report_path):
         return "", []
     text = report_path.read_text(encoding="utf-8")
     profile = extract_section(text, "Profile")
@@ -169,7 +179,8 @@ def seed_profile_from_existing_artifacts(report_path, old_profile_index_path):
     return "", []
 
 
-def write_profile_sidecar(path, profile, sources, source):
+def write_profile_sidecar(path, profile, sources, source, source_mtime=None):
+    created_at = source_mtime if source_mtime is not None else time.time()
     payload = {
         "version": 1,
         "symbol": symbol,
@@ -177,11 +188,13 @@ def write_profile_sidecar(path, profile, sources, source):
         "profile": profile,
         "sources": normalize_sources(sources),
         "source": source,
-        "createdAt": int(time.time()),
+        "createdAt": int(created_at),
     }
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     tmp.replace(path)
+    if source_mtime is not None:
+        os.utime(path, (source_mtime, source_mtime))
 
 
 def write_profile_work_files(profile, sources):
@@ -192,9 +205,11 @@ def write_profile_work_files(profile, sources):
     )
 
 
+sidecar_exists = profile_sidecar_path.exists()
+sidecar_fresh = profile_artifact_is_fresh(profile_sidecar_path)
 cached_profile, cached_sources = sidecar_profile(profile_sidecar_path)
 cached_profile_source = "sidecar" if cached_profile else ""
-if not cached_profile:
+if not cached_profile and (not sidecar_exists or sidecar_fresh):
     cached_profile, cached_sources = seed_profile_from_existing_artifacts(
         report_path,
         work_root / "profile-index.json",
@@ -208,7 +223,13 @@ work_root.mkdir(parents=True, exist_ok=True)
 
 if cached_profile:
     if cached_profile_source != "sidecar":
-        write_profile_sidecar(profile_sidecar_path, cached_profile, cached_sources, cached_profile_source)
+        write_profile_sidecar(
+            profile_sidecar_path,
+            cached_profile,
+            cached_sources,
+            cached_profile_source,
+            report_path.stat().st_mtime,
+        )
     write_profile_work_files(cached_profile, cached_sources)
 
 selected["workRoot"] = str(work_root)

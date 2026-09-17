@@ -77,6 +77,11 @@ Common outputs include:
 - per-security `rating.json`
 - portfolio `ratings.json` and `latest.json`
 
+`analyze-security` reuses a source-backed profile for at most 30 days, based on
+the profile sidecar's filesystem modification time. Older profiles are rebuilt
+before the task generates its research queries. Legacy report profiles are
+eligible for migration only while the report itself is no more than 30 days old.
+
 The artifact API intentionally allowlists `analysis.md`, `evidence-pack.md`,
 `latest.json`, `profile.json`, `rating.json`, `ratings.json`, `report.md`, and
 `summary.md`. Arbitrary filesystem reads are not exposed.
