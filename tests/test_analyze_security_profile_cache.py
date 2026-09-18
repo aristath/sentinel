@@ -70,7 +70,7 @@ def _set_age(path: Path, age_seconds: float) -> float:
 def test_profile_discovery_query_uses_ten_year_strategy():
     task = (definitions.CORE_TASKS_DIR / "analyze-security" / "task.js").read_text(encoding="utf-8")
 
-    assert 'query: `strategy of "${item.name}" for the next 10 years`' in task
+    assert "query: `strategy of ${item.name} for the next 10 years`" in task
 
 
 def test_external_context_search_uses_fixed_month_without_truncating_candidates():

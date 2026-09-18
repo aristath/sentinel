@@ -28,7 +28,7 @@ const itemJson = JSON.stringify(item);
 // 2. Build the factual profile, but only when one isn't already cached.
 if (!item.profileCacheHit) {
   const overview = await tool("searxng_web_search", {
-    query: `strategy of "${item.name}" for the next 10 years`,
+    query: `strategy of ${item.name} for the next 10 years`,
     language: "all",
     pageno: 1,
   }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
