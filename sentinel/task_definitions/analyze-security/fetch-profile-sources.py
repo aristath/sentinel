@@ -6,10 +6,8 @@ Environment: SEARCH_TEXT, ITEM_JSON."""
 import os
 import json
 import pathlib
-import re
-import time
-import urllib.request
-from urllib.parse import urlparse
+
+from source_fetching import collect_usable_sources, parse_candidates
 
 item = json.loads(os.environ["ITEM_JSON"])
 search_text = os.environ.get("SEARCH_TEXT", "")
@@ -30,87 +28,23 @@ skip_hosts = {
 }
 
 
-def host_matches(host, skipped):
-    return host == skipped or host.endswith("." + skipped)
-
-
 def url_summarizer_base_url():
     return str(os.environ.get("SENTINEL_URL_SUMMARIZER_BASE_URL") or "http://127.0.0.1:8890").rstrip("/")
 
 
-def read_article(service_base_url, candidate):
-    payload = json.dumps(
-        {
-            "url": candidate["url"],
-            "title": candidate["title"],
-            "includeContent": False,
-        }
-    ).encode("utf-8")
-    last_error = None
-    for attempt in range(3):
-        request = urllib.request.Request(
-            f"{service_base_url}/v1/articles/read",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except Exception as error:
-            last_error = error
-            if attempt < 2:
-                time.sleep(2 * (attempt + 1))
-    if last_error is not None:
-        raise last_error
-    raise RuntimeError("URL summarizer failed without an error")
-
-
-candidates = []
-seen_urls = set()
-pattern = re.compile(
-    r"Title:\s*(?P<title>.*?)\n"
-    r"Description:\s*(?P<description>.*?)\n"
-    r"URL:\s*(?P<url>\S+)(?:\nRelevance Score:\s*(?P<score>[^\n]+))?",
-    re.S,
-)
-for match in pattern.finditer(str(search_text or "")):
-    url = match.group("url").strip()
-    title = " ".join(match.group("title").split())
-    if not url.startswith(("http://", "https://")) or not title or url in seen_urls:
-        continue
-    parsed = urlparse(url)
-    host = parsed.netloc.lower()
-    if host.startswith("www."):
-        host = host[4:]
-    path = parsed.path.lower()
-    if any(host_matches(host, skipped) for skipped in skip_hosts):
-        continue
-    if "[pdf]" in title.lower() or path.endswith(".pdf") or path.endswith("/download") or "/bitstreams/" in path:
-        continue
-    seen_urls.add(url)
-    candidates.append({"title": title, "url": url})
-
 service_base_url = url_summarizer_base_url()
+candidates = parse_candidates(search_text, skip_hosts)
+fetched_sources, _attempted_count = collect_usable_sources(candidates, service_base_url)
 saved = []
 with summaries_path.open("a", encoding="utf-8") as handle:
-    for candidate in candidates:
-        try:
-            fetched = read_article(service_base_url, candidate)
-        except Exception:
-            continue
-        if not fetched.get("ok"):
-            continue
-        summary = str(fetched.get("summary") or "").strip()
-        if not summary:
-            continue
+    for fetched in fetched_sources:
         idx = len(saved) + 1
-        title = fetched.get("title") or candidate["title"]
-        url = fetched.get("url") or candidate["url"]
+        title = fetched["title"]
+        url = fetched["url"]
         saved.append({"index": idx, "title": title, "url": url})
         handle.write(f"\n\n## Source {idx}: {title}\n")
         handle.write(f"URL: {url}\n\n")
-        handle.write(summary)
+        handle.write(fetched["summary"])
         handle.write("\n")
 
 if not saved:
@@ -132,9 +66,8 @@ if not saved:
         stub = (
             f"# {symbol} — {name}\n"
             f"As of: {today}\n\n"
-            "(No usable profile sources fetched yet. The web search returned "
-            "only filtered-out URLs — typically PDFs, social media, or "
-            "paywalled stubs. Will retry next scheduled cycle.)\n"
+            "(No usable profile sources fetched yet. None of the returned URLs "
+            "yielded extractable content. Will retry next scheduled cycle.)\n"
         )
         tmp = report_path.with_suffix(report_path.suffix + ".tmp")
         tmp.write_text(stub, encoding="utf-8")

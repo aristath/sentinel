@@ -71,7 +71,6 @@ for (const query of contextQueries) {
     language: "all",
     time_range: "month",
     pageno: 1,
-    num_results: 5,
   }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
   const fetched = JSON.parse(await run("fetch-query-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.contextRoot, QUERY: query, SEARCH_TEXT: searchResults } }));
   const querySummaries = await run("load-query-source-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SOURCE_SUMMARIES_PATH: fetched.sourceSummariesPath } });

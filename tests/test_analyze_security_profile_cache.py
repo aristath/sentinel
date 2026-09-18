@@ -2,7 +2,9 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 from sentinel.tasks import definitions
@@ -71,13 +73,80 @@ def test_profile_discovery_query_uses_ten_year_strategy():
     assert 'query: `strategy of "${item.name}" for the next 10 years`' in task
 
 
-def test_external_context_search_is_bounded_and_uses_fixed_month():
+def test_external_context_search_uses_fixed_month_without_truncating_candidates():
     task = (definitions.CORE_TASKS_DIR / "analyze-security" / "task.js").read_text(encoding="utf-8")
 
     assert 'time_range: "month"' in task
-    assert "num_results: 5" in task
+    assert "num_results: 5" not in task
     assert 'prompt("generate-context-queries.md"' in task
     assert "useTools: false" in task
+
+
+def test_query_source_fetcher_tries_next_batch_until_five_sources_are_usable(tmp_path):
+    attempted_urls = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):  # noqa: N802 - BaseHTTPRequestHandler contract
+            size = int(self.headers["Content-Length"])
+            payload = json.loads(self.rfile.read(size))
+            attempted_urls.append(payload["url"])
+            source_number = int(payload["url"].rsplit("/", 1)[-1].split(".", 1)[0])
+            usable = source_number >= 3
+            body = json.dumps(
+                {
+                    "ok": usable,
+                    "url": payload["url"],
+                    "title": payload["title"],
+                    "summary": f"Actionable source {source_number}." if usable else "",
+                }
+            ).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, _format, *_args):
+            return
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        work_root = tmp_path / "work"
+        search_text = "\n\n".join(
+            f"Title: Source {number}\nDescription: Candidate {number}\nURL: "
+            f"http://127.0.0.1:{server.server_port}/{number}{'.pdf' if number == 1 else ''}"
+            for number in range(1, 11)
+        )
+        script = definitions.CORE_TASKS_DIR / "analyze-security" / "fetch-query-sources.py"
+        result = subprocess.run(  # noqa: S603 - fixed executable and repository-owned script
+            [sys.executable, str(script)],
+            capture_output=True,
+            text=True,
+            env=os.environ
+            | {
+                "WORK_ROOT": str(work_root),
+                "QUERY": "test query",
+                "SEARCH_TEXT": search_text,
+                "SENTINEL_URL_SUMMARIZER_BASE_URL": f"http://127.0.0.1:{server.server_port}",
+            },
+            timeout=15,
+            check=False,
+        )
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+    assert result.returncode == 0, result.stderr
+    output = json.loads(result.stdout)
+    assert output["candidateCount"] == 10
+    assert output["attemptedCount"] == 10
+    assert output["sourceCount"] == 5
+    assert any(url.endswith("1.pdf") for url in attempted_urls)
+    index = json.loads(Path(output["sourceIndexPath"]).read_text(encoding="utf-8"))
+    assert [source["title"] for source in index] == [f"Source {number}" for number in range(3, 8)]
 
 
 def test_fresh_profile_sidecar_is_reused(tmp_path):
