@@ -4,11 +4,9 @@
  * Produces a long-term (5-10 year) structural rating for one security and posts it
  * to Sentinel. Takes a manual `symbol` input. Flow:
  *
- *   1. resolve-rating-context.py locates the symbol, the macro buckets it belongs to,
- *      and prepares every working path.
- *   2. compose-evidence-pack.py assembles the evidence (current security research,
- *      current macro context, and a 6-month window of mem0 history); load-evidence-pack.py
- *      reads it back.
+ *   1. resolve-rating-context.py locates the symbol and prepares every working path.
+ *   2. compose-evidence-pack.py assembles a 6-month window of per-security mem0
+ *      research; load-evidence-pack.py reads it back.
  *   3. The analysis prompt writes a structured bull/bear/verdict analysis.
  *   4. The rating prompt emits a {symbol, rating, rationale} JSON; validate-rating.mjs
  *      checks/repairs it. Repeat up to 5 times, feeding validator feedback back, until valid.

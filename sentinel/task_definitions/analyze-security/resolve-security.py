@@ -220,6 +220,10 @@ work_root.mkdir(parents=True, exist_ok=True)
 (work_root / "query-source-summaries").mkdir(parents=True, exist_ok=True)
 (work_root / "query-source-index").mkdir(parents=True, exist_ok=True)
 (work_root / "query-findings").mkdir(parents=True, exist_ok=True)
+context_root = work_root / "external-context"
+(context_root / "query-source-summaries").mkdir(parents=True, exist_ok=True)
+(context_root / "query-source-index").mkdir(parents=True, exist_ok=True)
+(context_root / "query-findings").mkdir(parents=True, exist_ok=True)
 
 if cached_profile:
     if cached_profile_source != "sidecar":
@@ -235,6 +239,8 @@ if cached_profile:
 selected["workRoot"] = str(work_root)
 selected["reportPath"] = str(report_path)
 selected["queriesPath"] = str(work_root / "queries.json")
+selected["contextRoot"] = str(context_root)
+selected["contextReportPath"] = str(task_root / f"{slug(symbol)}.context.md")
 selected["profileCacheHit"] = bool(cached_profile)
 selected["profileCacheSource"] = cached_profile_source
 selected["profileSidecarPath"] = str(profile_sidecar_path)

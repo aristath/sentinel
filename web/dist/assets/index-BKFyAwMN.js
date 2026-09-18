@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-DO5p6AJO.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-DKtHdYO6.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2945,7 +2945,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-DO5p6AJO.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-DKtHdYO6.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -4173,15 +4173,10 @@ var SentinelResearch = class extends i {
 			stale: 0,
 			total: 0
 		};
-		const macro = status.staleness?.macro ?? {
-			stale: 0,
-			total: 0
-		};
 		const securities = (this.allUnits.value?.units ?? []).filter((unit) => unit.kind === "security");
 		return b`
       <div>
-        Securities ${security.stale}/${security.total} stale │ Macro
-        ${macro.stale}/${macro.total} stale │ Queued
+        Securities ${security.stale}/${security.total} stale │ Queued
         ${status.queued?.length ?? 0} │ Memory ${status.memory?.findings ?? "-"}
         findings
       </div>
@@ -4277,7 +4272,6 @@ var SentinelResearch = class extends i {
           >
             <option value="">All units</option>
             <option value="security">Securities</option>
-            <option value="macro">Macro</option>
             <option value="portfolio">Portfolio</option>
           </tui-select></label
         >

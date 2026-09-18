@@ -1738,15 +1738,15 @@ class TestDedupHelpers:
         assert find_deterministic_memory_duplicate("!!!", [{"id": "c1", "content": "x", "similarity": 0.99}]) is None
 
     def test_dedup_filters_symbol_branch(self) -> None:
-        assert dedup_metadata_filters({"domain": "securities", "symbol": "AETF.GR", "kind": "macro"}) == {
+        assert dedup_metadata_filters({"domain": "securities", "symbol": "AETF.GR", "kind": "external-context"}) == {
             "domain": "securities",
             "symbol": "AETF.GR",
         }
 
     def test_dedup_filters_kind_theme_branch(self) -> None:
-        assert dedup_metadata_filters({"domain": "securities", "kind": "macro", "theme": "greece"}) == {
+        assert dedup_metadata_filters({"domain": "securities", "kind": "external-context", "theme": "greece"}) == {
             "domain": "securities",
-            "kind": "macro",
+            "kind": "external-context",
             "theme": "greece",
         }
 
@@ -1761,11 +1761,11 @@ class TestMetadataNormalization:
         out = normalize_memory_store_metadata(
             "content",
             ["b", "a", "b"],
-            {"tags": ["a", "c"], "kind": "macro"},
+            {"tags": ["a", "c"], "kind": "external-context"},
         )
         assert out is not None
         assert out["tags"] == ["a", "c", "b"]
-        assert out["kind"] == "macro"
+        assert out["kind"] == "external-context"
 
     def test_sector_keys_popped(self) -> None:
         out = normalize_memory_store_metadata("c", None, {"primary_sector": "securities", "sector": "x", "kind": "k"})
@@ -1795,7 +1795,7 @@ class TestRecordMapping:
             "updatedAt": "2024-01-16T00:00:00.000Z",
             "last_seen_at": "2024-01-17T00:00:00.000Z",
             "tags": ["a"],
-            "kind": "macro",
+            "kind": "external-context",
             "salience": 0.7,
         }
         record = to_pgvector_record("id-1", payload)
@@ -1808,7 +1808,7 @@ class TestRecordMapping:
         assert "user_id" not in record["metadata"]
         assert "hash" not in record["metadata"]
         assert "data" not in record["metadata"]
-        assert record["metadata"]["kind"] == "macro"
+        assert record["metadata"]["kind"] == "external-context"
 
     def test_last_seen_camelcase_fallback(self) -> None:
         record = to_pgvector_record("id", {"data": "x", "lastSeenAt": "1970-01-01T00:00:00Z"})

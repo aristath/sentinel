@@ -179,14 +179,12 @@ class SentinelResearch extends LitElement {
   renderStatus() {
     const status = this.status.value;
     const security = status.staleness?.security ?? { stale: 0, total: 0 };
-    const macro = status.staleness?.macro ?? { stale: 0, total: 0 };
     const units = this.allUnits.value?.units ?? [];
     const securities = units.filter((unit) => unit.kind === "security");
 
     return html`
       <div>
-        Securities ${security.stale}/${security.total} stale │ Macro
-        ${macro.stale}/${macro.total} stale │ Queued
+        Securities ${security.stale}/${security.total} stale │ Queued
         ${status.queued?.length ?? 0} │ Memory ${status.memory?.findings ?? "-"}
         findings
       </div>
@@ -334,7 +332,6 @@ class SentinelResearch extends LitElement {
           >
             <option value="">All units</option>
             <option value="security">Securities</option>
-            <option value="macro">Macro</option>
             <option value="portfolio">Portfolio</option>
           </tui-select></label
         >

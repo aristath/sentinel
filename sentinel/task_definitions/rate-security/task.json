@@ -2,7 +2,7 @@
   "name": "Rate Security",
   "enabled": false,
   "schedule": null,
-  "description": "Compose evidence (current security research, current macro context, 6-month historical mem0 records), analyze structurally, produce a long-term 0-1 rating, and post it to Sentinel.",
+  "description": "Compose six months of per-security research memory, analyze structurally, produce a long-term 0-1 rating, and post it to Sentinel.",
   "tags": ["REQUIRES-INPUT"],
   "cwd": "@/tasks/artifacts/{{task-id}}",
   "timeout": 5400

@@ -96,8 +96,8 @@ console.log(result);
 ```
 
 `prompt` options include `context`, `systemPrompt`, `outputType: "json"`,
-`temperature`, and `timeoutSeconds`. `run` options include `cwd`, `env`, and
-`timeoutSeconds`. Tool calls accept `timeoutSeconds`.
+`temperature`, `useTools` (default `true`), and `timeoutSeconds`. `run` options
+include `cwd`, `env`, and `timeoutSeconds`. Tool calls accept `timeoutSeconds`.
 
 Helper processes receive the task inputs plus:
 
@@ -142,12 +142,9 @@ erase historical records.
 | Task | Purpose |
 |---|---|
 | `refresh-securities-universe` | Write the active security snapshot |
-| `refresh-macro-buckets` | Group eligible securities by country and industry |
 | `schedule-next-security-analysis` | Queue the stalest/missing security analysis |
-| `schedule-next-macro-analysis` | Queue the stalest/missing macro analysis |
-| `analyze-security` | Build source-backed profile, findings, report, and summary |
-| `analyze-macro-bucket` | Build source-backed macro report and memories |
-| `rate-security` | Rate one security from current and historical evidence |
+| `analyze-security` | Build a source-backed profile, security research, per-security external context, report, and summary |
+| `rate-security` | Rate one security from its last six months of research memory |
 | `rate-portfolio` | Rate the whole eligible universe relative to itself |
 
 See [AI pipeline](ai-pipeline.md) for dependencies and artifacts.

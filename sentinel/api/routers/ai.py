@@ -23,13 +23,10 @@ from sentinel.tasks.runtime import enqueue_task, list_runs_for_tasks
 
 router = APIRouter(prefix="/ai", tags=["ai"])
 AI_TASK_IDS = {
-    "analyze-macro-bucket",
     "analyze-security",
     "rate-portfolio",
     "rate-security",
-    "refresh-macro-buckets",
     "refresh-securities-universe",
-    "schedule-next-macro-analysis",
     "schedule-next-security-analysis",
 }
 MEMORY_STATS_TTL_SECONDS = 30.0
@@ -52,6 +49,7 @@ def _age_seconds(value: Any, now: datetime) -> float:
 
 ARTIFACT_ALLOWLIST = {
     "analysis.md",
+    "context.md",
     "evidence-pack.md",
     "latest.json",
     "profile.json",
@@ -166,9 +164,6 @@ def _run_identity(run: dict[str, Any], units: list[dict[str, Any]]) -> dict[str,
     if task_id in {"analyze-security", "rate-security"}:
         unit_kind = "security"
         requested = str(inputs.get("symbol") or "").strip()
-    elif task_id == "analyze-macro-bucket":
-        unit_kind = "macro"
-        requested = str(inputs.get("bucket") or "").strip()
     elif task_id == "rate-portfolio":
         unit_kind = "portfolio"
         requested = "portfolio"
@@ -218,7 +213,7 @@ async def get_ai_status(deps: Annotated[CommonDependencies, Depends(get_common_d
             "elapsed_seconds": None if not started else _age_seconds(started, now),
         }
 
-    stale_counts = {"macro": {"stale": 0, "total": 0}, "security": {"stale": 0, "total": 0}}
+    stale_counts = {"security": {"stale": 0, "total": 0}}
     most_stale: dict[str, Any] | None = None
     most_stale_age = -1.0
     for unit in units:
@@ -304,12 +299,6 @@ async def get_ai_units(
                     and run.get("taskId") in {"analyze-security", "rate-security"}
                     and str((run.get("inputs") or {}).get("symbol") or "").upper() == str(unit.get("key") or "").upper()
                 )
-                or (
-                    unit_kind == "macro"
-                    and run.get("taskId") == "analyze-macro-bucket"
-                    and str((run.get("inputs") or {}).get("bucket") or "")
-                    in {str(unit.get("key") or ""), str(unit.get("label") or "")}
-                )
                 or (unit_kind == "portfolio" and run.get("taskId") == "rate-portfolio")
             ),
             None,
@@ -344,23 +333,13 @@ async def create_ai_request(
     unit_key = str(data.get("unit_key") or "").strip()
     if kind not in {"analyze", "rate"}:
         raise HTTPException(status_code=400, detail="kind must be 'analyze' or 'rate'")
-    if unit_kind not in {"security", "macro"}:
-        raise HTTPException(status_code=400, detail="unit_kind must be 'security' or 'macro'")
-    if kind == "rate" and unit_kind != "security":
-        raise HTTPException(status_code=400, detail="rate requests are only supported for security units")
+    if unit_kind != "security":
+        raise HTTPException(status_code=400, detail="unit_kind must be 'security'")
     unit = get_research_unit(unit_kind, unit_key)
     if unit is None:
         raise HTTPException(status_code=404, detail="unknown AI unit")
-    if kind == "rate":
-        task_id = "rate-security"
-    elif unit_kind == "security":
-        task_id = "analyze-security"
-    else:
-        task_id = "analyze-macro-bucket"
-    if unit_kind == "security":
-        inputs = {"symbol": unit["key"]}
-    else:
-        inputs = {"bucket": unit["label"]}
+    task_id = "rate-security" if kind == "rate" else "analyze-security"
+    inputs = {"symbol": unit["key"]}
     run = await enqueue_task(task_id, inputs)
     return {"status": "queued", "request_id": run["id"]}
 
@@ -395,7 +374,7 @@ async def get_ai_artifact(
     name: str,
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, Any]:
-    if kind not in {"security", "macro", "portfolio"} or name not in ARTIFACT_ALLOWLIST:
+    if kind not in {"security", "portfolio"} or name not in ARTIFACT_ALLOWLIST:
         raise HTTPException(status_code=404, detail="artifact not found")
     unit = get_research_unit(kind, unit_key)
     artifacts = unit.get("artifacts", {}) if unit else {}

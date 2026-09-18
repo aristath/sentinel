@@ -404,7 +404,7 @@ class Database(TaskDatabaseMixin, BaseDatabase):
         `min_lot`) are written when the caller passes a non-None value; otherwise
         the existing value is left untouched. Pass an empty string for the text
         fields to deliberately blank them (e.g. ETFs whose UCITS-domicile country
-        we don't want polluting the AI research macro buckets).
+        we don't want polluting portfolio-composition classifications).
 
         The full broker payload lands in `data` verbatim — that's the durable
         store for any field we don't yet have a column for. Promote a field to

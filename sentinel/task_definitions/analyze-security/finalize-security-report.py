@@ -1,7 +1,8 @@
-"""Build the canonical security report (profile + sources + findings) atomically,
-then store one mem0 memory per finding (citation markers stripped, inline URLs kept).
+"""Build the canonical security report (profile + sources + both finding sets)
+atomically, then store one mem0 memory per finding.
 Report is written before mem0 so the artifact always survives.
-Environment: ITEM_JSON, DISTILL_OUTPUT, PROFILE, SENTINEL_BASE_URL (optional)."""
+Environment: ITEM_JSON, DISTILL_OUTPUT, CONTEXT_OUTPUT, PROFILE,
+             SENTINEL_BASE_URL (optional)."""
 
 import os
 import datetime as dt
@@ -14,14 +15,15 @@ import urllib.request
 item = json.loads(os.environ["ITEM_JSON"])
 symbol = item.get("symbol")
 name = item.get("name")
-industry = item.get("industry")
-geography = item.get("geography")
 work_root = pathlib.Path(item["workRoot"])
 report_path = pathlib.Path(item["reportPath"])
 
 raw = os.environ.get("DISTILL_OUTPUT", "")
 if not isinstance(raw, str) or not raw.strip():
     raise SystemExit("distill-security-findings produced no output")
+context_raw = os.environ.get("CONTEXT_OUTPUT", "")
+if not isinstance(context_raw, str) or not context_raw.strip():
+    raise SystemExit("distill-context-findings produced no output")
 
 profile_text = str(os.environ.get("PROFILE") or "").strip()
 
@@ -40,6 +42,10 @@ def extract_bullets(text):
             continue
         bullets.append(body)
     return bullets
+
+
+def extract_paragraphs(text):
+    return [paragraph.strip() for paragraph in re.split(r"\n\s*\n", text) if paragraph.strip()]
 
 
 def collect_inline_urls(bullet):
@@ -112,37 +118,50 @@ if query_index_dir.exists():
             if isinstance(entry, dict):
                 add_source(entry.get("url"), entry.get("title"))
 
+context_index_dir = work_root / "external-context" / "query-source-index"
+if context_index_dir.exists():
+    for path in sorted(context_index_dir.glob("*.json")):
+        for entry in json.loads(path.read_text(encoding="utf-8")):
+            if isinstance(entry, dict):
+                add_source(entry.get("url"), entry.get("title"))
+
 bullets = extract_bullets(raw)
+context_paragraphs = extract_paragraphs(context_raw)
 today = dt.date.today().isoformat()
 
 memory_items = []
-for bullet in bullets:
+
+
+def add_memory_item(bullet, kind):
     text = memory_text(bullet)
     if not text:
-        continue
-    inline_urls = collect_inline_urls(bullet)
-    tags = []
-    for value in ["securities", symbol, "query-source-summary", geography, industry]:
-        if value and value not in tags:
-            tags.append(value)
+        return
     metadata = {
         "domain": "securities",
         "primary_sector": "securities",
         "as_of": today,
         "symbol": symbol,
-        "kind": "query-source-summary",
-        "industry": industry,
-        "geography": geography,
-        "source_urls": inline_urls,
+        "kind": kind,
+        "source_urls": collect_inline_urls(bullet),
     }
-    memory_items.append({"memory": text, "tags": tags, "metadata": metadata})
+    memory_items.append(
+        {
+            "memory": text,
+            "tags": ["securities", symbol, kind],
+            "metadata": metadata,
+        }
+    )
+
+
+for bullet in bullets:
+    add_memory_item(bullet, "query-source-summary")
+for paragraph in context_paragraphs:
+    add_memory_item(paragraph, "external-context")
 
 # Build the canonical report. Write before mem0 stores so the artifact is
 # always on disk even if every mem0 write fails.
 lines = [
     f"# {symbol} — {name}",
-    f"Industry: {industry or 'n/a'}",
-    f"Geography: {geography or 'n/a'}",
     f"As of: {today}",
     "",
     "## Profile",
@@ -165,6 +184,13 @@ if bullets:
 else:
     lines.append("- None.")
 
+lines.append("")
+lines.append("## External Context")
+if context_paragraphs:
+    lines.append("\n\n".join(context_paragraphs))
+else:
+    lines.append("None.")
+
 report_path.parent.mkdir(parents=True, exist_ok=True)
 tmp_path = report_path.with_suffix(report_path.suffix + ".tmp")
 tmp_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
@@ -183,6 +209,7 @@ result = {
     "report": str(report_path),
     "workRoot": str(work_root),
     "findings": len(bullets),
+    "externalContextFindings": len(context_paragraphs),
     "memoryAttempts": len(memory_items),
     "memoryStored": stored,
     "memoryFailed": len(failed),

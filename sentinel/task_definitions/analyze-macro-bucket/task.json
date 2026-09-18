@@ -1,9 +1,0 @@
-{
-  "name": "Analyze Macro Bucket",
-  "enabled": false,
-  "schedule": null,
-  "description": "Research one macro bucket as a financial advisor: gather sources, investigate the 5-10 year structural picture, write a findings report, and persist findings to mem0.",
-  "tags": ["REQUIRES-INPUT"],
-  "cwd": "@/tasks/artifacts/{{task-id}}",
-  "timeout": 4500
-}

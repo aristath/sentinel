@@ -416,7 +416,7 @@ async def ai_prompt(prompt: str, temperature: float | None = None) -> dict[str, 
 
 @mcp.tool()
 async def ai_units_get(kind: str | None = None, stale_only: bool = False) -> dict[str, Any]:
-    """List portfolio, security, and macro subjects tracked by AI research.
+    """List portfolio and security subjects tracked by AI research.
 
     Includes staleness, run status, errors, and artifacts.
     """
@@ -431,13 +431,13 @@ async def ai_history_get(limit: int = 50) -> dict[str, Any]:
 
 @mcp.tool()
 async def ai_artifact_get(kind: str, unit_key: str, name: str) -> dict[str, Any]:
-    """Read a generated AI research artifact listed by ai_units_get for a portfolio, security, or macro subject."""
+    """Read a generated AI research artifact listed by ai_units_get for a portfolio or security subject."""
     return await _call(ai_api.get_ai_artifact(kind, unit_key, name, await _deps()))
 
 
 @mcp.tool()
 async def ai_research_run(kind: str, unit_kind: str, unit_key: str) -> dict[str, Any]:
-    """Queue analyze or rate research for a security or macro unit."""
+    """Queue analyze or rate research for a security."""
     return await _call(
         ai_api.create_ai_request(
             {"kind": kind, "unit_kind": unit_kind, "unit_key": unit_key},

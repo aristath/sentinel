@@ -2,23 +2,13 @@
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
-import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from sentinel.paths import TASK_ARTIFACTS_DIR
-
-
-def slugify(value: str) -> str:
-    """Build the stable key historically exposed by Sentinel's AI API."""
-    text = unicodedata.normalize("NFKD", value)
-    text = text.encode("ascii", "ignore").decode("ascii").lower()
-    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
-    return text or hashlib.sha1(value.encode("utf-8")).hexdigest()[:16]  # noqa: S324 - stable identifier
 
 
 def _task_slug(value: str) -> str:
@@ -44,25 +34,18 @@ def load_security_universe() -> list[dict[str, Any]]:
     return _read_array(path, "the securities universe")
 
 
-def load_macro_buckets() -> list[dict[str, Any]]:
-    """Read the bucket roster produced by refresh-macro-buckets."""
-    path = TASK_ARTIFACTS_DIR / "refresh-macro-buckets" / "macro-buckets.json"
-    return _read_array(path, "the macro bucket universe")
-
-
 def _artifact_paths(kind: str, key: str, label: str) -> dict[str, Path]:
     if kind == "security":
         stem = _task_slug(key)
         return {
             "report.md": TASK_ARTIFACTS_DIR / "analyze-security" / f"{stem}.md",
             "summary.md": TASK_ARTIFACTS_DIR / "analyze-security" / f"{stem}.summary.md",
+            "context.md": TASK_ARTIFACTS_DIR / "analyze-security" / f"{stem}.context.md",
             "profile.json": TASK_ARTIFACTS_DIR / "analyze-security" / f"{stem}.profile.json",
             "analysis.md": TASK_ARTIFACTS_DIR / "rate-security" / stem / "analysis.md",
             "rating.json": TASK_ARTIFACTS_DIR / "rate-security" / stem / "rating.json",
             "evidence-pack.md": TASK_ARTIFACTS_DIR / "rate-security" / stem / "evidence-pack.md",
         }
-    if kind == "macro":
-        return {"report.md": TASK_ARTIFACTS_DIR / "analyze-macro-bucket" / f"{_task_slug(label)}.md"}
     if kind == "portfolio":
         return {
             "latest.json": TASK_ARTIFACTS_DIR / "rate-portfolio" / "latest.json",
@@ -73,7 +56,7 @@ def _artifact_paths(kind: str, key: str, label: str) -> dict[str, Path]:
 
 def _with_artifacts(kind: str, key: str, label: str) -> dict[str, Any]:
     existing = {name: path for name, path in _artifact_paths(kind, key, label).items() if path.is_file()}
-    completion_name = {"security": "summary.md", "macro": "report.md", "portfolio": "latest.json"}.get(kind)
+    completion_name = {"security": "summary.md", "portfolio": "latest.json"}.get(kind)
     completion = existing.get(completion_name) if completion_name else None
     analyzed_at = None
     if completion is not None:
@@ -97,15 +80,6 @@ def load_research_units(kind: str | None = None) -> list[dict[str, Any]]:
             continue
         label = str(security.get("name") or "").strip() or symbol
         units.append(_with_artifacts("security", symbol, label))
-
-    for bucket in load_macro_buckets():
-        label = str(bucket.get("bucket") or "").strip()
-        if not label:
-            continue
-        country_code = str(bucket.get("country_code") or bucket.get("geography") or "").strip().upper()
-        industry = str(bucket.get("industry") or "").strip()
-        key = slugify(f"{country_code}-{industry}") if country_code and industry else slugify(label)
-        units.append(_with_artifacts("macro", key, label))
 
     units.append(_with_artifacts("portfolio", "portfolio", "Portfolio"))
     if kind is not None:

@@ -1,7 +1,7 @@
 {
   "name": "Analyze Security",
   "enabled": false,
-  "description": "Research one security as a financial advisor: build a factual profile, generate research queries, fetch sources, investigate the 5-10 year structural picture, distill findings, write a report, and persist findings to mem0.",
+  "description": "Research one security: build a factual profile, investigate security-specific and external context through bounded source-backed steps, distill findings, write reports, and persist findings to mem0.",
   "tags": [
     "REQUIRES-INPUT"
   ],

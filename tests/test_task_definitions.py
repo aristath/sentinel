@@ -485,6 +485,33 @@ async def test_prompt_call_forwards_custom_system_prompt(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_prompt_call_can_disable_tools(tmp_path, monkeypatch):
+    prompt_file = tmp_path / "prompt.md"
+    prompt_file.write_text("Prompt", encoding="utf-8")
+    captured = {}
+
+    async def fake_prompt(*_args, **kwargs):
+        captured.update(kwargs)
+        return "done"
+
+    monkeypatch.setattr(runtime, "run_prompt", fake_prompt)
+    result = await runtime._handle_call(
+        "run-id",
+        "prompt",
+        {"file": "prompt.md", "options": {"useTools": False}},
+        {"id": "example"},
+        tmp_path,
+        tmp_path,
+        {},
+        FakeClient(),
+        FakeExecutors(),
+    )
+
+    assert result == "done"
+    assert captured["use_tools"] is False
+
+
+@pytest.mark.asyncio
 async def test_worker_waits_for_api_readiness_before_claiming_work(monkeypatch):
     ready = asyncio.Event()
     claimed = asyncio.Event()
@@ -807,6 +834,32 @@ def test_rating_validator_repairs_json_without_frontend_node_modules(tmp_path):
     assert result.returncode == 0
     assert payload["valid"] is True
     assert json.loads(Path(context["ratingPath"]).read_text(encoding="utf-8"))["rating"] == 0.7
+
+
+def test_rating_validator_does_not_enforce_rationale_paragraph_count(tmp_path):
+    context = {
+        "symbol": "TEST",
+        "ratingRawPath": str(tmp_path / "rating.raw.json"),
+        "ratingPath": str(tmp_path / "rating.json"),
+    }
+    Path(context["ratingRawPath"]).write_text(
+        json.dumps({"symbol": "TEST", "rating": 0.7, "rationale": "One concise paragraph."}),
+        encoding="utf-8",
+    )
+    script = definitions.CORE_TASKS_DIR / "rate-security" / "validate-rating.mjs"
+    env = os.environ | {"CONTEXT_JSON": json.dumps(context), "SENTINEL_APP_ROOT": str(runtime.APP_ROOT)}
+    result = subprocess.run(  # noqa: S603 - fixed executable and test-owned script
+        [shutil.which("node") or "node", str(script)],
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=15,
+        check=False,
+    )
+
+    payload = json.loads(result.stdout)
+    assert result.returncode == 0
+    assert payload["valid"] is True
 
 
 def test_rating_validator_rejects_the_same_leading_zero_number_as_clara(tmp_path):

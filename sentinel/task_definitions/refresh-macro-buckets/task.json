@@ -1,9 +1,0 @@
-{
-  "name": "Refresh Macro Buckets",
-  "enabled": true,
-  "schedule": null,
-  "description": "Build the latest macro bucket list from the securities universe snapshot.",
-  "cwd": "@/tasks/artifacts/{{task-id}}",
-  "schedulePolicy": { "staleAfterSeconds": 10800, "runWhen": "idle" },
-  "timeout": 120
-}

@@ -1,9 +1,9 @@
 # AI research pipeline
 
-The AI pipeline researches securities and macro buckets, stores source-backed
-artifacts and memories, and writes per-security `ai_research_multiplier`
-ratings. Those ratings influence long-term target weights; deterministic market
-signals and optional forecasts influence timing.
+The AI pipeline researches each security and its specific external context,
+stores source-backed artifacts and memories, and writes per-security
+`ai_research_multiplier` ratings. Those ratings influence long-term target
+weights; deterministic market signals and optional forecasts influence timing.
 
 The pipeline is implemented as bundled editable folder tasks. It is not a
 second scheduler or an opaque background daemon.
@@ -13,12 +13,12 @@ second scheduler or an opaque background daemon.
 ```text
 refresh securities universe
           │
-          ├──► schedule/analyze stale securities ──► security reports/summaries
-          │                                              │
-          └──► refresh macro buckets                     │
-                       │                                 │
-                       └──► schedule/analyze stale macro │
-                              buckets ──► macro reports  │
+          └──► schedule/analyze stale securities
+                       │
+                       ├──► security-specific research
+                       ├──► per-security external-context research
+                       └──► reports/summaries
+                                                         │
                                                          ▼
                                           rate individual security
                                                          │
@@ -35,11 +35,14 @@ The `rate-portfolio` output is the primary batch update path.
 
 ## Research units
 
-The AI API exposes three unit kinds:
+The AI API exposes two unit kinds:
 
 - `security`: an active security from the generated universe snapshot.
-- `macro`: a country/industry bucket generated from eligible securities.
 - `portfolio`: the relative portfolio-rating result.
+
+External context is not a separate research unit. It is derived from each
+security's source-backed profile, researched through bounded fixed-month
+searches, distilled separately, and stored with that security.
 
 A unit is stale when its latest artifact is missing or older than the configured
 window. Portfolio staleness also considers whether its universe or security
@@ -71,9 +74,7 @@ $SENTINEL_HOME/tasks/artifacts/
 Common outputs include:
 
 - `refresh-securities-universe/securities-universe.json`
-- `refresh-macro-buckets/macro-buckets.json`
-- per-security `profile.json`, `report.md`, and `summary.md`
-- per-macro-bucket `report.md`
+- per-security `profile.json`, `context.md`, `report.md`, and `summary.md`
 - per-security `rating.json`
 - portfolio `ratings.json` and `latest.json`
 
@@ -82,14 +83,14 @@ the profile sidecar's filesystem modification time. Older profiles are rebuilt
 before the task generates its research queries. Legacy report profiles are
 eligible for migration only while the report itself is no more than 30 days old.
 
-The artifact API intentionally allowlists `analysis.md`, `evidence-pack.md`,
-`latest.json`, `profile.json`, `rating.json`, `ratings.json`, `report.md`, and
-`summary.md`. Arbitrary filesystem reads are not exposed.
+The artifact API intentionally allowlists `analysis.md`, `context.md`,
+`evidence-pack.md`, `latest.json`, `profile.json`, `rating.json`, `ratings.json`,
+`report.md`, and `summary.md`. Arbitrary filesystem reads are not exposed.
 
 ## Memory
 
-Security and macro finalizers submit distilled findings to
-`POST /api/memory/dedup-store`. Similarity at or above
+Security finalizers submit both security-specific and external-context findings
+to `POST /api/memory/dedup-store`. Similarity at or above
 `ai_dedup_similarity_threshold` reinforces/skips a duplicate rather than
 creating a redundant vector record. Tags and metadata preserve unit context.
 

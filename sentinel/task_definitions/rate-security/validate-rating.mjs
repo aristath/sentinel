@@ -3,7 +3,7 @@
  *
  * Reads the model output, strips fences / extracts embedded JSON / repairs JSON as
  * needed, and enforces the exact shape: keys {symbol, rating, rationale}, symbol matches,
- * rating a finite 0..1 number, rationale 2-3 blank-line-separated paragraphs. On success
+ * rating a finite 0..1 number, and a non-empty rationale. On success
  * writes rating.json and prints {valid:true,...}; on failure prints {valid:false, error,
  * schema, raw} so the rating loop can retry with the feedback.
  *
@@ -30,7 +30,7 @@ const schema = {
   properties: {
     symbol: expectedSymbol,
     rating: 'number from 0.0 to 1.0',
-    rationale: 'string with 2-3 paragraphs separated by blank lines',
+    rationale: 'non-empty string',
   },
 };
 
@@ -86,10 +86,6 @@ function validateRating(value) {
   }
   const rationale = stringValue(value.rationale);
   if (!rationale) throw new Error('Rationale is required');
-  const paragraphs = rationale.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
-  if (paragraphs.length < 2 || paragraphs.length > 3) {
-    throw new Error('Rationale must contain 2-3 paragraphs separated by a blank line');
-  }
   return { symbol, rating, rationale };
 }
 

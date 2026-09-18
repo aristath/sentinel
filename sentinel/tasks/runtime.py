@@ -515,6 +515,7 @@ async def _handle_call(
                 system=str(options["systemPrompt"]) if options.get("systemPrompt") else None,
                 as_json=options.get("outputType") == "json",
                 temperature=options.get("temperature"),
+                use_tools=options.get("useTools") is not False,
             )
             return json.dumps(value, ensure_ascii=False) if not isinstance(value, str) else value
         if method == "tool":

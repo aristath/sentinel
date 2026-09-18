@@ -1,9 +1,0 @@
-{
-  "name": "Schedule Next Macro Analysis",
-  "enabled": true,
-  "schedule": null,
-  "description": "Pick one macro bucket whose latest analysis file is missing or older than seven days and queue analyze-macro-bucket.",
-  "cwd": "@/tasks/artifacts/{{task-id}}",
-  "schedulePolicy": { "staleAfterSeconds": 3900, "runWhen": "idle" },
-  "timeout": 120
-}

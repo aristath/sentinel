@@ -153,9 +153,7 @@ async def sync_metadata(db, broker) -> None:
 
     ETFs (`instr_kind_c == 7`) are intentionally blanked — Tradernet stamps them
     with their domicile country (typically IE) and `"Equity ETFs"`, neither of
-    which reflects the actual underlying exposure. The AI research macro-bucket task
-    filters rows with empty geo+industry, so blanking keeps ETFs out of the
-    macro-analysis loop.
+    which reflects the actual underlying exposure shown in portfolio composition.
 
     Resilience: for non-ETFs, empty values from the broker are treated as
     "I don't know" and the existing DB value is left untouched. This means a

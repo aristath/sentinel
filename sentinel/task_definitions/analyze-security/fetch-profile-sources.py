@@ -129,12 +129,8 @@ if not saved:
         today = dt.date.today().isoformat()
         symbol = item.get("symbol")
         name = item.get("name")
-        industry = item.get("industry")
-        geography = item.get("geography")
         stub = (
             f"# {symbol} — {name}\n"
-            f"Industry: {industry or 'n/a'}\n"
-            f"Geography: {geography or 'n/a'}\n"
             f"As of: {today}\n\n"
             "(No usable profile sources fetched yet. The web search returned "
             "only filtered-out URLs — typically PDFs, social media, or "

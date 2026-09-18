@@ -47,7 +47,7 @@ Returns the pipeline dashboard state:
 | `enabled` | At least one AI task has an active schedule/policy |
 | `running` | Current unit/task identity, start time, and elapsed seconds |
 | `queued` | Queued AI task runs |
-| `staleness` | Macro/security stale and total counts plus most-stale unit |
+| `staleness` | Security stale and total counts plus most-stale unit |
 | `last_run` | Most recent completed or failed AI run |
 | `memory` | Memory finding count, most recent write, or satellite error |
 | `next_tick_at` | Reserved; currently `null` |
@@ -63,7 +63,7 @@ Query parameters:
 
 | Parameter | Values | Default |
 |---|---|---|
-| `kind` | `security`, `macro`, `portfolio`, or omitted | all kinds |
+| `kind` | `security`, `portfolio`, or omitted | all kinds |
 | `stale_only` | boolean | `false` |
 
 Response: `{ "units": [...] }`. Each unit includes `kind`, `key`, `label`,
@@ -83,7 +83,7 @@ Queues one analysis or security-rating task.
 ```
 
 - `kind`: `analyze` or `rate`
-- `unit_kind`: `security` or `macro`
+- `unit_kind`: `security`
 - `unit_key`: an existing unit key
 - Rating is supported only for security units.
 
@@ -104,10 +104,11 @@ identity, normalized status, duration, error, and execution time.
 
 ## `GET /api/ai/artifacts/{kind}/{unit_key}/{name}`
 
-Reads an allowlisted generated artifact for a `security`, `macro`, or
-`portfolio` unit. The response contains `name`, textual `content`, and
+Reads an allowlisted generated artifact for a `security` or `portfolio` unit.
+The response contains `name`, textual `content`, and
 `modified_at`. Unknown units, disallowed names, missing files, and paths outside
 the artifact root return 404.
 
-Allowlisted filenames are `analysis.md`, `evidence-pack.md`, `latest.json`,
-`profile.json`, `rating.json`, `ratings.json`, `report.md`, and `summary.md`.
+Allowlisted filenames are `analysis.md`, `context.md`, `evidence-pack.md`,
+`latest.json`, `profile.json`, `rating.json`, `ratings.json`, `report.md`, and
+`summary.md`.

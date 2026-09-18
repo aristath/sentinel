@@ -251,7 +251,7 @@ class TestSyncMetadata:
 
     @pytest.mark.asyncio
     async def test_sync_metadata_blanks_geo_industry_for_etfs(self, mock_db, mock_broker):
-        """ETFs (instr_kind_c == 7) get blank geography/industry so they fall out of macro buckets."""
+        """ETFs get blank geography/industry because domicile is not underlying exposure."""
         from sentinel.jobs.tasks import sync_metadata
 
         mock_broker.get_security_metadata = AsyncMock(

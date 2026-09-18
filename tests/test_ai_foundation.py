@@ -81,26 +81,14 @@ def test_units_come_from_clara_style_rosters_and_artifacts(artifact_root):
             {"name": "Missing Symbol"},
         ],
     )
-    _write_array(
-        artifact_root / "refresh-macro-buckets" / "macro-buckets.json",
-        [
-            {
-                "bucket": "United States + Semiconductors",
-                "country_code": "US",
-                "industry": "Semiconductors",
-            }
-        ],
-    )
     security_dir = artifact_root / "analyze-security"
     security_dir.mkdir(parents=True)
     (security_dir / "AAA.md").write_text("report\n", encoding="utf-8")
     (security_dir / "AAA.summary.md").write_text("summary\n", encoding="utf-8")
+    (security_dir / "AAA.context.md").write_text("context\n", encoding="utf-8")
     rating_dir = artifact_root / "rate-security" / "AAA"
     rating_dir.mkdir(parents=True)
     (rating_dir / "rating.json").write_text("{}\n", encoding="utf-8")
-    macro_dir = artifact_root / "analyze-macro-bucket"
-    macro_dir.mkdir(parents=True)
-    (macro_dir / "United-States-Semiconductors.md").write_text("macro\n", encoding="utf-8")
     portfolio_dir = artifact_root / "rate-portfolio"
     portfolio_dir.mkdir(parents=True)
     (portfolio_dir / "latest.json").write_text("{}\n", encoding="utf-8")
@@ -109,7 +97,6 @@ def test_units_come_from_clara_style_rosters_and_artifacts(artifact_root):
     by_id = {(unit["kind"], unit["key"]): unit for unit in units}
 
     assert set(by_id) == {
-        ("macro", "us-semiconductors"),
         ("portfolio", "portfolio"),
         ("security", "AAA"),
         ("security", "BBB"),
@@ -119,9 +106,9 @@ def test_units_come_from_clara_style_rosters_and_artifacts(artifact_root):
     assert by_id[("security", "AAA")]["artifacts"] == {
         "report.md": "analyze-security/AAA.md",
         "summary.md": "analyze-security/AAA.summary.md",
+        "context.md": "analyze-security/AAA.context.md",
         "rating.json": "rate-security/AAA/rating.json",
     }
-    assert by_id[("macro", "us-semiconductors")]["last_analyzed_at"] is not None
     assert by_id[("portfolio", "portfolio")]["last_analyzed_at"] is not None
     assert [unit["key"] for unit in universe.load_research_units("security")] == ["AAA", "BBB"]
 
@@ -205,29 +192,15 @@ async def test_units_endpoint_is_read_only():
 
 
 @pytest.mark.asyncio
-async def test_manual_macro_request_enqueues_exact_bucket_name():
-    unit = {
-        "kind": "macro",
-        "key": "us-semiconductors",
-        "label": "United States + Semiconductors",
-        "last_analyzed_at": None,
-        "artifacts": {},
-    }
-    queued = {"id": "run-1"}
-    with (
-        patch("sentinel.api.routers.ai.get_research_unit", return_value=unit),
-        patch("sentinel.api.routers.ai.enqueue_task", new=AsyncMock(return_value=queued)) as enqueue,
-    ):
-        result = await create_ai_request(
+async def test_manual_request_rejects_removed_macro_units():
+    with pytest.raises(HTTPException) as exc_info:
+        await create_ai_request(
             {"kind": "analyze", "unit_kind": "macro", "unit_key": "us-semiconductors"},
             SimpleNamespace(),
         )
 
-    enqueue.assert_awaited_once_with(
-        "analyze-macro-bucket",
-        {"bucket": "United States + Semiconductors"},
-    )
-    assert result == {"status": "queued", "request_id": "run-1"}
+    assert exc_info.value.status_code == 400
+    assert exc_info.value.detail == "unit_kind must be 'security'"
 
 
 @pytest.mark.asyncio
@@ -253,27 +226,14 @@ class TestRunnerIntegration:
         assert runner.job_timeout("sync:prices") == runner.JOB_TIMEOUT == 15 * 60
 
 
-def test_pipeline_run_identity_uses_security_and_macro_units():
-    units = [
-        {"kind": "security", "key": "AAA", "label": "Alpha"},
-        {"kind": "macro", "key": "us-tech", "label": "US + Technology"},
-    ]
+def test_pipeline_run_identity_uses_security_units():
+    units = [{"kind": "security", "key": "AAA", "label": "Alpha"}]
 
     security = _run_identity(
         {"taskId": "analyze-security", "taskName": "Analyze Security", "inputs": {"symbol": "AAA"}},
         units,
     )
-    macro = _run_identity(
-        {
-            "taskId": "analyze-macro-bucket",
-            "taskName": "Analyze Macro Bucket",
-            "inputs": {"bucket": "US + Technology"},
-        },
-        units,
-    )
-
     assert security == {"unit_kind": "security", "unit_key": "AAA", "unit_label": "Alpha"}
-    assert macro == {"unit_kind": "macro", "unit_key": "us-tech", "unit_label": "US + Technology"}
 
 
 @pytest.mark.asyncio
