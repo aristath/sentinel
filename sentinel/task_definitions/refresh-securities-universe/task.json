@@ -5,5 +5,5 @@
   "description": "Fetch active securities from Sentinel and write the latest universe snapshot.",
   "cwd": "@/tasks/artifacts/{{task-id}}",
   "schedulePolicy": { "staleAfterSeconds": 43200, "runWhen": "idle" },
-  "timeout": 120
+  "timeout": 43200
 }

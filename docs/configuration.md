@@ -119,7 +119,7 @@ See [Forecasting](forecasting.md) for process and failure behavior.
 | `ai_llm_base_url` | `http://127.0.0.1:8080/v1` | OpenAI-compatible inference base URL |
 | `ai_llm_api_key` | `local` | Bearer token sent to the inference service |
 | `ai_llm_model` | `qwen3.8-27b-udq4kxl` | Default model identifier |
-| `ai_llm_timeout_seconds` | `600` | LLM request timeout |
+| `ai_llm_timeout_seconds` | `3600` | LLM request timeout |
 | `ai_max_tool_calls` | `40` | Per-prompt tool-call limit |
 | `ai_max_tool_loop_iterations` | `40` | Per-prompt tool-loop iteration limit |
 

@@ -15,30 +15,32 @@
  * Triggered by schedule-next-security-analysis (manual `symbol` input).
  */
 
+const STEP_TIMEOUT_SECONDS = 3600;
+
 // Resolve the rating context for the requested symbol.
-const ctx = JSON.parse(await run("resolve-rating-context.py", { env: { SYMBOL: process.env.symbol || "" } }));
+const ctx = JSON.parse(await run("resolve-rating-context.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SYMBOL: process.env.symbol || "" } }));
 const ctxJson = JSON.stringify(ctx);
 
 // 1. Compose the evidence pack, then load it for the analysis prompt.
-await run("compose-evidence-pack.py", { timeoutSeconds: 300, env: { CONTEXT_JSON: ctxJson } });
-const evidencePack = await run("load-evidence-pack.py", { env: { CONTEXT_JSON: ctxJson } });
+await run("compose-evidence-pack.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { CONTEXT_JSON: ctxJson } });
+const evidencePack = await run("load-evidence-pack.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { CONTEXT_JSON: ctxJson } });
 
 // 2. Write the long-term structural analysis, then load it back for the rating prompt.
 await prompt("write-analysis.md", {
-  timeoutSeconds: 1800,
+  timeoutSeconds: STEP_TIMEOUT_SECONDS,
   context: { symbol: ctx.symbol, name: ctx.name, analysisPath: ctx.analysisPath, evidencePack },
 });
-const analysis = await run("load-analysis.py", { env: { CONTEXT_JSON: ctxJson } });
+const analysis = await run("load-analysis.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { CONTEXT_JSON: ctxJson } });
 
 // 3. Produce the rating, validating/repairing each attempt; retry up to 5 times.
 let validation;
 let validatorFeedback = "";
 for (let attempt = 0; attempt < 5; attempt++) {
   await prompt("write-rating-raw-json.md", {
-    timeoutSeconds: 900,
+    timeoutSeconds: STEP_TIMEOUT_SECONDS,
     context: { symbol: ctx.symbol, name: ctx.name, ratingRawPath: ctx.ratingRawPath, analysis, validatorFeedback },
   });
-  const rawValidation = await run("validate-rating.mjs", { env: { CONTEXT_JSON: ctxJson } });
+  const rawValidation = await run("validate-rating.mjs", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { CONTEXT_JSON: ctxJson } });
   validation = JSON.parse(rawValidation);
   if (validation.valid) break;
   validatorFeedback = rawValidation;
@@ -48,5 +50,5 @@ if (!validation?.valid) {
 }
 
 // 4. Submit the canonical rating to Sentinel.
-const result = await run("submit-rating.mjs", { env: { RATING_JSON: JSON.stringify(validation.canonical) } });
+const result = await run("submit-rating.mjs", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { RATING_JSON: JSON.stringify(validation.canonical) } });
 console.log(result.trim());

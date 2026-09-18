@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import subprocess
@@ -14,6 +15,20 @@ import pytest_asyncio
 
 from sentinel.database import Database
 from sentinel.tasks import definitions, runtime
+
+
+def test_bundled_tasks_use_uniform_step_and_task_timeouts():
+    task_dirs = sorted(path for path in definitions.CORE_TASKS_DIR.iterdir() if (path / "task.json").is_file())
+
+    assert task_dirs
+    for task_dir in task_dirs:
+        metadata = json.loads((task_dir / "task.json").read_text(encoding="utf-8"))
+        script = (task_dir / "task.js").read_text(encoding="utf-8")
+        call_count = len(re.findall(r"\b(?:prompt|run|tool)\(", script))
+
+        assert metadata["timeout"] == 43_200, task_dir.name
+        assert "const STEP_TIMEOUT_SECONDS = 3600;" in script, task_dir.name
+        assert script.count("timeoutSeconds: STEP_TIMEOUT_SECONDS") == call_count, task_dir.name
 
 
 def make_task(root: Path, task_id: str, *, name: str | None = None, script: str = "console.log('ok');\n") -> Path:

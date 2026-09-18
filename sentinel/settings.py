@@ -129,9 +129,9 @@ DEFAULTS = {
     # Memory dedup: semantic similarity at/above this is treated as a
     # duplicate (reinforce/skip instead of insert).
     "ai_dedup_similarity_threshold": 0.96,
-    # LLM request timeout and per-unit task timeouts (ported from the task
-    # definitions the pipeline was absorbed from).
-    "ai_llm_timeout_seconds": 600,
+    # Keep the LLM transport timeout aligned with the one-hour timeout applied
+    # to each bundled task step.
+    "ai_llm_timeout_seconds": 3600,
     # Tool-loop limits (parity with the absorbed task runner).
     "ai_max_tool_calls": 40,
     "ai_max_tool_loop_iterations": 40,

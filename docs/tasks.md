@@ -43,7 +43,7 @@ Example:
   "enabled": false,
   "tags": ["REQUIRES-INPUT"],
   "cwd": "@/tasks/artifacts/{{task-id}}",
-  "timeout": 5400,
+  "timeout": 43200,
   "schedule": null,
   "schedulePolicy": {
     "staleAfterSeconds": 86400,
@@ -88,7 +88,7 @@ const context = JSON.parse(await run("resolve.py", {
 
 const result = await prompt("analyze.md", {
   context,
-  timeoutSeconds: 600,
+  timeoutSeconds: 3600,
   outputType: "json",
 });
 
@@ -98,6 +98,11 @@ console.log(result);
 `prompt` options include `context`, `systemPrompt`, `outputType: "json"`,
 `temperature`, `useTools` (default `true`), and `timeoutSeconds`. `run` options
 include `cwd`, `env`, and `timeoutSeconds`. Tool calls accept `timeoutSeconds`.
+
+All bundled Sentinel tasks use a 12-hour whole-task timeout and a one-hour
+timeout for every individual `prompt`, `run`, and `tool` invocation. A call
+inside a loop or retry block receives a fresh one-hour timeout on every
+iteration or attempt.
 
 Helper processes receive the task inputs plus:
 

@@ -15,8 +15,10 @@
  * Triggered by schedule-next-security-analysis once every security summary is fresh.
  */
 
+const STEP_TIMEOUT_SECONDS = 3600;
+
 // 1. Compile all per-security summaries into a single document for the rater.
-const compiled = JSON.parse(await run("compile-summaries.py"));
+const compiled = JSON.parse(await run("compile-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS }));
 
 // 2. Rate, then validate/repair; retry up to 3 times, feeding errors back each round.
 let validation;
@@ -25,7 +27,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
   // The rater reads every summary and writes its ratings JSON to ratingsRawPath
   // via the write_file tool.
   await prompt("rate-all.md", {
-    timeoutSeconds: 1800,
+    timeoutSeconds: STEP_TIMEOUT_SECONDS,
     context: {
       compiledText: compiled.compiledText,
       count: compiled.count,
@@ -36,6 +38,7 @@ for (let attempt = 0; attempt < 3; attempt++) {
 
   // Validate + repair the candidate. On success the canonical ratings file is written.
   const rawValidation = await run("validate-ratings.mjs", {
+    timeoutSeconds: STEP_TIMEOUT_SECONDS,
     env: {
       EXPECTED_SYMBOLS: JSON.stringify(compiled.expectedSymbols),
       RATINGS_RAW_PATH: compiled.ratingsRawPath,
@@ -52,6 +55,6 @@ if (!validation?.ok) {
 }
 
 // 3. Gate-check the validated ratings, then submit them to Sentinel.
-const prepared = await run("prepare-ratings.py", { env: { VALIDATION_JSON: JSON.stringify(validation) } });
-const result = await run("submit-ratings.py", { env: { RATINGS_JSON: prepared } });
+const prepared = await run("prepare-ratings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { VALIDATION_JSON: JSON.stringify(validation) } });
+const result = await run("submit-ratings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { RATINGS_JSON: prepared } });
 console.log(result.trim());

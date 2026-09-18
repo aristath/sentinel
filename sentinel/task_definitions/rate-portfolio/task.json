@@ -3,5 +3,5 @@
   "enabled": true,
   "description": "Read all security summaries, rate them relative to each other for a 5-10 year portfolio allocation, and submit all ratings to Sentinel.",
   "cwd": "@/tasks/artifacts/{{task-id}}",
-  "timeout": 30000
+  "timeout": 43200
 }

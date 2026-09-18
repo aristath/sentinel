@@ -6,5 +6,5 @@
     "REQUIRES-INPUT"
   ],
   "cwd": "@/tasks/artifacts/{{task-id}}",
-  "timeout": 28800
+  "timeout": 43200
 }

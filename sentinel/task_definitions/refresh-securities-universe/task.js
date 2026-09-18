@@ -6,5 +6,7 @@
  * record. This snapshot is the root input for security scheduling and the
  * analyze/rate pipeline.
  */
-const result = await run("write-universe.py");
+const STEP_TIMEOUT_SECONDS = 3600;
+
+const result = await run("write-universe.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS });
 console.log(result.trim());

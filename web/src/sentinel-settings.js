@@ -514,7 +514,7 @@ const researchGroups = [
         key: "ai_llm_timeout_seconds",
         label: "LLM timeout (seconds)",
         type: "number",
-        default: 600,
+        default: 3600,
         min: 1,
       },
       {

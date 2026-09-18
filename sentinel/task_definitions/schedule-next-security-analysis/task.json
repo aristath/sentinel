@@ -5,5 +5,5 @@
   "description": "Pick one security whose latest summary file is missing or older than seven days and queue analyze-security. When all summaries are fresh, trigger rate-portfolio only if the portfolio rating is stale.",
   "cwd": "@/tasks/artifacts/{{task-id}}",
   "schedulePolicy": { "staleAfterSeconds": 900, "runWhen": "idle" },
-  "timeout": 120
+  "timeout": 43200
 }

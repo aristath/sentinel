@@ -18,8 +18,10 @@
  * Triggered by schedule-next-security-analysis (manual `symbol` input).
  */
 
+const STEP_TIMEOUT_SECONDS = 3600;
+
 // Resolve the security and prepare paths (+ any cached profile).
-const resolved = JSON.parse(await run("resolve-security.py", { env: { SYMBOL: process.env.symbol || "" } }));
+const resolved = JSON.parse(await run("resolve-security.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SYMBOL: process.env.symbol || "" } }));
 const item = resolved[0];
 const itemJson = JSON.stringify(item);
 
@@ -29,24 +31,24 @@ if (!item.profileCacheHit) {
     query: `strategy of "${item.name}" for the next 10 years`,
     language: "all",
     pageno: 1,
-  }, { timeoutSeconds: 120 });
-  await run("fetch-profile-sources.py", { timeoutSeconds: 600, env: { SEARCH_TEXT: overview, ITEM_JSON: itemJson } });
-  const profileSummaries = await run("load-profile-summaries.py", { env: { WORK_ROOT: item.workRoot } });
-  const profile = await prompt("generate-profile.md", { timeoutSeconds: 600, context: { name: item.name, profileSummaries } });
-  await run("save-generated-profile.py", { env: { PROFILE: profile, ITEM_JSON: itemJson } });
+  }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
+  await run("fetch-profile-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SEARCH_TEXT: overview, ITEM_JSON: itemJson } });
+  const profileSummaries = await run("load-profile-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.workRoot } });
+  const profile = await prompt("generate-profile.md", { timeoutSeconds: STEP_TIMEOUT_SECONDS, context: { name: item.name, profileSummaries } });
+  await run("save-generated-profile.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { PROFILE: profile, ITEM_JSON: itemJson } });
 }
 
 // 3. Load the profile and generate the two bounded query sets from it.
-const profileText = await run("load-profile.py", { env: { WORK_ROOT: item.workRoot } });
-await prompt("generate-queries.md", { timeoutSeconds: 600, context: { name: item.name, profile: profileText, queriesPath: item.queriesPath } });
-const queries = JSON.parse(await run("save-queries.py", { env: { QUERIES_PATH: item.queriesPath } }));
+const profileText = await run("load-profile.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.workRoot } });
+await prompt("generate-queries.md", { timeoutSeconds: STEP_TIMEOUT_SECONDS, context: { name: item.name, profile: profileText, queriesPath: item.queriesPath } });
+const queries = JSON.parse(await run("save-queries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { QUERIES_PATH: item.queriesPath } }));
 const rawContextQueries = await prompt("generate-context-queries.md", {
-  timeoutSeconds: 600,
+  timeoutSeconds: STEP_TIMEOUT_SECONDS,
   outputType: "json",
   useTools: false,
   context: { name: item.name, profile: profileText },
 });
-const contextQueries = JSON.parse(await run("validate-context-queries.py", { env: { QUERIES_JSON: rawContextQueries } }));
+const contextQueries = JSON.parse(await run("validate-context-queries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { QUERIES_JSON: rawContextQueries } }));
 
 // 4. Research each query in turn (the original ran the loop at concurrency 1).
 for (const query of queries) {
@@ -55,11 +57,11 @@ for (const query of queries) {
     language: "all",
     time_range: "year",
     pageno: 1,
-  }, { timeoutSeconds: 300 });
-  const fetched = JSON.parse(await run("fetch-query-sources.py", { timeoutSeconds: 1500, env: { WORK_ROOT: item.workRoot, QUERY: query, SEARCH_TEXT: searchResults } }));
-  const querySummaries = await run("load-query-source-summaries.py", { env: { SOURCE_SUMMARIES_PATH: fetched.sourceSummariesPath } });
-  const findings = await prompt("extract-query-findings.md", { timeoutSeconds: 1500, context: { name: item.name, query, querySummaries } });
-  await run("save-query-findings.py", { env: { FINDINGS: findings, FINDINGS_PATH: fetched.findingsPath } });
+  }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
+  const fetched = JSON.parse(await run("fetch-query-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.workRoot, QUERY: query, SEARCH_TEXT: searchResults } }));
+  const querySummaries = await run("load-query-source-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SOURCE_SUMMARIES_PATH: fetched.sourceSummariesPath } });
+  const findings = await prompt("extract-query-findings.md", { timeoutSeconds: STEP_TIMEOUT_SECONDS, context: { name: item.name, query, querySummaries } });
+  await run("save-query-findings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { FINDINGS: findings, FINDINGS_PATH: fetched.findingsPath } });
 }
 
 // 5. Research current external context with the same bounded per-query pipeline.
@@ -70,36 +72,36 @@ for (const query of contextQueries) {
     time_range: "month",
     pageno: 1,
     num_results: 5,
-  }, { timeoutSeconds: 300 });
-  const fetched = JSON.parse(await run("fetch-query-sources.py", { timeoutSeconds: 1500, env: { WORK_ROOT: item.contextRoot, QUERY: query, SEARCH_TEXT: searchResults } }));
-  const querySummaries = await run("load-query-source-summaries.py", { env: { SOURCE_SUMMARIES_PATH: fetched.sourceSummariesPath } });
+  }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
+  const fetched = JSON.parse(await run("fetch-query-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.contextRoot, QUERY: query, SEARCH_TEXT: searchResults } }));
+  const querySummaries = await run("load-query-source-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SOURCE_SUMMARIES_PATH: fetched.sourceSummariesPath } });
   const findings = await prompt("extract-context-findings.md", {
-    timeoutSeconds: 1500,
+    timeoutSeconds: STEP_TIMEOUT_SECONDS,
     useTools: false,
     context: { name: item.name, query, querySummaries },
   });
-  await run("save-query-findings.py", { env: { FINDINGS: findings, FINDINGS_PATH: fetched.findingsPath } });
+  await run("save-query-findings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { FINDINGS: findings, FINDINGS_PATH: fetched.findingsPath } });
 }
 
 // 6. Distill both branches independently so later prompts receive compact inputs.
-const aggregated = await run("aggregate-query-findings.py", { env: { WORK_ROOT: item.workRoot } });
-const distilled = await prompt("distill-security-findings.md", { timeoutSeconds: 900, context: { name: item.name, profile: profileText, rawFindings: aggregated } });
-const contextAggregated = await run("aggregate-query-findings.py", { env: { WORK_ROOT: item.contextRoot } });
+const aggregated = await run("aggregate-query-findings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.workRoot } });
+const distilled = await prompt("distill-security-findings.md", { timeoutSeconds: STEP_TIMEOUT_SECONDS, context: { name: item.name, profile: profileText, rawFindings: aggregated } });
+const contextAggregated = await run("aggregate-query-findings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.contextRoot } });
 const contextDistilled = await prompt("distill-context-findings.md", {
-  timeoutSeconds: 900,
+  timeoutSeconds: STEP_TIMEOUT_SECONDS,
   useTools: false,
   context: { name: item.name, rawFindings: contextAggregated },
 });
-await run("save-context-report.py", { env: { ITEM_JSON: itemJson, CONTEXT_OUTPUT: contextDistilled } });
+await run("save-context-report.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { ITEM_JSON: itemJson, CONTEXT_OUTPUT: contextDistilled } });
 
 // 7. Write the canonical report and persist both kinds of findings to mem0.
-await run("finalize-security-report.py", { timeoutSeconds: 300, env: { ITEM_JSON: itemJson, DISTILL_OUTPUT: distilled, CONTEXT_OUTPUT: contextDistilled, PROFILE: profileText } });
+await run("finalize-security-report.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { ITEM_JSON: itemJson, DISTILL_OUTPUT: distilled, CONTEXT_OUTPUT: contextDistilled, PROFILE: profileText } });
 
 // 8. Write the short structural summary from the two distilled briefs.
 const summary = await prompt("write-security-summary.md", {
-  timeoutSeconds: 300,
+  timeoutSeconds: STEP_TIMEOUT_SECONDS,
   useTools: false,
   context: { name: item.name, symbol: item.symbol, distilledFindings: distilled, externalContext: contextDistilled },
 });
-const result = await run("save-security-summary.py", { env: { ITEM_JSON: itemJson, SUMMARY: summary } });
+const result = await run("save-security-summary.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { ITEM_JSON: itemJson, SUMMARY: summary } });
 console.log(result.trim());
