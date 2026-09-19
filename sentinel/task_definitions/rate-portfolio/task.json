@@ -2,8 +2,7 @@
   "name": "Rate Portfolio",
   "enabled": true,
   "schedule": null,
-  "schedulePolicy": { "staleAfterSeconds": 3600, "runWhen": "idle" },
-  "description": "Check portfolio freshness hourly. Skip when the latest result is under five days old; otherwise queue stale security analysis or rate the portfolio when all summaries are fresh.",
+  "description": "Rate the whole eligible universe relative to itself when invoked by schedule-rate-portfolio or manually.",
   "cwd": "@/tasks/artifacts/{{task-id}}",
   "timeout": 43200
 }

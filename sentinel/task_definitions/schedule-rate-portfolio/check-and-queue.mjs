@@ -1,10 +1,10 @@
 /**
- * Enforce the portfolio rating's input/output freshness contract.
+ * Apply the portfolio-rating schedule rules in order:
  *
- * - A non-empty latest.json younger than five days skips redundant rating.
- * - Otherwise, any missing, empty, or seven-day-old security summary defers
- *   portfolio rating and queues analysis for every stale security.
- * - Only fresh summaries plus a missing/five-day-old result permit rating.
+ *   1. If the canonical portfolio result is under five days old, do nothing.
+ *   2. Otherwise, queue analysis for every missing, empty, or seven-day-old
+ *      security summary and stop.
+ *   3. If every summary is fresh, queue rate-portfolio.
  */
 import { readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
@@ -33,7 +33,7 @@ const usableMtimeMs = (path) => {
 const portfolioMtimeMs = usableMtimeMs(portfolioPath);
 if (portfolioMtimeMs > 0 && now - portfolioMtimeMs < portfolioStaleMs) {
   console.log(JSON.stringify({
-    action: "skip",
+    queued: false,
     reason: "portfolio rating is under five days old",
     portfolioMtimeMs,
     portfolioAgeMs: now - portfolioMtimeMs,
@@ -76,17 +76,32 @@ if (stale.length) {
     workItemIds.push(...(result.items ?? [result.item]).filter(Boolean).map((item) => item.id));
   }
   console.log(JSON.stringify({
-    action: "deferred",
-    reason: "stale security summaries queued",
+    queued: true,
+    taskId: "analyze-security",
     staleSymbols: stale.map((item) => item.symbol),
     workItemIds,
   }));
   process.exit(0);
 }
 
+const response = await fetch(`${base}/api/scheduler`, {
+  method: "POST",
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({
+    task: "rate-portfolio",
+    inputs: {},
+    dedupeKey: "rate-portfolio:current",
+  }),
+});
+if (!response.ok) {
+  const text = await response.text();
+  throw new Error(`Queue rate-portfolio failed: HTTP ${response.status} ${text}`);
+}
+const result = await response.json();
 console.log(JSON.stringify({
-  action: "rate",
-  reason: portfolioMtimeMs ? "portfolio rating is at least five days old" : "portfolio rating is missing",
+  queued: true,
+  taskId: "rate-portfolio",
+  workItemId: result.item?.id ?? null,
   portfolioMtimeMs: portfolioMtimeMs || null,
   portfolioAgeMs: portfolioMtimeMs ? now - portfolioMtimeMs : null,
 }));

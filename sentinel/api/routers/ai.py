@@ -32,6 +32,7 @@ AI_TASK_IDS = {
     "rate-security",
     "refresh-securities-universe",
     "schedule-next-security-analysis",
+    "schedule-rate-portfolio",
 }
 MEMORY_STATS_TTL_SECONDS = 30.0
 CHAT_CONTEXT_TOKEN_LIMIT = 128 * 1024

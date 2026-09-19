@@ -13,6 +13,7 @@ Below are concise assessments of each security in the portfolio. Each assessment
 - `name`: use this to understand which security and underlying exposure the assessment describes.
 
 Read all assessments, then rate them relative to each other.
+DO NOT rate each security in isolation. We need to account for the entire global financial and socioeconomic situation as described in the assessments below, and then rate the securities relative to the entire portfolio, taking into account NOT where the world is now, but where we think the world will be 5-10 years from now. Securities should be viewed as part of a portfolio, not as part of an industry or country etc. We rate securities in the portfolio against other securities in the same portfolio, not against securities in their industry etc.
 
 {{compiledText}}
 

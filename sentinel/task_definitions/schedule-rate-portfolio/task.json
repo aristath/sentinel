@@ -1,0 +1,9 @@
+{
+  "name": "Schedule Rate Portfolio",
+  "enabled": true,
+  "schedule": null,
+  "schedulePolicy": { "staleAfterSeconds": 3600, "runWhen": "idle" },
+  "description": "Check portfolio freshness hourly, queue every stale security when needed, and queue rate-portfolio only when all summaries are fresh.",
+  "cwd": "@/tasks/artifacts/{{task-id}}",
+  "timeout": 43200
+}

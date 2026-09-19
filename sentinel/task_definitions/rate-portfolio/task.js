@@ -4,30 +4,21 @@
  * Rates every security in the universe relative to the others for a 5-10 year
  * allocation, then submits those ratings to Sentinel. Flow:
  *
- *   1. preflight.mjs skips rating while the existing portfolio result is under
- *      five days old, then defers rating and queues every stale security.
- *   2. compile-summaries.py gathers all per-security summaries into one document
+ *   1. compile-summaries.py gathers all per-security summaries into one document
  *      and reports the expected symbols and output paths.
- *   3. The rater (an LLM prompt) writes a candidate ratings JSON; validate-ratings.mjs
+ *   2. The rater (an LLM prompt) writes a candidate ratings JSON; validate-ratings.mjs
  *      checks and repairs it. This repeats up to 3 times, feeding the validator's
  *      errors back into each retry, until the output validates.
- *   4. prepare-ratings.py gate-checks the validated result and submit-ratings.py
+ *   3. prepare-ratings.py gate-checks the validated result and submit-ratings.py
  *      POSTs each rating to Sentinel, persisting latest.json on full success.
- *
- * Checked hourly by its stale schedule policy.
  */
 
 const STEP_TIMEOUT_SECONDS = 3600;
 
-// 1. Enforce freshness before any portfolio-rating work begins.
-const preflight = JSON.parse(await run("preflight.mjs", { timeoutSeconds: STEP_TIMEOUT_SECONDS }));
-console.log(JSON.stringify(preflight));
-if (preflight.action !== "rate") process.exit(0);
-
-// 2. Compile all per-security summaries into a single document for the rater.
+// 1. Compile all per-security summaries into a single document for the rater.
 const compiled = JSON.parse(await run("compile-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS }));
 
-// 3. Rate, then validate/repair; retry up to 3 times, feeding errors back each round.
+// 2. Rate, then validate/repair; retry up to 3 times, feeding errors back each round.
 let validation;
 let validationFeedback = "";
 for (let attempt = 0; attempt < 3; attempt++) {
@@ -61,7 +52,7 @@ if (!validation?.ok) {
   throw new Error("Portfolio ratings did not validate after 3 attempts: " + JSON.stringify(validation?.errors ?? []));
 }
 
-// 4. Gate-check the validated ratings, then submit them to Sentinel.
+// 3. Gate-check the validated ratings, then submit them to Sentinel.
 const prepared = await run("prepare-ratings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { VALIDATION_JSON: JSON.stringify(validation) } });
 const result = await run("submit-ratings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { RATINGS_JSON: prepared } });
 console.log(result.trim());

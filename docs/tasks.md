@@ -150,6 +150,7 @@ erase historical records.
 | `schedule-next-security-analysis` | Queue every stale/missing security analysis |
 | `analyze-security` | Build a source-backed profile, security research, per-security external context, report, and summary |
 | `rate-security` | Rate one security from its last six months of research memory |
+| `schedule-rate-portfolio` | Check portfolio and security freshness hourly, then queue required work |
 | `rate-portfolio` | Rate the whole eligible universe relative to itself |
 
 See [AI pipeline](ai-pipeline.md) for dependencies and artifacts.

@@ -23,6 +23,9 @@ refresh securities universe
                                           rate individual security
                                                          │
                                                          ▼
+                                      schedule whole-portfolio rating
+                                                         │
+                                                         ▼
                                               rate whole portfolio
                                                          │
                                                          ▼
@@ -46,10 +49,11 @@ searches, distilled separately, and stored with that security.
 
 A security is stale when its canonical non-empty `summary.md` is missing or at
 least seven days old. The short-cadence scheduler queues stale securities for
-analysis. `rate-portfolio` is checked hourly while the task runtime is idle. Its
-preflight first exits when the canonical `rate-portfolio/latest.json` result is
-younger than five days. Otherwise it queues every stale security and exits, or
-runs the portfolio rating when every summary is fresh.
+analysis. `schedule-rate-portfolio` runs hourly while the task runtime is idle.
+It first exits when the canonical `rate-portfolio/latest.json` result is younger
+than five days. Otherwise it queues every stale security and exits, or queues
+`rate-portfolio` when every summary is fresh. `rate-portfolio` itself has no
+schedule.
 
 ## Required services
 

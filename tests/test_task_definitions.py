@@ -77,28 +77,35 @@ def _write_freshness_artifacts(tmp_path: Path, *, summary_age_days: float, portf
         os.utime(portfolio, (portfolio_time, portfolio_time))
 
 
-def test_rate_portfolio_checks_hourly_without_cron():
-    metadata = json.loads((definitions.CORE_TASKS_DIR / "rate-portfolio" / "task.json").read_text(encoding="utf-8"))
-    assert metadata["schedule"] is None
-    assert metadata["schedulePolicy"] == {"staleAfterSeconds": 3600, "runWhen": "idle"}
+def test_portfolio_rating_scheduler_checks_hourly_without_cron():
+    scheduler = json.loads(
+        (definitions.CORE_TASKS_DIR / "schedule-rate-portfolio" / "task.json").read_text(encoding="utf-8")
+    )
+    rater = json.loads((definitions.CORE_TASKS_DIR / "rate-portfolio" / "task.json").read_text(encoding="utf-8"))
+
+    assert scheduler["schedule"] is None
+    assert scheduler["schedulePolicy"] == {"staleAfterSeconds": 3600, "runWhen": "idle"}
+    assert rater["schedule"] is None
+    assert "schedulePolicy" not in rater
 
 
 @pytest.mark.parametrize(
-    ("portfolio_age_days", "expected_action"),
-    [(2, "skip"), (6, "rate"), (None, "rate")],
+    ("portfolio_age_days", "expected_task"),
+    [(2, None), (6, "rate-portfolio"), (None, "rate-portfolio")],
 )
-def test_rate_portfolio_preflight_enforces_five_day_output_freshness(tmp_path, portfolio_age_days, expected_action):
+def test_portfolio_rating_scheduler_enforces_five_day_output_freshness(tmp_path, portfolio_age_days, expected_task):
     _write_freshness_artifacts(tmp_path, summary_age_days=1, portfolio_age_days=portfolio_age_days)
 
     decision = _run_task_script(
-        definitions.CORE_TASKS_DIR / "rate-portfolio" / "preflight.mjs",
+        definitions.CORE_TASKS_DIR / "schedule-rate-portfolio" / "check-and-queue.mjs",
         tmp_path,
     )
 
-    assert decision["action"] == expected_action
+    assert decision.get("taskId") == expected_task
+    assert decision["queued"] is (expected_task is not None)
 
 
-def test_rate_portfolio_preflight_checks_output_before_stale_securities(tmp_path):
+def test_portfolio_rating_scheduler_checks_output_before_stale_securities(tmp_path):
     artifacts = tmp_path / "tasks" / "artifacts"
     universe_dir = artifacts / "refresh-securities-universe"
     universe_dir.mkdir(parents=True)
@@ -108,14 +115,15 @@ def test_rate_portfolio_preflight_checks_output_before_stale_securities(tmp_path
     portfolio.write_text("{}\n", encoding="utf-8")
 
     decision = _run_task_script(
-        definitions.CORE_TASKS_DIR / "rate-portfolio" / "preflight.mjs",
+        definitions.CORE_TASKS_DIR / "schedule-rate-portfolio" / "check-and-queue.mjs",
         tmp_path,
     )
 
-    assert decision["action"] == "skip"
+    assert decision["queued"] is False
+    assert decision["reason"] == "portfolio rating is under five days old"
 
 
-def test_rate_portfolio_preflight_queues_every_stale_security(tmp_path):
+def test_portfolio_rating_scheduler_queues_every_stale_security(tmp_path):
     artifacts = tmp_path / "tasks" / "artifacts"
     universe_dir = artifacts / "refresh-securities-universe"
     universe_dir.mkdir(parents=True)
@@ -132,16 +140,17 @@ def test_rate_portfolio_preflight_queues_every_stale_security(tmp_path):
     (summary_dir / "FRESH.summary.md").write_text("fresh\n", encoding="utf-8")
 
     decision = _run_task_script(
-        definitions.CORE_TASKS_DIR / "rate-portfolio" / "preflight.mjs",
+        definitions.CORE_TASKS_DIR / "schedule-rate-portfolio" / "check-and-queue.mjs",
         tmp_path,
     )
 
-    assert decision["action"] == "deferred"
+    assert decision["queued"] is True
+    assert decision["taskId"] == "analyze-security"
     assert decision["staleSymbols"] == ["MISSING", "OLD"]
     assert decision["workItemIds"] == ["queued-0", "queued-1"]
 
 
-def test_rate_portfolio_preflight_batches_large_stale_universes(tmp_path):
+def test_portfolio_rating_scheduler_batches_large_stale_universes(tmp_path):
     artifacts = tmp_path / "tasks" / "artifacts"
     universe_dir = artifacts / "refresh-securities-universe"
     universe_dir.mkdir(parents=True)
@@ -151,11 +160,12 @@ def test_rate_portfolio_preflight_batches_large_stale_universes(tmp_path):
     )
 
     decision = _run_task_script(
-        definitions.CORE_TASKS_DIR / "rate-portfolio" / "preflight.mjs",
+        definitions.CORE_TASKS_DIR / "schedule-rate-portfolio" / "check-and-queue.mjs",
         tmp_path,
     )
 
-    assert decision["action"] == "deferred"
+    assert decision["queued"] is True
+    assert decision["taskId"] == "analyze-security"
     assert len(decision["staleSymbols"]) == 501
     assert len(decision["workItemIds"]) == 501
 
