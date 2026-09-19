@@ -15,7 +15,7 @@
  *   6. Write the report and per-security external-context artifact, then store findings.
  *   7. Write <symbol>.summary.md from the two distilled briefs.
  *
- * Triggered by schedule-next-security-analysis (manual `symbol` input).
+ * Triggered by schedule-next-security-analysis with a `symbol` input.
  */
 
 const STEP_TIMEOUT_SECONDS = 3600;

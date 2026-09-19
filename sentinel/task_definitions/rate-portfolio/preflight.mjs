@@ -1,9 +1,9 @@
 /**
  * Enforce the portfolio rating's input/output freshness contract.
  *
- * - Any missing, empty, or seven-day-old security summary defers portfolio
- *   rating and queues analysis for every stale security.
  * - A non-empty latest.json younger than five days skips redundant rating.
+ * - Otherwise, any missing, empty, or seven-day-old security summary defers
+ *   portfolio rating and queues analysis for every stale security.
  * - Only fresh summaries plus a missing/five-day-old result permit rating.
  */
 import { readFileSync, statSync } from "node:fs";
@@ -29,6 +29,17 @@ const usableMtimeMs = (path) => {
     return 0;
   }
 };
+
+const portfolioMtimeMs = usableMtimeMs(portfolioPath);
+if (portfolioMtimeMs > 0 && now - portfolioMtimeMs < portfolioStaleMs) {
+  console.log(JSON.stringify({
+    action: "skip",
+    reason: "portfolio rating is under five days old",
+    portfolioMtimeMs,
+    portfolioAgeMs: now - portfolioMtimeMs,
+  }));
+  process.exit(0);
+}
 
 const universe = JSON.parse(readFileSync(universePath, "utf8"));
 if (!Array.isArray(universe)) throw new Error("securities-universe.json must contain an array");
@@ -69,17 +80,6 @@ if (stale.length) {
     reason: "stale security summaries queued",
     staleSymbols: stale.map((item) => item.symbol),
     workItemIds,
-  }));
-  process.exit(0);
-}
-
-const portfolioMtimeMs = usableMtimeMs(portfolioPath);
-if (portfolioMtimeMs > 0 && now - portfolioMtimeMs < portfolioStaleMs) {
-  console.log(JSON.stringify({
-    action: "skip",
-    reason: "portfolio rating is under five days old",
-    portfolioMtimeMs,
-    portfolioAgeMs: now - portfolioMtimeMs,
   }));
   process.exit(0);
 }

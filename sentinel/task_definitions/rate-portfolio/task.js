@@ -4,8 +4,8 @@
  * Rates every security in the universe relative to the others for a 5-10 year
  * allocation, then submits those ratings to Sentinel. Flow:
  *
- *   1. preflight.mjs defers rating and queues analysis for every stale security,
- *      or skips rating while the existing portfolio result is under five days old.
+ *   1. preflight.mjs skips rating while the existing portfolio result is under
+ *      five days old, then defers rating and queues every stale security.
  *   2. compile-summaries.py gathers all per-security summaries into one document
  *      and reports the expected symbols and output paths.
  *   3. The rater (an LLM prompt) writes a candidate ratings JSON; validate-ratings.mjs
@@ -14,7 +14,7 @@
  *   4. prepare-ratings.py gate-checks the validated result and submit-ratings.py
  *      POSTs each rating to Sentinel, persisting latest.json on full success.
  *
- * Runs weekly and may also be triggered by schedule-next-security-analysis.
+ * Checked hourly by its stale schedule policy.
  */
 
 const STEP_TIMEOUT_SECONDS = 3600;

@@ -46,15 +46,10 @@ searches, distilled separately, and stored with that security.
 
 A security is stale when its canonical non-empty `summary.md` is missing or at
 least seven days old. The short-cadence scheduler queues stale securities for
-analysis. Portfolio rating is eligible only after every security summary is
-fresh and the canonical `rate-portfolio/latest.json` result is missing or at
-least five days old.
-
-`rate-portfolio` also has a weekly Sunday schedule as a backstop. Its own
-preflight applies the same dependency gate before any LLM work: stale security
-summaries are queued for analysis, a portfolio result younger than five days is
-a no-op, and rating proceeds only when all summaries are fresh and the previous
-portfolio result needs refreshing.
+analysis. `rate-portfolio` is checked hourly while the task runtime is idle. Its
+preflight first exits when the canonical `rate-portfolio/latest.json` result is
+younger than five days. Otherwise it queues every stale security and exits, or
+runs the portfolio rating when every summary is fresh.
 
 ## Required services
 

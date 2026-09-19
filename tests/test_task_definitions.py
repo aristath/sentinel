@@ -77,9 +77,10 @@ def _write_freshness_artifacts(tmp_path: Path, *, summary_age_days: float, portf
         os.utime(portfolio, (portfolio_time, portfolio_time))
 
 
-def test_rate_portfolio_has_a_weekly_schedule():
+def test_rate_portfolio_checks_hourly_without_cron():
     metadata = json.loads((definitions.CORE_TASKS_DIR / "rate-portfolio" / "task.json").read_text(encoding="utf-8"))
-    assert metadata["schedule"] == "0 9 * * 0"
+    assert metadata["schedule"] is None
+    assert metadata["schedulePolicy"] == {"staleAfterSeconds": 3600, "runWhen": "idle"}
 
 
 @pytest.mark.parametrize(
@@ -95,6 +96,23 @@ def test_rate_portfolio_preflight_enforces_five_day_output_freshness(tmp_path, p
     )
 
     assert decision["action"] == expected_action
+
+
+def test_rate_portfolio_preflight_checks_output_before_stale_securities(tmp_path):
+    artifacts = tmp_path / "tasks" / "artifacts"
+    universe_dir = artifacts / "refresh-securities-universe"
+    universe_dir.mkdir(parents=True)
+    (universe_dir / "securities-universe.json").write_text(json.dumps([{"symbol": "MISSING"}]), encoding="utf-8")
+    portfolio = artifacts / "rate-portfolio" / "latest.json"
+    portfolio.parent.mkdir(parents=True)
+    portfolio.write_text("{}\n", encoding="utf-8")
+
+    decision = _run_task_script(
+        definitions.CORE_TASKS_DIR / "rate-portfolio" / "preflight.mjs",
+        tmp_path,
+    )
+
+    assert decision["action"] == "skip"
 
 
 def test_rate_portfolio_preflight_queues_every_stale_security(tmp_path):
@@ -142,21 +160,15 @@ def test_rate_portfolio_preflight_batches_large_stale_universes(tmp_path):
     assert len(decision["workItemIds"]) == 501
 
 
-@pytest.mark.parametrize(
-    ("portfolio_age_days", "should_trigger"),
-    [(2, False), (6, True), (None, True)],
-)
-def test_security_scheduler_uses_five_day_portfolio_freshness(tmp_path, portfolio_age_days, should_trigger):
-    _write_freshness_artifacts(tmp_path, summary_age_days=1, portfolio_age_days=portfolio_age_days)
+def test_security_scheduler_does_not_trigger_portfolio_rating(tmp_path):
+    _write_freshness_artifacts(tmp_path, summary_age_days=1, portfolio_age_days=None)
 
     decision = _run_task_script(
         definitions.CORE_TASKS_DIR / "schedule-next-security-analysis" / "pick-and-queue.mjs",
         tmp_path,
     )
 
-    assert decision.get("triggeredPortfolioRating", False) is should_trigger
-    if not should_trigger:
-        assert decision["reason"] == "portfolio rating already current"
+    assert decision == {"queued": False, "reason": "all security summaries fresh"}
 
 
 @pytest.mark.parametrize("summary_state", ["missing", "empty", "outdated"])
@@ -178,29 +190,30 @@ def test_security_picker_requeues_unusable_or_stale_summary(tmp_path, summary_st
         os.utime(summary, (old, old))
 
     script = definitions.CORE_TASKS_DIR / "schedule-next-security-analysis" / "pick-and-queue.mjs"
-    wrapper = (
-        "globalThis.fetch = async (_url, options) => ({"
-        "ok: true, "
-        "json: async () => ({item: {id: 'queued-id'}}), "
-        "text: async () => '', "
-        "requestBody: JSON.parse(options.body)"
-        "});"
-        f"await import({json.dumps(script.as_uri())});"
-    )
-    env = os.environ.copy()
-    env.update({"SENTINEL_TASKS_HOME": str(tmp_path), "SENTINEL_BASE_URL": "http://sentinel.test"})
-    result = subprocess.run(  # noqa: S603 - fixed executable and test-owned script
-        [shutil.which("node") or "node", "--input-type=module", "--eval", wrapper],
-        check=True,
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-
-    decision = json.loads(result.stdout.strip())
+    decision = _run_task_script(script, tmp_path)
     assert decision["queued"] is True
     assert decision["taskId"] == "analyze-security"
-    assert decision["symbol"] == "TEST"
+    assert decision["staleSymbols"] == ["TEST"]
+    assert decision["workItemIds"] == ["queued-0"]
+
+
+def test_security_scheduler_queues_every_stale_security(tmp_path):
+    artifacts = tmp_path / "tasks" / "artifacts"
+    universe_dir = artifacts / "refresh-securities-universe"
+    universe_dir.mkdir(parents=True)
+    (universe_dir / "securities-universe.json").write_text(
+        json.dumps([{"symbol": "MISSING-A"}, {"symbol": "MISSING-B"}]),
+        encoding="utf-8",
+    )
+
+    decision = _run_task_script(
+        definitions.CORE_TASKS_DIR / "schedule-next-security-analysis" / "pick-and-queue.mjs",
+        tmp_path,
+    )
+
+    assert decision["queued"] is True
+    assert decision["staleSymbols"] == ["MISSING-A", "MISSING-B"]
+    assert decision["workItemIds"] == ["queued-0", "queued-1"]
 
 
 def make_task(root: Path, task_id: str, *, name: str | None = None, script: str = "console.log('ok');\n") -> Path:

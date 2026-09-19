@@ -147,7 +147,7 @@ erase historical records.
 | Task | Purpose |
 |---|---|
 | `refresh-securities-universe` | Write the active security snapshot |
-| `schedule-next-security-analysis` | Queue the stalest/missing security analysis |
+| `schedule-next-security-analysis` | Queue every stale/missing security analysis |
 | `analyze-security` | Build a source-backed profile, security research, per-security external context, report, and summary |
 | `rate-security` | Rate one security from its last six months of research memory |
 | `rate-portfolio` | Rate the whole eligible universe relative to itself |

@@ -1,8 +1,9 @@
 {
   "name": "Rate Portfolio",
   "enabled": true,
-  "schedule": "0 9 * * 0",
-  "description": "Weekly portfolio rating. Stale security summaries are queued for analysis first; ratings run only when every summary is at most seven days old and the previous portfolio result is at least five days old.",
+  "schedule": null,
+  "schedulePolicy": { "staleAfterSeconds": 3600, "runWhen": "idle" },
+  "description": "Check portfolio freshness hourly. Skip when the latest result is under five days old; otherwise queue stale security analysis or rate the portfolio when all summaries are fresh.",
   "cwd": "@/tasks/artifacts/{{task-id}}",
   "timeout": 43200
 }

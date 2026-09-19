@@ -1,8 +1,8 @@
 {
-  "name": "Schedule Next Security Analysis",
+  "name": "Schedule Security Analyses",
   "enabled": true,
   "schedule": null,
-  "description": "Pick one security whose latest summary file is missing or older than seven days and queue analyze-security. When all summaries are fresh, trigger rate-portfolio only when its latest result is at least five days old.",
+  "description": "Queue analysis for every security whose latest summary file is missing, empty, or at least seven days old.",
   "cwd": "@/tasks/artifacts/{{task-id}}",
   "schedulePolicy": { "staleAfterSeconds": 900, "runWhen": "idle" },
   "timeout": 43200

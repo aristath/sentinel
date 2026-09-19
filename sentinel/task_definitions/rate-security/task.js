@@ -12,7 +12,7 @@
  *      checks/repairs it. Repeat up to 5 times, feeding validator feedback back, until valid.
  *   5. submit-rating.mjs POSTs the canonical rating to Sentinel.
  *
- * Triggered by schedule-next-security-analysis (manual `symbol` input).
+ * Triggered by schedule-next-security-analysis with a `symbol` input.
  */
 
 const STEP_TIMEOUT_SECONDS = 3600;
