@@ -1,5 +1,5 @@
 import { LitElement, html } from "lit";
-import { getJson, postJson } from "./api.js";
+import { getJson, postEventStream, postJson } from "./api.js";
 import { LiveResource } from "./live-resource.js";
 import {
   formatDuration,
@@ -86,15 +86,20 @@ class SentinelResearch extends LitElement {
 
   loadChatMessages() {
     try {
-      const value = JSON.parse(
-        window.sessionStorage.getItem("sentinel-research-chat") ?? "[]",
-      );
+      const storageKey = "sentinel-research-chat";
+      const stored = window.localStorage.getItem(storageKey);
+      const legacy = window.sessionStorage.getItem(storageKey);
+      const value = JSON.parse(stored ?? legacy ?? "[]");
+      if (stored === null && legacy !== null) {
+        window.localStorage.setItem(storageKey, legacy);
+        window.sessionStorage.removeItem(storageKey);
+      }
       return Array.isArray(value)
         ? value.filter(
             (entry) =>
               ["user", "assistant"].includes(entry?.role) &&
               typeof entry?.content === "string",
-          )
+          ).map((entry) => ({ ...entry, pending: false }))
         : [];
     } catch {
       return [];
@@ -103,7 +108,7 @@ class SentinelResearch extends LitElement {
 
   persistChatMessages() {
     try {
-      window.sessionStorage.setItem(
+      window.localStorage.setItem(
         "sentinel-research-chat",
         JSON.stringify(this.chatMessages),
       );
@@ -116,13 +121,145 @@ class SentinelResearch extends LitElement {
     this.chatMessages = [];
     this.chatError = "";
     this.persistChatMessages();
+    window.sessionStorage.removeItem("sentinel-research-chat");
+  }
+
+  chatHistory() {
+    return this.chatMessages
+      .filter(
+        (entry) =>
+          ["user", "assistant"].includes(entry.role) &&
+          typeof entry.content === "string" &&
+          !entry.pending,
+      )
+      .map((entry) => ({
+        role: entry.role,
+        content: entry.contextContent || entry.content,
+      }));
+  }
+
+  updateStreamingAssistant(id, update) {
+    const transcript = this.querySelector("[data-research-chat-transcript]");
+    const follow =
+      !transcript ||
+      transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight <
+        48;
+    this.chatMessages = this.chatMessages.map((entry) =>
+      entry.id === id ? update(entry) : entry,
+    );
+    this.persistChatMessages();
+    if (follow) this.scrollChatToEnd();
+  }
+
+  handleChatEvent(id, event) {
+    if (event.type === "error") throw new Error(event.error || "Chat failed");
+    this.updateStreamingAssistant(id, (entry) => {
+      if (event.type === "content_delta") {
+        const segments = [...(entry.segments ?? [])];
+        const index = segments.findIndex(
+          (segment) => segment.turnId === event.turn_id,
+        );
+        if (index === -1) {
+          segments.push({ turnId: event.turn_id, content: event.delta });
+        } else {
+          segments[index] = {
+            ...segments[index],
+            content: segments[index].content + event.delta,
+          };
+        }
+        return {
+          ...entry,
+          segments,
+          content: segments.map((segment) => segment.content).join(""),
+        };
+      }
+      if (event.type === "reasoning_delta") {
+        const reasoning = [...(entry.reasoning ?? [])];
+        const index = reasoning.findIndex(
+          (item) => item.turnId === event.turn_id,
+        );
+        if (index === -1) {
+          reasoning.push({ turnId: event.turn_id, content: event.delta });
+        } else {
+          reasoning[index] = {
+            ...reasoning[index],
+            content: reasoning[index].content + event.delta,
+          };
+        }
+        return { ...entry, reasoning };
+      }
+      if (event.type === "turn_reset") {
+        const segments = (entry.segments ?? []).filter(
+          (segment) => segment.turnId !== event.turn_id,
+        );
+        return {
+          ...entry,
+          segments,
+          content: segments.map((segment) => segment.content).join(""),
+          reasoning: (entry.reasoning ?? []).filter(
+            (item) => item.turnId !== event.turn_id,
+          ),
+        };
+      }
+      if (event.type === "tool_start") {
+        return {
+          ...entry,
+          tools: [
+            ...(entry.tools ?? []),
+            {
+              id: event.id,
+              name: event.name,
+              arguments: event.arguments,
+              result: "",
+              status: "running",
+            },
+          ],
+        };
+      }
+      if (event.type === "tool_result") {
+        return {
+          ...entry,
+          tools: (entry.tools ?? []).map((tool) =>
+            tool.id === event.id
+              ? { ...tool, result: event.result, status: "complete" }
+              : tool,
+          ),
+        };
+      }
+      if (event.type === "context") {
+        return { ...entry, context: event };
+      }
+      if (event.type === "done") {
+        return {
+          ...entry,
+          content: entry.content || event.output || "",
+          contextContent: event.output || entry.content || "",
+          pending: false,
+        };
+      }
+      return entry;
+    });
   }
 
   async sendChatMessage() {
     const message = this.chatDraft.trim();
     if (!message || this.chatBusy) return;
-    const history = [...this.chatMessages];
-    this.chatMessages = [...history, { role: "user", content: message }];
+    const history = this.chatHistory();
+    const assistantId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
+    this.chatMessages = [
+      ...this.chatMessages,
+      { role: "user", content: message },
+      {
+        id: assistantId,
+        role: "assistant",
+        content: "",
+        contextContent: "",
+        segments: [],
+        reasoning: [],
+        tools: [],
+        pending: true,
+      },
+    ];
     this.chatDraft = "";
     this.chatBusy = true;
     this.chatError = "";
@@ -130,14 +267,17 @@ class SentinelResearch extends LitElement {
     await this.scrollChatToEnd();
 
     try {
-      const result = await postJson("/api/ai/chat", { message, history });
-      this.chatMessages = [
-        ...this.chatMessages,
-        { role: "assistant", content: result.output ?? "" },
-      ];
-      this.persistChatMessages();
+      await postEventStream(
+        "/api/ai/chat",
+        { message, history },
+        (event) => this.handleChatEvent(assistantId, event),
+      );
     } catch (error) {
       this.chatError = error.message;
+      this.updateStreamingAssistant(assistantId, (entry) => ({
+        ...entry,
+        pending: false,
+      }));
     } finally {
       this.chatBusy = false;
       await this.scrollChatToEnd();
@@ -155,6 +295,14 @@ class SentinelResearch extends LitElement {
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
       this.sendChatMessage();
+    }
+  }
+
+  formatToolArguments(value) {
+    try {
+      return JSON.stringify(JSON.parse(value), null, 2);
+    } catch {
+      return value;
     }
   }
 
@@ -606,6 +754,70 @@ class SentinelResearch extends LitElement {
                     <div
                       style="white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch"
                     >${message.content}</div>
+                    ${
+                      message.role === "assistant"
+                        ? html`
+                            ${(message.reasoning ?? []).map(
+                              (item, index) => html`
+                                <details style="margin-top: 0.45rem; max-width: 78ch">
+                                  <summary style="cursor: pointer">
+                                    Reasoning${
+                                      message.reasoning.length > 1
+                                        ? ` ${index + 1}`
+                                        : ""
+                                    }
+                                  </summary>
+                                  <div
+                                    style="white-space: pre-wrap; overflow-wrap: anywhere; padding: 0.4rem 0 0 2ch"
+                                  >${item.content}</div>
+                                </details>
+                              `,
+                            )}
+                            ${(message.tools ?? []).map(
+                              (tool) => html`
+                                <details style="margin-top: 0.45rem; max-width: 78ch">
+                                  <summary style="cursor: pointer; overflow-wrap: anywhere">
+                                    Tool · ${tool.name} · ${
+                                      tool.status === "complete"
+                                        ? "complete"
+                                        : "running"
+                                    }
+                                  </summary>
+                                  <div style="padding: 0.4rem 0 0 2ch">
+                                    <div>Arguments</div>
+                                    <pre
+                                      style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0.75rem"
+                                    >${this.formatToolArguments(tool.arguments)}</pre>
+                                    <div>Result</div>
+                                    <pre
+                                      style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0"
+                                    >${tool.result || "Waiting…"}</pre>
+                                  </div>
+                                </details>
+                              `,
+                            )}
+                            ${
+                              message.context?.dropped_messages > 0
+                                ? html`
+                                    <details style="margin-top: 0.45rem; max-width: 78ch">
+                                      <summary style="cursor: pointer">
+                                        Context · ${message.context.dropped_messages}
+                                        older messages omitted
+                                      </summary>
+                                      <div style="padding: 0.4rem 0 0 2ch">
+                                        The newest ${message.context.retained_messages}
+                                        messages were retained inside the
+                                        ${Math.round(
+                                          message.context.limit_tokens / 1024,
+                                        )}k-token context window.
+                                      </div>
+                                    </details>
+                                  `
+                                : ""
+                            }
+                          `
+                        : ""
+                    }
                   </article>
                 `,
               )
@@ -614,7 +826,7 @@ class SentinelResearch extends LitElement {
                 search the web, browse with Firefox, or operate Sentinel directly.
               </div>`
         }
-        ${this.chatBusy ? html`<div>Sentinel is working…</div>` : ""}
+        ${this.chatBusy ? html`<div>Streaming…</div>` : ""}
       </section>
       <div aria-hidden="true" style="overflow: hidden; white-space: nowrap">
         ${"─".repeat(160)}

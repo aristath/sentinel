@@ -55,8 +55,26 @@ tools.
 }
 ```
 
-`history` is optional. Entries use `user` or `assistant` roles. The response is
-`{ "output": "..." }`.
+`history` is optional. Entries use `user` or `assistant` roles. Sentinel keeps
+the newest complete messages that fit after the inherited system prompt,
+current message, and tool schemas in a 128k-token request window.
+
+The response is a Server-Sent Events stream. Every frame contains one JSON
+object in its `data` field. Event object types are:
+
+| Type | Meaning |
+|---|---|
+| `context` | The context limit and retained/dropped history counts |
+| `reasoning_delta` | Incremental model reasoning for one inference turn |
+| `content_delta` | Incremental assistant-visible output |
+| `tool_start` | Tool name and complete arguments immediately before execution |
+| `tool_result` | The complete result returned to the model |
+| `turn_reset` | A streamed turn was discarded by the repetition guard |
+| `done` | Final answer and successful stream completion |
+| `error` | The stream failed; `error` contains the message |
+
+The Research UI stores one conversation in browser-local storage, so its
+answers, reasoning, and tool records survive page reloads and browser restarts.
 
 ## `GET /api/ai/status`
 

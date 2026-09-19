@@ -612,6 +612,70 @@ class TestChat:
         assert messages[2] == {"role": "tool", "tool_call_id": "call_1", "content": "FILE-CONTENT"}
 
     @pytest.mark.asyncio
+    async def test_chat_streams_reasoning_content_and_tool_lifecycle_events(self) -> None:
+        async def fake_read(args: dict) -> str:
+            return f"read {args['path']}"
+
+        first_turn = FakeResponse(
+            lines=sse_lines(
+                [
+                    {"choices": [{"delta": {"reasoning_content": "Need the file. "}}]},
+                    {
+                        "choices": [
+                            {
+                                "delta": {
+                                    "content": "Checking. ",
+                                    "tool_calls": [
+                                        {
+                                            "index": 0,
+                                            "id": "call_1",
+                                            "function": {
+                                                "name": "read_file",
+                                                "arguments": '{"path":"a.txt"}',
+                                            },
+                                        }
+                                    ],
+                                }
+                            }
+                        ]
+                    },
+                ]
+            )
+        )
+        client = make_client([first_turn, content_stream("Finished.")])
+        events: list[dict[str, Any]] = []
+
+        async def collect(event: dict[str, Any]) -> None:
+            events.append(event)
+
+        await client.chat(
+            "Read it",
+            tools=[{"type": "function"}],
+            executors={"read_file": fake_read},
+            on_event=collect,
+        )
+
+        assert events == [
+            {"type": "reasoning_delta", "turn_id": "0:0", "delta": "Need the file. "},
+            {"type": "content_delta", "turn_id": "0:0", "delta": "Checking. "},
+            {
+                "type": "tool_start",
+                "id": "1:call_1",
+                "call_id": "call_1",
+                "name": "read_file",
+                "arguments": '{"path":"a.txt"}',
+            },
+            {
+                "type": "tool_result",
+                "id": "1:call_1",
+                "call_id": "call_1",
+                "name": "read_file",
+                "result": "read a.txt",
+            },
+            {"type": "content_delta", "turn_id": "1:0", "delta": "Finished."},
+        ]
+
+    @pytest.mark.asyncio
     async def test_unknown_tool_becomes_tool_content(self) -> None:
         client = make_client(
             [

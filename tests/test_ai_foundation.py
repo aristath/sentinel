@@ -13,8 +13,10 @@ from fastapi import HTTPException
 from sentinel.ai import universe
 from sentinel.api.routers import ai as ai_router
 from sentinel.api.routers.ai import (
+    CHAT_CONTEXT_TOKEN_LIMIT,
     _run_display_status,
     _run_identity,
+    _window_chat_history,
     create_ai_chat,
     create_ai_prompt,
     create_ai_request,
@@ -454,7 +456,7 @@ async def test_research_chat_inherits_system_prompt_history_and_complete_toolset
             new=AsyncMock(return_value=chat_tools),
         ) as create_tools,
     ):
-        result = await create_ai_chat(
+        response = await create_ai_chat(
             {
                 "message": "Compare the reports",
                 "history": [
@@ -464,8 +466,18 @@ async def test_research_chat_inherits_system_prompt_history_and_complete_toolset
             },
             deps,
         )
+        chunks = [chunk async for chunk in response.body_iterator]
 
-    assert result == {"output": "Answer"}
+    events = [json.loads(chunk.removeprefix("data: ").strip()) for chunk in chunks]
+    assert events == [
+        {
+            "type": "context",
+            "limit_tokens": CHAT_CONTEXT_TOKEN_LIMIT,
+            "retained_messages": 2,
+            "dropped_messages": 0,
+        },
+        {"type": "done", "output": "Answer"},
+    ]
     create_tools.assert_awaited_once_with(
         searxng_base_url="http://search",
         url_summarizer_base_url="http://summarizer",
@@ -483,6 +495,7 @@ async def test_research_chat_inherits_system_prompt_history_and_complete_toolset
     assert "Current task: research-chat." in kwargs["system"]
     assert kwargs["tools"] is chat_tools.definitions
     assert kwargs["executors"] is chat_tools
+    assert callable(kwargs["on_event"])
     chat_tools.aclose.assert_awaited_once_with()
     client.close.assert_awaited_once_with()
 
@@ -503,3 +516,36 @@ async def test_research_chat_rejects_invalid_conversations(body):
         await create_ai_chat(body, SimpleNamespace(settings=SimpleNamespace()))
 
     assert exc_info.value.status_code == 400
+
+
+def test_research_chat_context_keeps_newest_complete_messages_within_128k_tokens():
+    history = [
+        {"role": "user", "content": "old" * 100_000},
+        {"role": "assistant", "content": "middle" * 10_000},
+        {"role": "user", "content": "newest" * 10_000},
+    ]
+
+    retained, dropped = _window_chat_history(
+        history,
+        system="system",
+        tools=[],
+        message="follow-up",
+    )
+
+    assert retained == history[1:]
+    assert dropped == 1
+
+
+def test_research_chat_context_accounts_for_system_tools_and_current_message():
+    history = [{"role": "assistant", "content": "previous"}]
+    oversized_tools = [{"description": "x" * (CHAT_CONTEXT_TOKEN_LIMIT * 3)}]
+
+    retained, dropped = _window_chat_history(
+        history,
+        system="system",
+        tools=oversized_tools,
+        message="follow-up",
+    )
+
+    assert retained == []
+    assert dropped == 1

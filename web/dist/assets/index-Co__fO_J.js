@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BZGQWYZJ.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BsbdZliS.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2257,6 +2257,43 @@ function postJson(path, body, options) {
 function deleteJson(path, options) {
 	return mutationJson(path, "DELETE", void 0, options);
 }
+async function postEventStream(path, body, onEvent, { signal } = {}) {
+	const response = await fetch(path, {
+		method: "POST",
+		headers: {
+			Accept: "text/event-stream",
+			"Content-Type": "application/json"
+		},
+		body: JSON.stringify(body),
+		signal
+	});
+	if (!response.ok) {
+		const payload = await response.json().catch(() => void 0);
+		throw new Error(payload?.detail ?? `${response.status} ${response.statusText}`);
+	}
+	if (!response.body) throw new Error("Chat stream has no response body");
+	const reader = response.body.getReader();
+	const decoder = new TextDecoder();
+	let buffer = "";
+	try {
+		while (true) {
+			const { done, value } = await reader.read();
+			buffer += decoder.decode(value, { stream: !done }).replace(/\r\n/g, "\n");
+			const frames = buffer.split("\n\n");
+			buffer = frames.pop() ?? "";
+			for (const frame of frames) {
+				const data = frame.split("\n").filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
+				if (data) await onEvent(JSON.parse(data));
+			}
+			if (done) break;
+		}
+	} catch (error) {
+		await reader.cancel().catch(() => {});
+		throw error;
+	} finally {
+		reader.releaseLock();
+	}
+}
 //#endregion
 //#region src/live-resource.js
 var LiveResource = class {
@@ -2945,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-BZGQWYZJ.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-BsbdZliS.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -3381,8 +3418,10 @@ var SentinelTasks = class extends i {
 	}
 	async pollRuns() {
 		if (!this.selectedId) return;
+		const selectedId = this.selectedId;
 		try {
-			const runs = await getJson(`/api/tasks/${encodeURIComponent(this.selectedId)}/runs?limit=50`);
+			const runs = await getJson(`/api/tasks/${encodeURIComponent(selectedId)}/runs?limit=50`);
+			if (this.selectedId !== selectedId) return;
 			this.runs = runs;
 			const active = runs.find((item) => ["queued", "running"].includes(item.status));
 			if (active) this.runId = active.id;
@@ -3667,9 +3706,7 @@ var SentinelTasks = class extends i {
                 <div>
                   <span aria-hidden="true"
                     >${task.id === this.selectedId ? "▶" : " "}&nbsp;</span
-                  ><tui-button
-                    ?disabled=${this.running}
-                    @click=${() => this.selectTask(task.id)}
+                  ><tui-button @click=${() => this.selectTask(task.id)}
                     >${task.name}</tui-button
                   >
                   <tui-text
@@ -3730,9 +3767,7 @@ var SentinelTasks = class extends i {
               <div>
                 <span aria-hidden="true"
                   >${file.name === this.activeFile ? "▶" : " "}&nbsp;</span
-                ><tui-button
-                  ?disabled=${this.running}
-                  @click=${() => this.selectFile(file.name)}
+                ><tui-button @click=${() => this.selectFile(file.name)}
                   >${file.name}</tui-button
                 >
                 ${this.drafts[file.name] !== this.baselines[file.name] && file.name in this.baselines ? b`<tui-text variant="warning">unsaved</tui-text>` : ""}
@@ -4102,47 +4137,160 @@ var SentinelResearch = class extends i {
 	}
 	loadChatMessages() {
 		try {
-			const value = JSON.parse(window.sessionStorage.getItem("sentinel-research-chat") ?? "[]");
-			return Array.isArray(value) ? value.filter((entry) => ["user", "assistant"].includes(entry?.role) && typeof entry?.content === "string") : [];
+			const storageKey = "sentinel-research-chat";
+			const stored = window.localStorage.getItem(storageKey);
+			const legacy = window.sessionStorage.getItem(storageKey);
+			const value = JSON.parse(stored ?? legacy ?? "[]");
+			if (stored === null && legacy !== null) {
+				window.localStorage.setItem(storageKey, legacy);
+				window.sessionStorage.removeItem(storageKey);
+			}
+			return Array.isArray(value) ? value.filter((entry) => ["user", "assistant"].includes(entry?.role) && typeof entry?.content === "string").map((entry) => ({
+				...entry,
+				pending: false
+			})) : [];
 		} catch {
 			return [];
 		}
 	}
 	persistChatMessages() {
 		try {
-			window.sessionStorage.setItem("sentinel-research-chat", JSON.stringify(this.chatMessages));
+			window.localStorage.setItem("sentinel-research-chat", JSON.stringify(this.chatMessages));
 		} catch {}
 	}
 	clearChat() {
 		this.chatMessages = [];
 		this.chatError = "";
 		this.persistChatMessages();
+		window.sessionStorage.removeItem("sentinel-research-chat");
+	}
+	chatHistory() {
+		return this.chatMessages.filter((entry) => ["user", "assistant"].includes(entry.role) && typeof entry.content === "string" && !entry.pending).map((entry) => ({
+			role: entry.role,
+			content: entry.contextContent || entry.content
+		}));
+	}
+	updateStreamingAssistant(id, update) {
+		const transcript = this.querySelector("[data-research-chat-transcript]");
+		const follow = !transcript || transcript.scrollHeight - transcript.scrollTop - transcript.clientHeight < 48;
+		this.chatMessages = this.chatMessages.map((entry) => entry.id === id ? update(entry) : entry);
+		this.persistChatMessages();
+		if (follow) this.scrollChatToEnd();
+	}
+	handleChatEvent(id, event) {
+		if (event.type === "error") throw new Error(event.error || "Chat failed");
+		this.updateStreamingAssistant(id, (entry) => {
+			if (event.type === "content_delta") {
+				const segments = [...entry.segments ?? []];
+				const index = segments.findIndex((segment) => segment.turnId === event.turn_id);
+				if (index === -1) segments.push({
+					turnId: event.turn_id,
+					content: event.delta
+				});
+				else segments[index] = {
+					...segments[index],
+					content: segments[index].content + event.delta
+				};
+				return {
+					...entry,
+					segments,
+					content: segments.map((segment) => segment.content).join("")
+				};
+			}
+			if (event.type === "reasoning_delta") {
+				const reasoning = [...entry.reasoning ?? []];
+				const index = reasoning.findIndex((item) => item.turnId === event.turn_id);
+				if (index === -1) reasoning.push({
+					turnId: event.turn_id,
+					content: event.delta
+				});
+				else reasoning[index] = {
+					...reasoning[index],
+					content: reasoning[index].content + event.delta
+				};
+				return {
+					...entry,
+					reasoning
+				};
+			}
+			if (event.type === "turn_reset") {
+				const segments = (entry.segments ?? []).filter((segment) => segment.turnId !== event.turn_id);
+				return {
+					...entry,
+					segments,
+					content: segments.map((segment) => segment.content).join(""),
+					reasoning: (entry.reasoning ?? []).filter((item) => item.turnId !== event.turn_id)
+				};
+			}
+			if (event.type === "tool_start") return {
+				...entry,
+				tools: [...entry.tools ?? [], {
+					id: event.id,
+					name: event.name,
+					arguments: event.arguments,
+					result: "",
+					status: "running"
+				}]
+			};
+			if (event.type === "tool_result") return {
+				...entry,
+				tools: (entry.tools ?? []).map((tool) => tool.id === event.id ? {
+					...tool,
+					result: event.result,
+					status: "complete"
+				} : tool)
+			};
+			if (event.type === "context") return {
+				...entry,
+				context: event
+			};
+			if (event.type === "done") return {
+				...entry,
+				content: entry.content || event.output || "",
+				contextContent: event.output || entry.content || "",
+				pending: false
+			};
+			return entry;
+		});
 	}
 	async sendChatMessage() {
 		const message = this.chatDraft.trim();
 		if (!message || this.chatBusy) return;
-		const history = [...this.chatMessages];
-		this.chatMessages = [...history, {
-			role: "user",
-			content: message
-		}];
+		const history = this.chatHistory();
+		const assistantId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
+		this.chatMessages = [
+			...this.chatMessages,
+			{
+				role: "user",
+				content: message
+			},
+			{
+				id: assistantId,
+				role: "assistant",
+				content: "",
+				contextContent: "",
+				segments: [],
+				reasoning: [],
+				tools: [],
+				pending: true
+			}
+		];
 		this.chatDraft = "";
 		this.chatBusy = true;
 		this.chatError = "";
 		this.persistChatMessages();
 		await this.scrollChatToEnd();
 		try {
-			const result = await postJson("/api/ai/chat", {
+			await postEventStream("/api/ai/chat", {
 				message,
 				history
-			});
-			this.chatMessages = [...this.chatMessages, {
-				role: "assistant",
-				content: result.output ?? ""
-			}];
-			this.persistChatMessages();
+			}, (event) => this.handleChatEvent(assistantId, event));
 		} catch (error) {
 			this.chatError = error.message;
+			this.updateStreamingAssistant(assistantId, (entry) => ({
+				...entry,
+				pending: false
+			}));
 		} finally {
 			this.chatBusy = false;
 			await this.scrollChatToEnd();
@@ -4158,6 +4306,13 @@ var SentinelResearch = class extends i {
 		if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault();
 			this.sendChatMessage();
+		}
+	}
+	formatToolArguments(value) {
+		try {
+			return JSON.stringify(JSON.parse(value), null, 2);
+		} catch {
+			return value;
 		}
 	}
 	changeUnitsFilter(name, value) {
@@ -4481,12 +4636,54 @@ var SentinelResearch = class extends i {
                     <div
                       style="white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch"
                     >${message.content}</div>
+                    ${message.role === "assistant" ? b`
+                            ${(message.reasoning ?? []).map((item, index) => b`
+                                <details style="margin-top: 0.45rem; max-width: 78ch">
+                                  <summary style="cursor: pointer">
+                                    Reasoning${message.reasoning.length > 1 ? ` ${index + 1}` : ""}
+                                  </summary>
+                                  <div
+                                    style="white-space: pre-wrap; overflow-wrap: anywhere; padding: 0.4rem 0 0 2ch"
+                                  >${item.content}</div>
+                                </details>
+                              `)}
+                            ${(message.tools ?? []).map((tool) => b`
+                                <details style="margin-top: 0.45rem; max-width: 78ch">
+                                  <summary style="cursor: pointer; overflow-wrap: anywhere">
+                                    Tool · ${tool.name} · ${tool.status === "complete" ? "complete" : "running"}
+                                  </summary>
+                                  <div style="padding: 0.4rem 0 0 2ch">
+                                    <div>Arguments</div>
+                                    <pre
+                                      style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0.75rem"
+                                    >${this.formatToolArguments(tool.arguments)}</pre>
+                                    <div>Result</div>
+                                    <pre
+                                      style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0"
+                                    >${tool.result || "Waiting…"}</pre>
+                                  </div>
+                                </details>
+                              `)}
+                            ${message.context?.dropped_messages > 0 ? b`
+                                    <details style="margin-top: 0.45rem; max-width: 78ch">
+                                      <summary style="cursor: pointer">
+                                        Context · ${message.context.dropped_messages}
+                                        older messages omitted
+                                      </summary>
+                                      <div style="padding: 0.4rem 0 0 2ch">
+                                        The newest ${message.context.retained_messages}
+                                        messages were retained inside the
+                                        ${Math.round(message.context.limit_tokens / 1024)}k-token context window.
+                                      </div>
+                                    </details>
+                                  ` : ""}
+                          ` : ""}
                   </article>
                 `) : b`<div style="max-width: 68ch">
                 Ask about the research pipeline, inspect any generated artifact,
                 search the web, browse with Firefox, or operate Sentinel directly.
               </div>`}
-        ${this.chatBusy ? b`<div>Sentinel is working…</div>` : ""}
+        ${this.chatBusy ? b`<div>Streaming…</div>` : ""}
       </section>
       <div aria-hidden="true" style="overflow: hidden; white-space: nowrap">
         ${"─".repeat(160)}

@@ -1,7 +1,8 @@
 {
   "name": "Rate Portfolio",
   "enabled": true,
-  "description": "Read all security summaries, rate them relative to each other for a 5-10 year portfolio allocation, and submit all ratings to Sentinel.",
+  "schedule": "0 9 * * 0",
+  "description": "Weekly portfolio rating. Stale security summaries are queued for analysis first; ratings run only when every summary is at most seven days old and the previous portfolio result is at least five days old.",
   "cwd": "@/tasks/artifacts/{{task-id}}",
   "timeout": 43200
 }

@@ -44,9 +44,17 @@ External context is not a separate research unit. It is derived from each
 security's source-backed profile, researched through bounded fixed-month
 searches, distilled separately, and stored with that security.
 
-A unit is stale when its latest artifact is missing or older than the configured
-window. Portfolio staleness also considers whether its universe or security
-summary dependencies are newer than the latest portfolio rating.
+A security is stale when its canonical non-empty `summary.md` is missing or at
+least seven days old. The short-cadence scheduler queues stale securities for
+analysis. Portfolio rating is eligible only after every security summary is
+fresh and the canonical `rate-portfolio/latest.json` result is missing or at
+least five days old.
+
+`rate-portfolio` also has a weekly Sunday schedule as a backstop. Its own
+preflight applies the same dependency gate before any LLM work: stale security
+summaries are queued for analysis, a portfolio result younger than five days is
+a no-op, and rating proceeds only when all summaries are fresh and the previous
+portfolio result needs refreshing.
 
 ## Required services
 

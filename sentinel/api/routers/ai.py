@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import math
 import re
 import time
@@ -10,8 +11,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 
-import httpx
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from sentinel.ai import tools as ai_tools
 from sentinel.ai.chat_tools import ResearchChatTools
@@ -33,9 +34,38 @@ AI_TASK_IDS = {
     "schedule-next-security-analysis",
 }
 MEMORY_STATS_TTL_SECONDS = 30.0
+CHAT_CONTEXT_TOKEN_LIMIT = 128 * 1024
 _memory_stats_cache: dict[str, Any] | None = None
 _memory_stats_cached_at = 0.0
 _memory_stats_lock = asyncio.Lock()
+
+
+def _estimate_chat_tokens(value: Any) -> int:
+    """Conservatively estimate model tokens without coupling to one tokenizer."""
+    if not isinstance(value, str):
+        value = json.dumps(value, ensure_ascii=False, separators=(",", ":"))
+    return max(1, math.ceil(len(value.encode("utf-8")) / 3))
+
+
+def _window_chat_history(
+    history: list[dict[str, str]],
+    *,
+    system: str,
+    tools: list[dict[str, Any]],
+    message: str,
+) -> tuple[list[dict[str, str]], int]:
+    """Keep the newest complete messages inside a 128k-token request window."""
+    fixed_tokens = _estimate_chat_tokens(system) + _estimate_chat_tokens(tools) + _estimate_chat_tokens(message) + 32
+    remaining = max(0, CHAT_CONTEXT_TOKEN_LIMIT - fixed_tokens)
+    retained_reversed: list[dict[str, str]] = []
+    for entry in reversed(history):
+        cost = _estimate_chat_tokens(entry) + 4
+        if cost > remaining:
+            break
+        retained_reversed.append(entry)
+        remaining -= cost
+    retained = list(reversed(retained_reversed))
+    return retained, len(history) - len(retained)
 
 
 def _age_seconds(value: Any, now: datetime) -> float:
@@ -202,7 +232,7 @@ async def create_ai_prompt(
 async def create_ai_chat(
     body: dict[str, Any],
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
-) -> dict[str, str]:
+) -> StreamingResponse:
     message = body.get("message")
     if not isinstance(message, str) or not message.strip():
         raise HTTPException(status_code=400, detail="message must be a non-empty string")
@@ -218,38 +248,90 @@ async def create_ai_chat(
             raise HTTPException(status_code=400, detail="history entry content must be a string")
         history.append({"role": entry["role"], "content": content})
 
-    client = await LLMClient.from_settings(deps.settings)
-    workspace = Path(client.ai_data_dir or SENTINEL_HOME)
-    system = build_system_prompt(workspace, "research-chat", workspace)
-    chat_tools: ResearchChatTools | None = None
-    try:
-        chat_tools = await ResearchChatTools.create(
-            searxng_base_url=client.searxng_base_url,
-            url_summarizer_base_url=client.url_summarizer_base_url,
-            browser_search_base_url=client.browser_search_base_url,
-            firefox_mcp_base_url=str(await deps.settings.get("ai_firefox_mcp_base_url", "http://127.0.0.1:8892")),
-            work_root=workspace,
-        )
-        result = await client.chat(
-            message,
-            system=system,
-            history=history,
-            tools=chat_tools.definitions,
-            executors=chat_tools,
-            work_root=workspace,
-        )
-        output = result.content if result.content.strip() else result.last_tool_result
-        return {"output": output}
-    except LLMError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    except (httpx.HTTPError, ValueError) as exc:
-        raise HTTPException(status_code=502, detail=f"Chat tool setup failed: {exc}") from exc
-    finally:
+    async def event_stream():
+        queue: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue(maxsize=256)
+
+        async def emit(event: dict[str, Any]) -> None:
+            await queue.put(event)
+
+        async def run_chat() -> None:
+            client: LLMClient | None = None
+            chat_tools: ResearchChatTools | None = None
+            try:
+                client = await LLMClient.from_settings(deps.settings)
+                workspace = Path(client.ai_data_dir or SENTINEL_HOME)
+                system = build_system_prompt(workspace, "research-chat", workspace)
+                chat_tools = await ResearchChatTools.create(
+                    searxng_base_url=client.searxng_base_url,
+                    url_summarizer_base_url=client.url_summarizer_base_url,
+                    browser_search_base_url=client.browser_search_base_url,
+                    firefox_mcp_base_url=str(
+                        await deps.settings.get("ai_firefox_mcp_base_url", "http://127.0.0.1:8892")
+                    ),
+                    work_root=workspace,
+                )
+                windowed_history, dropped = _window_chat_history(
+                    history,
+                    system=system,
+                    tools=chat_tools.definitions,
+                    message=message,
+                )
+                await emit(
+                    {
+                        "type": "context",
+                        "limit_tokens": CHAT_CONTEXT_TOKEN_LIMIT,
+                        "retained_messages": len(windowed_history),
+                        "dropped_messages": dropped,
+                    }
+                )
+                result = await client.chat(
+                    message,
+                    system=system,
+                    history=windowed_history,
+                    tools=chat_tools.definitions,
+                    executors=chat_tools,
+                    work_root=workspace,
+                    on_event=emit,
+                )
+                output = result.content if result.content.strip() else result.last_tool_result
+                await emit({"type": "done", "output": output})
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - errors must reach an already-open stream
+                await emit({"type": "error", "error": str(exc)})
+            finally:
+                try:
+                    if chat_tools is not None:
+                        await chat_tools.aclose()
+                finally:
+                    if client is not None:
+                        await client.close()
+                    try:
+                        queue.put_nowait(None)
+                    except asyncio.QueueFull:
+                        pass
+
+        runner = asyncio.create_task(run_chat())
         try:
-            if chat_tools is not None:
-                await chat_tools.aclose()
+            while True:
+                event = await queue.get()
+                if event is None:
+                    break
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         finally:
-            await client.close()
+            if not runner.done():
+                runner.cancel()
+            await asyncio.gather(runner, return_exceptions=True)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 def _run_identity(run: dict[str, Any], units: list[dict[str, Any]]) -> dict[str, str]:

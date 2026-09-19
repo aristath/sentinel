@@ -4,9 +4,9 @@
  *   1. If any security's analysis summary is missing or older than seven days,
  *      queue analyze-security for the single most-overdue one (oldest/absent
  *      first, ties broken by symbol for determinism).
- *   2. Otherwise, if every summary is fresh AND the portfolio rating is older
- *      than the newest summary or the universe snapshot, queue one rate-portfolio
- *      run (deduped so concurrent ticks don't pile up duplicates).
+ *   2. Otherwise, if every summary is fresh AND the portfolio rating is missing
+ *      or at least five days old, queue one rate-portfolio run (deduped so
+ *      concurrent ticks don't pile up duplicates).
  *   3. Otherwise do nothing.
  *
  * Run on a short idle cadence, each invocation advances at most one unit of work,
@@ -37,6 +37,7 @@ const portfolioRatingPath = join(dataDir, "tasks/artifacts/rate-portfolio/latest
 
 // A summary is stale once it is older than seven days.
 const staleMs = 7 * 24 * 60 * 60 * 1000;
+const portfolioStaleMs = 5 * 24 * 60 * 60 * 1000;
 const now = Date.now();
 
 // Filesystem-safe filename stem derived from a symbol (unsafe chars collapsed).
@@ -77,8 +78,8 @@ const candidates = universe
 candidates.sort((a, b) => a.mtimeMs - b.mtimeMs || a.symbol.localeCompare(b.symbol));
 const selected = candidates[0];
 
-// Step 2: nothing stale. If every summary exists and is fresh, consider whether the
-// portfolio rating needs refreshing relative to the newest summary / universe file.
+// Step 2: nothing stale. If every summary exists and is fresh, refresh the
+// portfolio rating only once its canonical completion artifact reaches five days.
 if (!selected) {
   const universeMtimeMs = statSync(universePath).mtimeMs;
   let newestSummaryMtimeMs = 0;
@@ -92,17 +93,14 @@ if (!selected) {
   });
 
   if (allFresh) {
-    // The portfolio rating must be at least as new as the newest summary and the
-    // universe snapshot; if it already is, there's nothing to do.
-    let portfolioMtimeMs = 0;
-    try { portfolioMtimeMs = statSync(portfolioRatingPath).mtimeMs; } catch {}
-    const requiredPortfolioMtimeMs = Math.max(newestSummaryMtimeMs, universeMtimeMs);
+    const portfolioMtimeMs = usableSummaryMtimeMs(portfolioRatingPath);
 
-    if (portfolioMtimeMs >= requiredPortfolioMtimeMs) {
+    if (portfolioMtimeMs > 0 && now - portfolioMtimeMs < portfolioStaleMs) {
       console.log(JSON.stringify({
         queued: false,
         reason: "portfolio rating already current",
         portfolioMtimeMs,
+        portfolioAgeMs: now - portfolioMtimeMs,
         newestSummaryMtimeMs,
         universeMtimeMs,
       }));
@@ -149,6 +147,7 @@ const queueResponse = await fetch(`${base}/api/scheduler`, {
   body: JSON.stringify({
     task: "analyze-security",
     inputs: { symbol: selected.symbol },
+    dedupeKey: `analyze-security:${selected.symbol}:stale`,
   }),
 });
 

@@ -301,11 +301,13 @@ class SentinelTasks extends LitElement {
 
   async pollRuns() {
     if (!this.selectedId) return;
+    const selectedId = this.selectedId;
 
     try {
       const runs = await getJson(
-        `/api/tasks/${encodeURIComponent(this.selectedId)}/runs?limit=50`,
+        `/api/tasks/${encodeURIComponent(selectedId)}/runs?limit=50`,
       );
+      if (this.selectedId !== selectedId) return;
       this.runs = runs;
       const active = runs.find((item) =>
         ["queued", "running"].includes(item.status),
@@ -672,9 +674,7 @@ class SentinelTasks extends LitElement {
                 <div>
                   <span aria-hidden="true"
                     >${task.id === this.selectedId ? "▶" : " "}&nbsp;</span
-                  ><tui-button
-                    ?disabled=${this.running}
-                    @click=${() => this.selectTask(task.id)}
+                  ><tui-button @click=${() => this.selectTask(task.id)}
                     >${task.name}</tui-button
                   >
                   <tui-text
@@ -756,9 +756,7 @@ class SentinelTasks extends LitElement {
               <div>
                 <span aria-hidden="true"
                   >${file.name === this.activeFile ? "▶" : " "}&nbsp;</span
-                ><tui-button
-                  ?disabled=${this.running}
-                  @click=${() => this.selectFile(file.name)}
+                ><tui-button @click=${() => this.selectFile(file.name)}
                   >${file.name}</tui-button
                 >
                 ${

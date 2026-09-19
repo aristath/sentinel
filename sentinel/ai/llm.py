@@ -68,6 +68,7 @@ _CORRECTIVE_TEXTS = (
 # A tool executor receives already-expanded args and returns either a string
 # or {"text": str, "data": dict, "artifacts": list} (Clara ToolResult shape).
 ToolExecutor = Callable[[dict], Awaitable[Any]]
+ChatEventHandler = Callable[[dict[str, Any]], Awaitable[None]]
 
 
 class ExecutorLookup(Protocol):
@@ -501,11 +502,14 @@ def _rate_limit_delay_ms(headers: httpx.Headers, attempt: int) -> float:
 def _reasoning_delta(delta: dict) -> str:
     raw = delta.get("reasoning_content")
     thinking = delta.get("thinking")
+    reasoning = delta.get("reasoning")
     out = ""
     if isinstance(raw, str):
         out += raw
     if isinstance(thinking, str):
         out += thinking
+    if isinstance(reasoning, str):
+        out += reasoning
     return out
 
 
@@ -591,6 +595,7 @@ class LLMClient:
         executors: ExecutorLookup | None = None,
         work_root: Path | None = None,
         temperature: float | None = None,
+        on_event: ChatEventHandler | None = None,
     ) -> ChatResult:
         """Run the full tool loop; return the last turn's content.
 
@@ -611,7 +616,7 @@ class LLMClient:
         content = ""
         last_tool_result = ""
         while True:
-            turn = await self._stream_turn(messages, tool_defs, temperature)
+            turn = await self._stream_turn(messages, tool_defs, temperature, on_event, rounds)
             content = turn.content
             if not turn.tool_calls:
                 if not content.strip() and not last_tool_result and empty_response_retries < MAX_EMPTY_RESPONSE_RETRIES:
@@ -624,8 +629,29 @@ class LLMClient:
                 raise LLMError(f"LLM tool loop exceeded {self.max_rounds} rounds without producing a final answer")
             rounds += 1
             for call in turn.tool_calls:
+                event_id = f"{rounds}:{call['id']}"
+                if on_event is not None:
+                    await on_event(
+                        {
+                            "type": "tool_start",
+                            "id": event_id,
+                            "call_id": call["id"],
+                            "name": call["name"],
+                            "arguments": call["arguments"],
+                        }
+                    )
                 result = await self._execute_tool_call(call, executor_lookup, work_root)
                 last_tool_result = result
+                if on_event is not None:
+                    await on_event(
+                        {
+                            "type": "tool_result",
+                            "id": event_id,
+                            "call_id": call["id"],
+                            "name": call["name"],
+                            "result": result,
+                        }
+                    )
                 messages.append({"role": "tool", "tool_call_id": call["id"], "content": result})
 
     # -- one protected turn (corrective retries) --------------------------------
@@ -635,14 +661,19 @@ class LLMClient:
         messages: list[dict],
         tools: list[dict] | None,
         temperature: float | None,
+        on_event: ChatEventHandler | None,
+        round_index: int,
     ) -> _Turn:
         request_messages = copy.deepcopy(messages)
         attempt = 0
         while True:
             guard = _LoopGuard()
+            turn_id = f"{round_index}:{attempt}"
             try:
-                return await self._stream_once(request_messages, tools, temperature, guard)
+                return await self._stream_once(request_messages, tools, temperature, guard, on_event, turn_id)
             except _LoopDetected as exc:
+                if on_event is not None:
+                    await on_event({"type": "turn_reset", "turn_id": turn_id})
                 if attempt >= MAX_CORRECTIVE_RETRIES:
                     raise LLMError(str(exc)) from exc
                 request_messages.append({"role": "user", "content": _CORRECTIVE_TEXTS[attempt]})
@@ -656,6 +687,8 @@ class LLMClient:
         tools: list[dict] | None,
         temperature: float | None,
         guard: _LoopGuard,
+        on_event: ChatEventHandler | None,
+        turn_id: str,
     ) -> _Turn:
         body: dict[str, Any] = {"model": self.model, "messages": messages, "stream": True}
         if tools:
@@ -690,9 +723,15 @@ class LLMClient:
                 text = (await response.aread()).decode("utf-8", "replace")
                 await response.aclose()
                 raise LLMError(f"LLM request failed with {response.status_code}: {text[:500]}")
-            return await self._parse_turn(response, guard)
+            return await self._parse_turn(response, guard, on_event, turn_id)
 
-    async def _parse_turn(self, response: httpx.Response, guard: _LoopGuard) -> _Turn:
+    async def _parse_turn(
+        self,
+        response: httpx.Response,
+        guard: _LoopGuard,
+        on_event: ChatEventHandler | None,
+        turn_id: str,
+    ) -> _Turn:
         content = ""
         accumulator = _ToolCallAccumulator()
         try:
@@ -715,12 +754,16 @@ class LLMClient:
                         period = guard.observe(reasoning)
                         if period:
                             raise _LoopDetected(period)
+                        if on_event is not None:
+                            await on_event({"type": "reasoning_delta", "turn_id": turn_id, "delta": reasoning})
                     c = delta.get("content")
                     if c:
                         content += c
                         period = guard.observe(c)
                         if period:
                             raise _LoopDetected(period)
+                        if on_event is not None:
+                            await on_event({"type": "content_delta", "turn_id": turn_id, "delta": c})
                     tool_calls = delta.get("tool_calls")
                     if tool_calls:
                         period = guard.observe(json.dumps(tool_calls, ensure_ascii=False, separators=(",", ":")))

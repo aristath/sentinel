@@ -31,6 +31,134 @@ def test_bundled_tasks_use_uniform_step_and_task_timeouts():
         assert script.count("timeoutSeconds: STEP_TIMEOUT_SECONDS") == call_count, task_dir.name
 
 
+def _run_task_script(script: Path, sentinel_home: Path) -> dict:
+    wrapper = (
+        "globalThis.fetch = async (_url, options) => {"
+        "const body = JSON.parse(options.body);"
+        "const rows = Array.isArray(body) ? body : [body];"
+        "if (rows.length > 500) throw new Error('scheduler batch exceeds 500');"
+        "return {ok: true, json: async () => rows.length === 1 "
+        "? {item: {id: 'queued-0'}} "
+        ": {items: rows.map((_item, index) => ({id: `queued-${index}`}))}, text: async () => ''};"
+        "};"
+        f"await import({json.dumps(script.as_uri())});"
+    )
+    env = os.environ.copy()
+    env.update({"SENTINEL_TASKS_HOME": str(sentinel_home), "SENTINEL_BASE_URL": "http://sentinel.test"})
+    result = subprocess.run(  # noqa: S603 - fixed executable and test-owned script
+        [shutil.which("node") or "node", "--input-type=module", "--eval", wrapper],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    return json.loads(result.stdout.strip())
+
+
+def _write_freshness_artifacts(tmp_path: Path, *, summary_age_days: float, portfolio_age_days: float | None) -> None:
+    artifacts = tmp_path / "tasks" / "artifacts"
+    universe_dir = artifacts / "refresh-securities-universe"
+    universe_dir.mkdir(parents=True)
+    (universe_dir / "securities-universe.json").write_text(
+        json.dumps([{"symbol": "TEST", "name": "Test Security"}]),
+        encoding="utf-8",
+    )
+    summary_dir = artifacts / "analyze-security"
+    summary_dir.mkdir(parents=True)
+    summary = summary_dir / "TEST.summary.md"
+    summary.write_text("summary\n", encoding="utf-8")
+    summary_time = time.time() - summary_age_days * 24 * 60 * 60
+    os.utime(summary, (summary_time, summary_time))
+    if portfolio_age_days is not None:
+        portfolio = artifacts / "rate-portfolio" / "latest.json"
+        portfolio.parent.mkdir(parents=True)
+        portfolio.write_text("{}\n", encoding="utf-8")
+        portfolio_time = time.time() - portfolio_age_days * 24 * 60 * 60
+        os.utime(portfolio, (portfolio_time, portfolio_time))
+
+
+def test_rate_portfolio_has_a_weekly_schedule():
+    metadata = json.loads((definitions.CORE_TASKS_DIR / "rate-portfolio" / "task.json").read_text(encoding="utf-8"))
+    assert metadata["schedule"] == "0 9 * * 0"
+
+
+@pytest.mark.parametrize(
+    ("portfolio_age_days", "expected_action"),
+    [(2, "skip"), (6, "rate"), (None, "rate")],
+)
+def test_rate_portfolio_preflight_enforces_five_day_output_freshness(tmp_path, portfolio_age_days, expected_action):
+    _write_freshness_artifacts(tmp_path, summary_age_days=1, portfolio_age_days=portfolio_age_days)
+
+    decision = _run_task_script(
+        definitions.CORE_TASKS_DIR / "rate-portfolio" / "preflight.mjs",
+        tmp_path,
+    )
+
+    assert decision["action"] == expected_action
+
+
+def test_rate_portfolio_preflight_queues_every_stale_security(tmp_path):
+    artifacts = tmp_path / "tasks" / "artifacts"
+    universe_dir = artifacts / "refresh-securities-universe"
+    universe_dir.mkdir(parents=True)
+    (universe_dir / "securities-universe.json").write_text(
+        json.dumps([{"symbol": "MISSING"}, {"symbol": "OLD"}, {"symbol": "FRESH"}]),
+        encoding="utf-8",
+    )
+    summary_dir = artifacts / "analyze-security"
+    summary_dir.mkdir(parents=True)
+    old = summary_dir / "OLD.summary.md"
+    old.write_text("old\n", encoding="utf-8")
+    old_time = time.time() - 8 * 24 * 60 * 60
+    os.utime(old, (old_time, old_time))
+    (summary_dir / "FRESH.summary.md").write_text("fresh\n", encoding="utf-8")
+
+    decision = _run_task_script(
+        definitions.CORE_TASKS_DIR / "rate-portfolio" / "preflight.mjs",
+        tmp_path,
+    )
+
+    assert decision["action"] == "deferred"
+    assert decision["staleSymbols"] == ["MISSING", "OLD"]
+    assert decision["workItemIds"] == ["queued-0", "queued-1"]
+
+
+def test_rate_portfolio_preflight_batches_large_stale_universes(tmp_path):
+    artifacts = tmp_path / "tasks" / "artifacts"
+    universe_dir = artifacts / "refresh-securities-universe"
+    universe_dir.mkdir(parents=True)
+    (universe_dir / "securities-universe.json").write_text(
+        json.dumps([{"symbol": f"STALE-{index}"} for index in range(501)]),
+        encoding="utf-8",
+    )
+
+    decision = _run_task_script(
+        definitions.CORE_TASKS_DIR / "rate-portfolio" / "preflight.mjs",
+        tmp_path,
+    )
+
+    assert decision["action"] == "deferred"
+    assert len(decision["staleSymbols"]) == 501
+    assert len(decision["workItemIds"]) == 501
+
+
+@pytest.mark.parametrize(
+    ("portfolio_age_days", "should_trigger"),
+    [(2, False), (6, True), (None, True)],
+)
+def test_security_scheduler_uses_five_day_portfolio_freshness(tmp_path, portfolio_age_days, should_trigger):
+    _write_freshness_artifacts(tmp_path, summary_age_days=1, portfolio_age_days=portfolio_age_days)
+
+    decision = _run_task_script(
+        definitions.CORE_TASKS_DIR / "schedule-next-security-analysis" / "pick-and-queue.mjs",
+        tmp_path,
+    )
+
+    assert decision.get("triggeredPortfolioRating", False) is should_trigger
+    if not should_trigger:
+        assert decision["reason"] == "portfolio rating already current"
+
+
 @pytest.mark.parametrize("summary_state", ["missing", "empty", "outdated"])
 def test_security_picker_requeues_unusable_or_stale_summary(tmp_path, summary_state):
     artifacts = tmp_path / "tasks" / "artifacts"
