@@ -42,6 +42,15 @@ const now = Date.now();
 // Filesystem-safe filename stem derived from a symbol (unsafe chars collapsed).
 const slug = (value) => String(value || "item").replace(/[^A-Za-z0-9_.-]+/g, "-").replace(/^-+|-+$/g, "") || "item";
 
+const usableSummaryMtimeMs = (path) => {
+  try {
+    if (!readFileSync(path, "utf8").trim()) return 0;
+    return statSync(path).mtimeMs;
+  } catch {
+    return 0;
+  }
+};
+
 mkdirSync(outputDir, { recursive: true });
 
 const universe = JSON.parse(readFileSync(universePath, "utf8"));
@@ -54,8 +63,7 @@ const candidates = universe
   .map((item) => {
     const symbol = item.symbol.trim();
     const path = join(outputDir, `${slug(symbol)}.summary.md`);
-    let mtimeMs = 0;
-    try { mtimeMs = statSync(path).mtimeMs; } catch {}
+    const mtimeMs = usableSummaryMtimeMs(path);
     return {
       symbol,
       name: typeof item.name === "string" ? item.name : "",
@@ -78,11 +86,9 @@ if (!selected) {
     const symbol = (typeof item.symbol === "string" ? item.symbol : "").trim();
     if (!symbol) return true;
     const path = join(outputDir, `${slug(symbol)}.summary.md`);
-    try {
-      const mtimeMs = statSync(path).mtimeMs;
-      newestSummaryMtimeMs = Math.max(newestSummaryMtimeMs, mtimeMs);
-      return now - mtimeMs < staleMs;
-    } catch { return false; }
+    const mtimeMs = usableSummaryMtimeMs(path);
+    newestSummaryMtimeMs = Math.max(newestSummaryMtimeMs, mtimeMs);
+    return mtimeMs > 0 && now - mtimeMs < staleMs;
   });
 
   if (allFresh) {

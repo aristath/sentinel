@@ -60,7 +60,12 @@ def _with_artifacts(kind: str, key: str, label: str) -> dict[str, Any]:
     completion = existing.get(completion_name) if completion_name else None
     analyzed_at = None
     if completion is not None:
-        analyzed_at = datetime.fromtimestamp(completion.stat().st_mtime, tz=timezone.utc).isoformat()
+        try:
+            usable = bool(completion.read_text(encoding="utf-8").strip())
+        except (OSError, UnicodeError):
+            usable = False
+        if usable:
+            analyzed_at = datetime.fromtimestamp(completion.stat().st_mtime, tz=timezone.utc).isoformat()
     return {
         "kind": kind,
         "key": key,

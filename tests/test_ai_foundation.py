@@ -1,6 +1,7 @@
 """Tests for the file-backed AI research pipeline administration API."""
 
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, patch
@@ -12,6 +13,7 @@ from fastapi import HTTPException
 from sentinel.ai import universe
 from sentinel.api.routers import ai as ai_router
 from sentinel.api.routers.ai import (
+    _run_display_status,
     _run_identity,
     create_ai_prompt,
     create_ai_request,
@@ -131,6 +133,9 @@ def test_security_freshness_requires_the_canonical_summary(artifact_root):
     assert universe.get_research_unit("security", "TEST")["last_analyzed_at"] is None
 
     summary = security_dir / "TEST.summary.md"
+    summary.write_text("\n", encoding="utf-8")
+    assert universe.get_research_unit("security", "TEST")["last_analyzed_at"] is None
+
     summary.write_text("complete\n", encoding="utf-8")
     assert universe.get_research_unit("security", "TEST")["last_analyzed_at"] is not None
 
@@ -234,6 +239,39 @@ def test_pipeline_run_identity_uses_security_units():
         units,
     )
     assert security == {"unit_kind": "security", "unit_key": "AAA", "unit_label": "Alpha"}
+
+
+@pytest.mark.parametrize(
+    ("last_analyzed_at", "expected"),
+    [
+        (None, "stale"),
+        ("2026-01-01T00:00:00+00:00", "stale"),
+        ("2026-09-19T00:00:00+00:00", "completed"),
+    ],
+)
+def test_completed_security_run_display_depends_on_current_summary(last_analyzed_at, expected):
+    run = {"taskId": "analyze-security", "status": "done"}
+    identity = {"unit_kind": "security", "unit_key": "AAA", "unit_label": "Alpha"}
+    units = [
+        {
+            "kind": "security",
+            "key": "AAA",
+            "label": "Alpha",
+            "last_analyzed_at": last_analyzed_at,
+            "artifacts": {},
+        }
+    ]
+
+    assert (
+        _run_display_status(
+            run,
+            identity,
+            units,
+            now=datetime(2026, 9, 19, 12, tzinfo=timezone.utc),
+            security_days=7,
+        )
+        == expected
+    )
 
 
 @pytest.mark.asyncio

@@ -64,6 +64,31 @@ def _stale(unit: dict[str, Any], *, now: datetime, security_days: int) -> bool:
     return _age_seconds(unit.get("last_analyzed_at"), now) >= max(1, security_days) * 86400
 
 
+def _run_display_status(
+    run: dict[str, Any],
+    identity: dict[str, str],
+    units: list[dict[str, Any]],
+    *,
+    now: datetime,
+    security_days: int,
+) -> str:
+    if run.get("status") != "done":
+        return "failed"
+    if run.get("taskId") != "analyze-security":
+        return "completed"
+    unit = next(
+        (
+            row
+            for row in units
+            if row.get("kind") == "security" and str(row.get("key") or "").casefold() == identity["unit_key"].casefold()
+        ),
+        None,
+    )
+    if unit is None or _stale(unit, now=now, security_days=security_days):
+        return "stale"
+    return "completed"
+
+
 def _portfolio_stale() -> bool:
     latest = TASK_ARTIFACTS_DIR / "rate-portfolio" / "latest.json"
     universe = TASK_ARTIFACTS_DIR / "refresh-securities-universe" / "securities-universe.json"
@@ -241,7 +266,13 @@ async def get_ai_status(deps: Annotated[CommonDependencies, Depends(get_common_d
         last_run = {
             "job_id": row.get("taskId"),
             **identity,
-            "status": "completed" if row.get("status") == "done" else "failed",
+            "status": _run_display_status(
+                row,
+                identity,
+                units,
+                now=now,
+                security_days=security_days,
+            ),
             "duration_seconds": duration_ms / 1000 if isinstance(duration_ms, (int, float)) else None,
             "error": row.get("error"),
             "finished_at": row.get("finishedAt"),
@@ -351,14 +382,23 @@ async def get_ai_history(
 ) -> dict[str, Any]:
     history = []
     units = load_research_units()
+    now = datetime.now(timezone.utc)
+    security_days = int(await deps.settings.get("ai_stale_after_days", 7))
     for run in await _pipeline_runs(max(1, min(200, int(limit)))):
         if run.get("status") in {"queued", "running"}:
             continue
+        identity = _run_identity(run, units)
         history.append(
             {
                 "job_id": run.get("taskId"),
-                **_run_identity(run, units),
-                "status": "completed" if run.get("status") == "done" else "failed",
+                **identity,
+                "status": _run_display_status(
+                    run,
+                    identity,
+                    units,
+                    now=now,
+                    security_days=security_days,
+                ),
                 "duration_ms": run.get("durationMs"),
                 "error": run.get("error"),
                 "executed_at": datetime.fromisoformat(run["finishedAt"]).timestamp() if run.get("finishedAt") else None,

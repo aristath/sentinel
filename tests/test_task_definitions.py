@@ -31,6 +31,50 @@ def test_bundled_tasks_use_uniform_step_and_task_timeouts():
         assert script.count("timeoutSeconds: STEP_TIMEOUT_SECONDS") == call_count, task_dir.name
 
 
+@pytest.mark.parametrize("summary_state", ["missing", "empty", "outdated"])
+def test_security_picker_requeues_unusable_or_stale_summary(tmp_path, summary_state):
+    artifacts = tmp_path / "tasks" / "artifacts"
+    universe_dir = artifacts / "refresh-securities-universe"
+    universe_dir.mkdir(parents=True)
+    (universe_dir / "securities-universe.json").write_text(
+        json.dumps([{"symbol": "TEST", "name": "Test Security"}]),
+        encoding="utf-8",
+    )
+    summary_dir = artifacts / "analyze-security"
+    summary_dir.mkdir(parents=True)
+    summary = summary_dir / "TEST.summary.md"
+    if summary_state != "missing":
+        summary.write_text("\n" if summary_state == "empty" else "summary\n", encoding="utf-8")
+    if summary_state == "outdated":
+        old = time.time() - 8 * 24 * 60 * 60
+        os.utime(summary, (old, old))
+
+    script = definitions.CORE_TASKS_DIR / "schedule-next-security-analysis" / "pick-and-queue.mjs"
+    wrapper = (
+        "globalThis.fetch = async (_url, options) => ({"
+        "ok: true, "
+        "json: async () => ({item: {id: 'queued-id'}}), "
+        "text: async () => '', "
+        "requestBody: JSON.parse(options.body)"
+        "});"
+        f"await import({json.dumps(script.as_uri())});"
+    )
+    env = os.environ.copy()
+    env.update({"SENTINEL_TASKS_HOME": str(tmp_path), "SENTINEL_BASE_URL": "http://sentinel.test"})
+    result = subprocess.run(  # noqa: S603 - fixed executable and test-owned script
+        [shutil.which("node") or "node", "--input-type=module", "--eval", wrapper],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+
+    decision = json.loads(result.stdout.strip())
+    assert decision["queued"] is True
+    assert decision["taskId"] == "analyze-security"
+    assert decision["symbol"] == "TEST"
+
+
 def make_task(root: Path, task_id: str, *, name: str | None = None, script: str = "console.log('ok');\n") -> Path:
     path = root / task_id
     path.mkdir(parents=True)
