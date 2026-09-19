@@ -22,6 +22,10 @@ class SentinelResearch extends LitElement {
     artifactContent: { state: true },
     artifactLoading: { state: true },
     artifactError: { state: true },
+    chatMessages: { state: true },
+    chatDraft: { state: true },
+    chatBusy: { state: true },
+    chatError: { state: true },
   };
 
   constructor() {
@@ -38,6 +42,10 @@ class SentinelResearch extends LitElement {
     this.artifactContent = "";
     this.artifactLoading = false;
     this.artifactError = "";
+    this.chatMessages = this.loadChatMessages();
+    this.chatDraft = "";
+    this.chatBusy = false;
+    this.chatError = "";
   }
 
   status = new LiveResource(
@@ -74,6 +82,80 @@ class SentinelResearch extends LitElement {
     if (this.staleOnly) parameters.set("stale_only", "true");
     const query = parameters.toString();
     return `/api/ai/units${query ? `?${query}` : ""}`;
+  }
+
+  loadChatMessages() {
+    try {
+      const value = JSON.parse(
+        window.sessionStorage.getItem("sentinel-research-chat") ?? "[]",
+      );
+      return Array.isArray(value)
+        ? value.filter(
+            (entry) =>
+              ["user", "assistant"].includes(entry?.role) &&
+              typeof entry?.content === "string",
+          )
+        : [];
+    } catch {
+      return [];
+    }
+  }
+
+  persistChatMessages() {
+    try {
+      window.sessionStorage.setItem(
+        "sentinel-research-chat",
+        JSON.stringify(this.chatMessages),
+      );
+    } catch {
+      // The chat remains usable when browser storage is unavailable.
+    }
+  }
+
+  clearChat() {
+    this.chatMessages = [];
+    this.chatError = "";
+    this.persistChatMessages();
+  }
+
+  async sendChatMessage() {
+    const message = this.chatDraft.trim();
+    if (!message || this.chatBusy) return;
+    const history = [...this.chatMessages];
+    this.chatMessages = [...history, { role: "user", content: message }];
+    this.chatDraft = "";
+    this.chatBusy = true;
+    this.chatError = "";
+    this.persistChatMessages();
+    await this.scrollChatToEnd();
+
+    try {
+      const result = await postJson("/api/ai/chat", { message, history });
+      this.chatMessages = [
+        ...this.chatMessages,
+        { role: "assistant", content: result.output ?? "" },
+      ];
+      this.persistChatMessages();
+    } catch (error) {
+      this.chatError = error.message;
+    } finally {
+      this.chatBusy = false;
+      await this.scrollChatToEnd();
+      this.querySelector('[data-research-chat-input]')?.focus();
+    }
+  }
+
+  async scrollChatToEnd() {
+    await this.updateComplete;
+    const transcript = this.querySelector("[data-research-chat-transcript]");
+    if (transcript) transcript.scrollTop = transcript.scrollHeight;
+  }
+
+  handleChatKeydown(event) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      this.sendChatMessage();
+    }
   }
 
   changeUnitsFilter(name, value) {
@@ -503,6 +585,76 @@ class SentinelResearch extends LitElement {
     `;
   }
 
+  renderChat() {
+    return html`
+      <section
+        data-research-chat-transcript
+        aria-label="Research chat transcript"
+        aria-live="polite"
+        style="height: min(52vh, 36rem); overflow-y: auto; padding-right: 1ch"
+      >
+        ${
+          this.chatMessages.length
+            ? this.chatMessages.map(
+                (message) => html`
+                  <article style="margin-bottom: 1.25rem">
+                    <div>
+                      <tui-text
+                        >${message.role === "assistant" ? "Sentinel" : "You"}</tui-text
+                      >
+                    </div>
+                    <div
+                      style="white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch"
+                    >${message.content}</div>
+                  </article>
+                `,
+              )
+            : html`<div style="max-width: 68ch">
+                Ask about the research pipeline, inspect any generated artifact,
+                search the web, browse with Firefox, or operate Sentinel directly.
+              </div>`
+        }
+        ${this.chatBusy ? html`<div>Sentinel is working…</div>` : ""}
+      </section>
+      <div aria-hidden="true" style="overflow: hidden; white-space: nowrap">
+        ${"─".repeat(160)}
+      </div>
+      <label for="research-chat-input">Message</label>
+      <tui-textarea
+        id="research-chat-input"
+        data-research-chat-input
+        aria-label="Message research chat"
+        block
+        rows="4"
+        placeholder="Ask Sentinel…"
+        value=${this.chatDraft}
+        ?disabled=${this.chatBusy}
+        @input=${(event) => (this.chatDraft = event.currentTarget.value)}
+        @keydown=${this.handleChatKeydown}
+      ></tui-textarea>
+      <tui-flex align="baseline" justify="between" wrap>
+        <span>Enter sends │ Shift+Enter adds a line</span>
+        <span>
+          <tui-button
+            ?disabled=${this.chatMessages.length === 0 || this.chatBusy}
+            @click=${this.clearChat}
+            >Clear</tui-button
+          >
+          <tui-button
+            ?disabled=${!this.chatDraft.trim() || this.chatBusy}
+            @click=${this.sendChatMessage}
+            >Send</tui-button
+          >
+        </span>
+      </tui-flex>
+      ${
+        this.chatError
+          ? html`<tui-text variant="error">${this.chatError}</tui-text>`
+          : ""
+      }
+    `;
+  }
+
   renderArtifactModal() {
     const unit = this.artifactUnit;
 
@@ -569,6 +721,8 @@ ${this.artifactContent}</pre>`
     let content;
     if (this.tab === "tasks") {
       content = html`<sentinel-tasks></sentinel-tasks>`;
+    } else if (this.tab === "chat") {
+      content = this.renderChat();
     } else if (loading) {
       content = html`<div>Loading research pipeline…</div>`;
     } else if (error && !this.status.value) {
@@ -591,6 +745,7 @@ ${this.artifactContent}</pre>`
         <tui-radio-button value="status">Status</tui-radio-button>
         <tui-radio-button value="units">Units</tui-radio-button>
         <tui-radio-button value="history">History</tui-radio-button>
+        <tui-radio-button value="chat">Chat</tui-radio-button>
         <tui-radio-button value="tasks">Tasks</tui-radio-button>
       </tui-radio-buttonset>
       <div aria-hidden="true">&nbsp;</div>

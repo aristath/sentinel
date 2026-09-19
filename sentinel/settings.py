@@ -107,6 +107,7 @@ DEFAULTS = {
     # Web search (SearXNG, JSON format) and URL summarizer satellites.
     "ai_searxng_base_url": "http://127.0.0.1:8888",
     "ai_browser_search_base_url": "http://127.0.0.1:8891",
+    "ai_firefox_mcp_base_url": "http://127.0.0.1:8892",
     "ai_url_summarizer_base_url": "http://127.0.0.1:8890",
     # Research memory: pgvector Postgres (clara-postgres) with mem0 tables.
     # Connection identity matches Clara's mem0 config; the password is stored in

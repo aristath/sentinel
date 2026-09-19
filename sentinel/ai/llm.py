@@ -586,6 +586,7 @@ class LLMClient:
         user_content: str,
         *,
         system: str | None = None,
+        history: list[dict[str, str]] | None = None,
         tools: list[dict] | None = None,
         executors: ExecutorLookup | None = None,
         work_root: Path | None = None,
@@ -600,6 +601,8 @@ class LLMClient:
         messages: list[dict] = []
         if system:
             messages.append({"role": "system", "content": system})
+        if history:
+            messages.extend(copy.deepcopy(history))
         messages.append({"role": "user", "content": user_content})
         tool_defs = tools or None
         executor_lookup = cast(ExecutorLookup, executors if executors is not None else {})

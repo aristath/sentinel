@@ -436,6 +436,24 @@ async def ai_artifact_get(kind: str, unit_key: str, name: str) -> dict[str, Any]
 
 
 @mcp.tool()
+async def ai_artifact_files_list(prefix: str = "") -> dict[str, Any]:
+    """List all generated AI artifacts, including intermediate work files, optionally beneath a relative prefix."""
+    return await _call(ai_api.list_ai_artifact_files(prefix))
+
+
+@mcp.tool()
+async def ai_artifact_file_get(path: str) -> dict[str, Any]:
+    """Read any generated AI artifact by its path relative to the artifact root."""
+    return await _call(ai_api.get_ai_artifact_file(path))
+
+
+@mcp.tool()
+async def ai_artifact_search(query: str, prefix: str = "") -> dict[str, Any]:
+    """Search textual AI artifacts for a case-insensitive literal string."""
+    return await _call(ai_api.search_ai_artifact_files(query, prefix))
+
+
+@mcp.tool()
 async def ai_research_run(kind: str, unit_kind: str, unit_key: str) -> dict[str, Any]:
     """Queue analyze or rate research for a security."""
     return await _call(

@@ -50,7 +50,9 @@ sentinel-app
 ```
 
 The header owns command/navigation modals. Research contains the Status, Units,
-History, and Tasks tabs; Tasks is not an independent top-level command.
+History, Chat, and Tasks tabs; Tasks is not an independent top-level command.
+Chat keeps its current browser-session transcript when the modal closes and
+sends the transcript with each follow-up request.
 
 ## Development
 

@@ -83,9 +83,11 @@ the profile sidecar's filesystem modification time. Older profiles are rebuilt
 before the task generates its research queries. Legacy report profiles are
 eligible for migration only while the report itself is no more than 30 days old.
 
-The artifact API intentionally allowlists `analysis.md`, `context.md`,
+The unit-oriented artifact API allowlists `analysis.md`, `context.md`,
 `evidence-pack.md`, `latest.json`, `profile.json`, `rating.json`, `ratings.json`,
-`report.md`, and `summary.md`. Arbitrary filesystem reads are not exposed.
+`report.md`, and `summary.md`. The Sentinel MCP additionally provides listing,
+reading, and searching across the complete generated artifact tree so Research
+chat can inspect intermediate `.work` files.
 
 ## Memory
 
@@ -101,7 +103,9 @@ existing vectors.
 
 ## Monitoring and manual control
 
-The Research modal provides Status, Units, History, and Tasks views. Equivalent
+The Research modal provides Status, Units, History, Chat, and Tasks views. Chat
+uses Sentinel's inherited system prompt and can call the complete Sentinel MCP,
+SearXNG MCP, Firefox MCP, URL reader, Bash, and filesystem tools. Equivalent
 read-only checks are:
 
 ```bash

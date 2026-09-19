@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import asyncio
 import math
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException
 
 from sentinel.ai import tools as ai_tools
+from sentinel.ai.chat_tools import ResearchChatTools
 from sentinel.ai.errors import LLMError
 from sentinel.ai.llm import LLMClient, build_system_prompt, discover_models
 from sentinel.ai.memory import make_memory_store
@@ -58,6 +61,19 @@ ARTIFACT_ALLOWLIST = {
     "report.md",
     "summary.md",
 }
+
+
+def _artifact_path(relative_path: str, *, require_file: bool = True) -> Path:
+    relative = Path(relative_path)
+    if relative.is_absolute() or not relative.parts:
+        raise HTTPException(status_code=404, detail="artifact not found")
+    root = TASK_ARTIFACTS_DIR.resolve()
+    target = (root / relative).resolve()
+    if target != root and root not in target.parents:
+        raise HTTPException(status_code=404, detail="artifact not found")
+    if require_file and not target.is_file():
+        raise HTTPException(status_code=404, detail="artifact not found")
+    return target
 
 
 def _stale(unit: dict[str, Any], *, now: datetime, security_days: int) -> bool:
@@ -178,6 +194,60 @@ async def create_ai_prompt(
     finally:
         try:
             await executors.aclose()
+        finally:
+            await client.close()
+
+
+@router.post("/chat")
+async def create_ai_chat(
+    body: dict[str, Any],
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict[str, str]:
+    message = body.get("message")
+    if not isinstance(message, str) or not message.strip():
+        raise HTTPException(status_code=400, detail="message must be a non-empty string")
+    raw_history = body.get("history", [])
+    if not isinstance(raw_history, list):
+        raise HTTPException(status_code=400, detail="history must be an array")
+    history: list[dict[str, str]] = []
+    for entry in raw_history:
+        if not isinstance(entry, dict) or entry.get("role") not in {"user", "assistant"}:
+            raise HTTPException(status_code=400, detail="history entries must have a user or assistant role")
+        content = entry.get("content")
+        if not isinstance(content, str):
+            raise HTTPException(status_code=400, detail="history entry content must be a string")
+        history.append({"role": entry["role"], "content": content})
+
+    client = await LLMClient.from_settings(deps.settings)
+    workspace = Path(client.ai_data_dir or SENTINEL_HOME)
+    system = build_system_prompt(workspace, "research-chat", workspace)
+    chat_tools: ResearchChatTools | None = None
+    try:
+        chat_tools = await ResearchChatTools.create(
+            searxng_base_url=client.searxng_base_url,
+            url_summarizer_base_url=client.url_summarizer_base_url,
+            browser_search_base_url=client.browser_search_base_url,
+            firefox_mcp_base_url=str(await deps.settings.get("ai_firefox_mcp_base_url", "http://127.0.0.1:8892")),
+            work_root=workspace,
+        )
+        result = await client.chat(
+            message,
+            system=system,
+            history=history,
+            tools=chat_tools.definitions,
+            executors=chat_tools,
+            work_root=workspace,
+        )
+        output = result.content if result.content.strip() else result.last_tool_result
+        return {"output": output}
+    except LLMError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        raise HTTPException(status_code=502, detail=f"Chat tool setup failed: {exc}") from exc
+    finally:
+        try:
+            if chat_tools is not None:
+                await chat_tools.aclose()
         finally:
             await client.close()
 
@@ -428,3 +498,62 @@ async def get_ai_artifact(
         "content": target.read_text(encoding="utf-8"),
         "modified_at": datetime.fromtimestamp(target.stat().st_mtime).isoformat(),
     }
+
+
+async def list_ai_artifact_files(prefix: str = "") -> dict[str, Any]:
+    """List every generated AI artifact, including intermediate work files."""
+    root = TASK_ARTIFACTS_DIR.resolve()
+    start = root if not prefix.strip() else _artifact_path(prefix.strip(), require_file=False)
+    if not start.exists() or not start.is_dir():
+        raise HTTPException(status_code=404, detail="artifact path not found")
+    files = []
+    for path in sorted(item for item in start.rglob("*") if item.is_file()):
+        resolved = path.resolve()
+        if resolved != root and root not in resolved.parents:
+            continue
+        stat = path.stat()
+        files.append(
+            {
+                "path": path.relative_to(root).as_posix(),
+                "size": stat.st_size,
+                "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+            }
+        )
+    return {"files": files}
+
+
+async def get_ai_artifact_file(path: str) -> dict[str, Any]:
+    """Read any generated AI artifact by path relative to the artifact root."""
+    target = _artifact_path(path)
+    stat = target.stat()
+    try:
+        content = target.read_text(encoding="utf-8")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=422, detail="artifact is not UTF-8 text") from exc
+    return {
+        "path": target.relative_to(TASK_ARTIFACTS_DIR.resolve()).as_posix(),
+        "content": content,
+        "size": stat.st_size,
+        "modified_at": datetime.fromtimestamp(stat.st_mtime, timezone.utc).isoformat(),
+    }
+
+
+async def search_ai_artifact_files(query: str, prefix: str = "") -> dict[str, Any]:
+    """Search every textual AI artifact for a case-insensitive literal string."""
+    needle = query.strip()
+    if not needle:
+        raise HTTPException(status_code=400, detail="query must be a non-empty string")
+    listing = await list_ai_artifact_files(prefix)
+    matches: list[dict[str, Any]] = []
+    pattern = re.compile(re.escape(needle), re.IGNORECASE)
+    root = TASK_ARTIFACTS_DIR.resolve()
+    for item in listing["files"]:
+        target = root / item["path"]
+        try:
+            lines = target.read_text(encoding="utf-8").splitlines()
+        except UnicodeDecodeError:
+            continue
+        for line_number, line in enumerate(lines, start=1):
+            if pattern.search(line):
+                matches.append({"path": item["path"], "line": line_number, "text": line})
+    return {"query": needle, "matches": matches}

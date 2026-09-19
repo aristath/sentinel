@@ -38,6 +38,26 @@ it out of the inference request so the backend default applies.
 The response is `{ "output": "..." }`. An empty or non-string prompt returns
 400, and an LLM failure returns 502.
 
+## `POST /api/ai/chat`
+
+Runs one multi-turn Research chat message. Sentinel supplies the inherited
+system prompt. The model receives the complete Sentinel MCP catalog, the
+SearXNG and Firefox MCP catalogs, URL-reading tools, Bash, and filesystem
+tools.
+
+```json
+{
+  "message": "Compare CATL's current report with the evidence files.",
+  "history": [
+    { "role": "user", "content": "Open the CATL artifacts." },
+    { "role": "assistant", "content": "I found the security unit." }
+  ]
+}
+```
+
+`history` is optional. Entries use `user` or `assistant` roles. The response is
+`{ "output": "..." }`.
+
 ## `GET /api/ai/status`
 
 Returns the pipeline dashboard state:

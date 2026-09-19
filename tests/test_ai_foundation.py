@@ -15,11 +15,15 @@ from sentinel.api.routers import ai as ai_router
 from sentinel.api.routers.ai import (
     _run_display_status,
     _run_identity,
+    create_ai_chat,
     create_ai_prompt,
     create_ai_request,
     get_ai_artifact,
+    get_ai_artifact_file,
     get_ai_models,
     get_ai_units,
+    list_ai_artifact_files,
+    search_ai_artifact_files,
 )
 from sentinel.database import Database
 
@@ -224,6 +228,42 @@ async def test_artifact_endpoint_reads_the_canonical_file(artifact_root):
     assert result["content"] == "canonical summary\n"
 
 
+@pytest.mark.asyncio
+async def test_artifact_file_tools_cover_intermediate_files(artifact_root):
+    first = artifact_root / "analyze-security" / ".work" / "AAA" / "queries.json"
+    first.parent.mkdir(parents=True)
+    first.write_text('{"query":"battery supply chain"}\n', encoding="utf-8")
+    second = artifact_root / "rate-portfolio" / "summary.md"
+    second.parent.mkdir(parents=True)
+    second.write_text("Battery allocation\n", encoding="utf-8")
+
+    listing = await list_ai_artifact_files()
+    assert [item["path"] for item in listing["files"]] == [
+        "analyze-security/.work/AAA/queries.json",
+        "rate-portfolio/summary.md",
+    ]
+
+    artifact = await get_ai_artifact_file("analyze-security/.work/AAA/queries.json")
+    assert artifact["content"] == '{"query":"battery supply chain"}\n'
+
+    matches = await search_ai_artifact_files("BATTERY")
+    assert [(item["path"], item["line"]) for item in matches["matches"]] == [
+        ("analyze-security/.work/AAA/queries.json", 1),
+        ("rate-portfolio/summary.md", 1),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_artifact_file_tools_reject_paths_outside_artifact_root(artifact_root, tmp_path):
+    outside = tmp_path / "outside.txt"
+    outside.write_text("private", encoding="utf-8")
+
+    with pytest.raises(HTTPException) as exc_info:
+        await get_ai_artifact_file("../../outside.txt")
+
+    assert exc_info.value.status_code == 404
+
+
 class TestRunnerIntegration:
     def test_default_jobs_keep_15m_timeout(self):
         from sentinel.jobs import runner
@@ -389,3 +429,77 @@ async def test_direct_prompt_rejects_invalid_input_before_opening_client(body):
 
     assert exc_info.value.status_code == 400
     create_client.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_research_chat_inherits_system_prompt_history_and_complete_toolset():
+    client = SimpleNamespace(
+        ai_data_dir=None,
+        searxng_base_url="http://search",
+        url_summarizer_base_url="http://summarizer",
+        browser_search_base_url="http://browser-search",
+        chat=AsyncMock(return_value=SimpleNamespace(content="Answer", last_tool_result="")),
+        close=AsyncMock(),
+    )
+    chat_tools = SimpleNamespace(
+        definitions=[{"type": "function", "function": {"name": "mcp__sentinel__portfolio_get"}}],
+        aclose=AsyncMock(),
+    )
+    settings = SimpleNamespace(get=AsyncMock(return_value="http://firefox:8892"))
+    deps = SimpleNamespace(settings=settings)
+    with (
+        patch("sentinel.api.routers.ai.LLMClient.from_settings", new=AsyncMock(return_value=client)),
+        patch(
+            "sentinel.api.routers.ai.ResearchChatTools.create",
+            new=AsyncMock(return_value=chat_tools),
+        ) as create_tools,
+    ):
+        result = await create_ai_chat(
+            {
+                "message": "Compare the reports",
+                "history": [
+                    {"role": "user", "content": "Open CATL"},
+                    {"role": "assistant", "content": "I found it."},
+                ],
+            },
+            deps,
+        )
+
+    assert result == {"output": "Answer"}
+    create_tools.assert_awaited_once_with(
+        searxng_base_url="http://search",
+        url_summarizer_base_url="http://summarizer",
+        browser_search_base_url="http://browser-search",
+        firefox_mcp_base_url="http://firefox:8892",
+        work_root=ai_router.SENTINEL_HOME,
+    )
+    client.chat.assert_awaited_once()
+    args, kwargs = client.chat.await_args
+    assert args == ("Compare the reports",)
+    assert kwargs["history"] == [
+        {"role": "user", "content": "Open CATL"},
+        {"role": "assistant", "content": "I found it."},
+    ]
+    assert "Current task: research-chat." in kwargs["system"]
+    assert kwargs["tools"] is chat_tools.definitions
+    assert kwargs["executors"] is chat_tools
+    chat_tools.aclose.assert_awaited_once_with()
+    client.close.assert_awaited_once_with()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        {},
+        {"message": ""},
+        {"message": "hello", "history": {}},
+        {"message": "hello", "history": [{"role": "tool", "content": "no"}]},
+        {"message": "hello", "history": [{"role": "user", "content": 1}]},
+    ],
+)
+async def test_research_chat_rejects_invalid_conversations(body):
+    with pytest.raises(HTTPException) as exc_info:
+        await create_ai_chat(body, SimpleNamespace(settings=SimpleNamespace()))
+
+    assert exc_info.value.status_code == 400

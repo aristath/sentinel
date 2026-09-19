@@ -129,6 +129,7 @@ See [Forecasting](forecasting.md) for process and failure behavior.
 |---|---|---|
 | `ai_searxng_base_url` | `http://127.0.0.1:8888` | SearXNG JSON search service |
 | `ai_browser_search_base_url` | `http://127.0.0.1:8891` | Browser-search service |
+| `ai_firefox_mcp_base_url` | `http://127.0.0.1:8892` | Firefox MCP HTTP adapter used by Research chat |
 | `ai_url_summarizer_base_url` | `http://127.0.0.1:8890` | URL fetch/summarization service |
 
 These are service defaults, not Vite or Sentinel HTTP ports.

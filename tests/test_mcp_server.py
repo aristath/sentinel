@@ -73,6 +73,9 @@ EXPECTED_TOOLS = {
     "ai_units_get",
     "ai_history_get",
     "ai_artifact_get",
+    "ai_artifact_files_list",
+    "ai_artifact_file_get",
+    "ai_artifact_search",
     "ai_research_run",
     "forecast_status_get",
     "forecast_get",
@@ -360,6 +363,27 @@ BASE_CASES = [
         "get_ai_artifact",
         {"kind": "security", "unit_key": "AIR.EU", "name": "report.md"},
         ("security", "AIR.EU", "report.md", DEPS),
+    ),
+    _case(
+        "ai_artifact_files_list",
+        "ai_api",
+        "list_ai_artifact_files",
+        {},
+        ("",),
+    ),
+    _case(
+        "ai_artifact_file_get",
+        "ai_api",
+        "get_ai_artifact_file",
+        {"path": "analyze-security/AIR.EU.summary.md"},
+        ("analyze-security/AIR.EU.summary.md",),
+    ),
+    _case(
+        "ai_artifact_search",
+        "ai_api",
+        "search_ai_artifact_files",
+        {"query": "battery"},
+        ("battery", ""),
     ),
     _case(
         "ai_research_run",
@@ -826,7 +850,7 @@ async def test_required_arguments_are_enforced_before_endpoint_execution(monkeyp
                 checked += 1
             endpoint.assert_not_awaited()
 
-    assert checked == 43
+    assert checked == 45
 
 
 @pytest.mark.asyncio

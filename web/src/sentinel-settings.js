@@ -433,6 +433,12 @@ const researchGroups = [
         default: "",
       },
       {
+        key: "ai_firefox_mcp_base_url",
+        label: "Firefox MCP",
+        type: "text",
+        default: "",
+      },
+      {
         key: "ai_url_summarizer_base_url",
         label: "URL summarizer",
         type: "text",

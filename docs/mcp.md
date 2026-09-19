@@ -124,6 +124,9 @@ order, preserving its validation, deduplication, and enqueue behavior.
 | `ai_units_get` | List research units, optionally filtered or stale-only |
 | `ai_history_get` | Completed and failed research work |
 | `ai_artifact_get` | Read an allowlisted research artifact |
+| `ai_artifact_files_list` | List every generated artifact, including intermediate work files |
+| `ai_artifact_file_get` | Read any artifact by its artifact-root-relative path |
+| `ai_artifact_search` | Search all textual artifacts for a literal string |
 | `ai_research_run` | Queue analysis or rating for a research unit |
 | `ai_models_get` | Discover models available to the configured AI service |
 | `forecast_status_get` | Forecast service and recent-run status |
@@ -134,6 +137,11 @@ accept a system prompt; Sentinel always supplies its existing system prompt. The
 model receives the same search, browser fallback, URL-reading, and workspace file
 tools used by editable AI tasks, so a prompt can gather current evidence instead
 of relying only on model knowledge.
+
+The three artifact-tree tools expose the generated files beneath
+`$SENTINEL_HOME/tasks/artifacts`, including `.work` query, source, summary, and
+finding intermediates. They complement `ai_artifact_get`, which remains the
+canonical unit-oriented artifact reader.
 
 ### Backups
 

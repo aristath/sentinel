@@ -567,6 +567,23 @@ class TestChat:
         assert client._test_session.requests[0]["json"]["temperature"] == 0.2  # type: ignore[attr-defined]
 
     @pytest.mark.asyncio
+    async def test_chat_history_is_inserted_before_the_new_user_message(self) -> None:
+        client = make_client([content_stream("ok")])
+        history = [
+            {"role": "user", "content": "Earlier question"},
+            {"role": "assistant", "content": "Earlier answer"},
+        ]
+
+        await client.chat("Follow-up", system="sys", history=history)
+
+        messages = client._test_session.requests[0]["json"]["messages"]  # type: ignore[attr-defined]
+        assert messages == [
+            {"role": "system", "content": "sys"},
+            *history,
+            {"role": "user", "content": "Follow-up"},
+        ]
+
+    @pytest.mark.asyncio
     async def test_tool_loop_executes_and_finalizes(self) -> None:
         async def fake_read(args: dict) -> str:
             assert args == {"path": "a.txt"}
