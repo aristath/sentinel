@@ -1,6 +1,7 @@
 """Settings and LED API routes."""
 
 import inspect
+import math
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -59,6 +60,7 @@ PLANNER_SETTING_KEYS = {
 _led_controller: LEDController | None = None
 LED_BRIDGE_HEALTH_KEY = "led_bridge_health"
 LED_BRIDGE_STALE_AFTER_SEC = 600
+FIRE_MONTHLY_EXPENSES_KEY = "fire_monthly_expenses_eur"
 
 
 def set_led_controller(controller: LEDController | None) -> None:
@@ -157,7 +159,20 @@ async def set_setting(
     """Set a setting value."""
     if key in REMOVED_SETTINGS:
         raise HTTPException(status_code=400, detail=f"Setting '{key}' has been removed")
-    await deps.settings.set(key, value.get("value"))
+    setting_value = value.get("value")
+    if key == FIRE_MONTHLY_EXPENSES_KEY:
+        if (
+            isinstance(setting_value, bool)
+            or not isinstance(setting_value, int | float)
+            or not math.isfinite(setting_value)
+            or setting_value <= 0
+        ):
+            raise HTTPException(
+                status_code=400,
+                detail="FIRE monthly expenses must be a finite number greater than zero",
+            )
+        setting_value = float(setting_value)
+    await deps.settings.set(key, setting_value)
     if key in PLANNER_SETTING_KEYS:
         invalidator = getattr(deps.db, "invalidate_planner_cache", None)
         if callable(invalidator):

@@ -57,6 +57,7 @@ class TestSettingsDefaults:
             "min_position_pct",
             "min_cash_buffer",
             "simulated_cash_eur",
+            "fire_monthly_expenses_eur",
         ]
         for key in required_keys:
             assert key in DEFAULTS, f"Missing required default: {key}"
@@ -68,6 +69,10 @@ class TestSettingsDefaults:
     def test_defaults_simulated_cash_is_none(self):
         """Simulated cash default should be None (disabled)."""
         assert DEFAULTS["simulated_cash_eur"] is None
+
+    def test_defaults_fire_monthly_expenses_is_none(self):
+        """FIRE expenses require an explicit household estimate."""
+        assert DEFAULTS["fire_monthly_expenses_eur"] is None
 
     def test_defaults_transaction_fees_positive(self):
         """Transaction fees should be positive."""

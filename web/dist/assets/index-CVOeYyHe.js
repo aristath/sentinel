@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BTR3v3T_.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-CdQgN7BG.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-BTR3v3T_.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-CdQgN7BG.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6555,6 +6555,64 @@ var SentinelPortfolioStatus = class extends i {
 	}
 };
 customElements.define("sentinel-portfolio-status", SentinelPortfolioStatus);
+var FIRE_WITHDRAWAL_RATE = .04;
+var AVG_DAYS_PER_MONTH = 365.25 / 12;
+var MILLISECONDS_PER_DAY = 864e5;
+function projectedDate(currentDate, monthsAhead) {
+	const start = Date.parse(`${currentDate}T00:00:00Z`);
+	if (!Number.isFinite(start)) return;
+	const date = new Date(start + Math.round(monthsAhead * AVG_DAYS_PER_MONTH) * MILLISECONDS_PER_DAY);
+	return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : void 0;
+}
+function monthsToTarget(currentValue, targetEur, monthlyReturn, monthlyDeposit) {
+	if (Math.max(0, currentValue * (1 + monthlyReturn) + monthlyDeposit) <= currentValue) return;
+	if (monthlyReturn === 0) return Math.ceil((targetEur - currentValue) / monthlyDeposit);
+	const fixedPoint = -monthlyDeposit / monthlyReturn;
+	if (monthlyReturn < 0 && targetEur >= fixedPoint) return;
+	const ratio = (targetEur - fixedPoint) / (currentValue - fixedPoint);
+	const months = Math.ceil(Math.log(ratio) / Math.log(1 + monthlyReturn));
+	return Number.isSafeInteger(months) && months > 0 ? months : void 0;
+}
+function valueAtMonth(currentValue, monthlyReturn, monthlyDeposit, month) {
+	if (monthlyReturn === 0) return currentValue + monthlyDeposit * month;
+	const growth = (1 + monthlyReturn) ** month;
+	return currentValue * growth + monthlyDeposit * ((growth - 1) / monthlyReturn);
+}
+function findAchievement(targetEur, projection, summary) {
+	const available = projection.find((point) => Number(point.projected_value_eur) >= targetEur);
+	if (available) return available;
+	const currentValue = Number(summary?.current_value_eur);
+	const monthlyReturn = Number(summary?.monthly_return_rate ?? 0);
+	const monthlyDeposit = Number(summary?.avg_monthly_net_deposit_eur);
+	const currentDate = summary?.current_date;
+	const projectionMonths = Number(summary?.projection_months ?? 0);
+	if (!Number.isFinite(currentValue) || !Number.isFinite(monthlyReturn) || monthlyReturn <= -1 || !Number.isFinite(monthlyDeposit) || !currentDate) return;
+	const month = monthsToTarget(currentValue, targetEur, monthlyReturn, monthlyDeposit);
+	const date = month ? projectedDate(currentDate, month) : void 0;
+	return date ? {
+		date,
+		projected_value_eur: valueAtMonth(currentValue, monthlyReturn, monthlyDeposit, month),
+		months_ahead: month,
+		extended: month > projectionMonths
+	} : void 0;
+}
+function calculateFirePlan(monthlyExpensesEur, projection, summary) {
+	const monthlyExpenses = Number(monthlyExpensesEur);
+	if (!Number.isFinite(monthlyExpenses) || monthlyExpenses <= 0) return;
+	const annualExpensesEur = monthlyExpenses * 12;
+	const targetEur = annualExpensesEur * 25;
+	const annualWithdrawalEur = targetEur * FIRE_WITHDRAWAL_RATE;
+	const monthlyWithdrawalEur = annualWithdrawalEur / 12;
+	if (!Number.isFinite(annualExpensesEur) || !Number.isFinite(targetEur) || !Number.isFinite(annualWithdrawalEur) || !Number.isFinite(monthlyWithdrawalEur)) return;
+	return {
+		monthlyExpensesEur: monthlyExpenses,
+		annualExpensesEur,
+		targetEur,
+		annualWithdrawalEur,
+		monthlyWithdrawalEur,
+		achievement: findAchievement(targetEur, projection, summary)
+	};
+}
 //#endregion
 //#region src/sentinel-portfolio-value.js
 var CHECKPOINT_COUNT = 5;
@@ -6591,19 +6649,29 @@ function closestProjection(projection, target) {
 var SentinelPortfolioValue = class extends i {
 	static properties = {
 		editingNetDeposit: { state: true },
+		monthlyExpensesDraft: { state: true },
+		monthlyExpensesError: { state: true },
 		netDepositDraft: { state: true },
-		netDepositOverride: { state: true }
+		netDepositOverride: { state: true },
+		savingMonthlyExpenses: { state: true }
 	};
 	constructor() {
 		super();
 		this.editingNetDeposit = false;
+		this.monthlyExpensesDraft = null;
+		this.monthlyExpensesError = "";
 		this.netDepositDraft = "";
 		this.netDepositOverride = null;
+		this.savingMonthlyExpenses = false;
 	}
-	projection = new LiveResource(this, (signal) => {
+	projection = new LiveResource(this, async (signal) => {
 		const params = new URLSearchParams({ years: "25" });
 		if (this.netDepositOverride !== null) params.set("avg_monthly_net_deposit_eur", String(this.netDepositOverride));
-		return getJson(`/api/portfolio/value-projection?${params}`, { signal });
+		const [projection, settings] = await Promise.all([getJson(`/api/portfolio/value-projection?${params}`, { signal }), getJson("/api/settings", { signal })]);
+		return {
+			...projection,
+			monthlyExpensesEur: settings.fire_monthly_expenses_eur
+		};
 	}, { interval: 3e5 });
 	createRenderRoot() {
 		return this;
@@ -6640,6 +6708,81 @@ var SentinelPortfolioValue = class extends i {
 		this.netDepositOverride = null;
 		this.cancelNetDepositEdit();
 		this.projection.refresh();
+	}
+	async applyMonthlyExpenses(event, data) {
+		event.preventDefault();
+		const value = Number(this.monthlyExpensesDraft ?? data.monthlyExpensesEur);
+		if (!Number.isFinite(value) || value <= 0) {
+			this.monthlyExpensesError = "Monthly retirement expenses must be greater than zero.";
+			return;
+		}
+		this.savingMonthlyExpenses = true;
+		this.monthlyExpensesError = "";
+		try {
+			await putJson("/api/settings/fire_monthly_expenses_eur", { value });
+			this.monthlyExpensesDraft = null;
+			await this.projection.refresh();
+		} catch (error) {
+			this.monthlyExpensesError = error.message;
+		} finally {
+			this.savingMonthlyExpenses = false;
+		}
+	}
+	renderFireCalculator(data) {
+		const fire = calculateFirePlan(data.monthlyExpensesEur, data.projection, data.summary);
+		return b`
+      <form @submit=${(event) => this.applyMonthlyExpenses(event, data)}>
+        <tui-flex align="baseline" wrap>
+          <label
+            >Estimated monthly expenses on retirement&nbsp;<tui-input
+              aria-label="Estimated monthly expenses on retirement in EUR"
+              type="number"
+              min="0.01"
+              step="0.01"
+              size="8"
+              value=${this.monthlyExpensesDraft ?? data.monthlyExpensesEur ?? ""}
+              ?disabled=${this.savingMonthlyExpenses}
+              @input=${(event) => this.monthlyExpensesDraft = event.currentTarget.value}
+            ></tui-input
+          ></label>
+          <span>&nbsp;</span><tui-button
+            type="submit"
+            ?disabled=${this.savingMonthlyExpenses}
+            >${this.savingMonthlyExpenses ? "Saving…" : "Save & calculate"}</tui-button
+          >
+        </tui-flex>
+      </form>
+      ${this.monthlyExpensesError ? b`<tui-text variant="error"
+            >${this.monthlyExpensesError}</tui-text
+          >` : ""}
+      ${fire ? b`
+            <div aria-hidden="true">&nbsp;</div>
+            <tui-flex wrap>
+              <span style="white-space: nowrap"
+                >F.U. Money&nbsp;<tui-text variant="success"
+                  >${formatCurrency(fire.targetEur, "EUR", 0)}</tui-text
+                ></span
+              >
+              <span style="white-space: nowrap"
+                >&nbsp;&nbsp;Projected FIRE&nbsp;<tui-text variant="success"
+                  >${fire.achievement ? fire.achievement.months_ahead === 0 ? "Funded now" : String(fire.achievement.date).slice(0, 4) : "Not reached under current assumptions"}</tui-text
+                ></span
+              >
+            </tui-flex>
+            <div>
+              ${formatCurrency(fire.monthlyExpensesEur, "EUR", 0)}/month is
+              ${formatCurrency(fire.annualExpensesEur, "EUR", 0)}/year.
+              F.U. Money is 25× annual expenses. A 4% annual withdrawal is
+              ${formatCurrency(fire.annualWithdrawalEur, "EUR", 0)}/year, or
+              ${formatCurrency(fire.monthlyWithdrawalEur, "EUR", 0)}/month.
+            </div>
+            <div>
+              The projected year estimates that the portfolio's actual
+              Historical MWR and current Net/mo continue. The 4% rate is annual
+              and paid monthly.
+            </div>
+          ` : b`<div>Enter monthly household expenses to calculate FIRE.</div>`}
+    `;
 	}
 	renderNetDeposit(summary) {
 		if (this.editingNetDeposit) return b`
@@ -6746,7 +6889,9 @@ var SentinelPortfolioValue = class extends i {
 		if (checkpoints.length === 0) return b`<span>Not enough data yet</span>`;
 		const startYear = String(data.summary.start_date).slice(0, 4);
 		const endYear = checkpoints.at(-1).date.getUTCFullYear();
-		return b`${this.renderMetrics(data.summary, startYear, endYear)}
+		return b`${this.renderFireCalculator(data)}
+    <div aria-hidden="true">&nbsp;</div>
+    ${this.renderMetrics(data.summary, startYear, endYear)}
     ${this.renderTable(checkpoints)}`;
 	}
 	render() {
@@ -6757,7 +6902,9 @@ var SentinelPortfolioValue = class extends i {
       >`;
 		else if (!this.projection.value?.summary || !this.projection.value?.projection?.length) content = b`<span>Not enough data yet</span>`;
 		else content = this.renderProjection(this.projection.value);
-		return b`<tui-box heading="Portfolio value" border="single"
+		return b`<tui-box
+      heading="FIRE (Financial Independence, Retire Early)"
+      border="single"
       >${content}</tui-box
     >`;
 	}

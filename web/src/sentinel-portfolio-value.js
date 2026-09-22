@@ -1,5 +1,6 @@
 import { LitElement, html } from "lit";
-import { getJson } from "./api.js";
+import { getJson, putJson } from "./api.js";
+import { calculateFirePlan } from "./fire-calculator.js";
 import { formatCurrency, formatPercent } from "./format.js";
 import { LiveResource } from "./live-resource.js";
 
@@ -59,20 +60,26 @@ function closestProjection(projection, target) {
 class SentinelPortfolioValue extends LitElement {
   static properties = {
     editingNetDeposit: { state: true },
+    monthlyExpensesDraft: { state: true },
+    monthlyExpensesError: { state: true },
     netDepositDraft: { state: true },
     netDepositOverride: { state: true },
+    savingMonthlyExpenses: { state: true },
   };
 
   constructor() {
     super();
     this.editingNetDeposit = false;
+    this.monthlyExpensesDraft = null;
+    this.monthlyExpensesError = "";
     this.netDepositDraft = "";
     this.netDepositOverride = null;
+    this.savingMonthlyExpenses = false;
   }
 
   projection = new LiveResource(
     this,
-    (signal) => {
+    async (signal) => {
       const params = new URLSearchParams({ years: "25" });
 
       if (this.netDepositOverride !== null) {
@@ -82,7 +89,15 @@ class SentinelPortfolioValue extends LitElement {
         );
       }
 
-      return getJson(`/api/portfolio/value-projection?${params}`, { signal });
+      const [projection, settings] = await Promise.all([
+        getJson(`/api/portfolio/value-projection?${params}`, { signal }),
+        getJson("/api/settings", { signal }),
+      ]);
+
+      return {
+        ...projection,
+        monthlyExpensesEur: settings.fire_monthly_expenses_eur,
+      };
     },
     { interval: 300_000 },
   );
@@ -143,6 +158,105 @@ class SentinelPortfolioValue extends LitElement {
     this.netDepositOverride = null;
     this.cancelNetDepositEdit();
     this.projection.refresh();
+  }
+
+  async applyMonthlyExpenses(event, data) {
+    event.preventDefault();
+    const value = Number(
+      this.monthlyExpensesDraft ?? data.monthlyExpensesEur,
+    );
+
+    if (!Number.isFinite(value) || value <= 0) {
+      this.monthlyExpensesError =
+        "Monthly retirement expenses must be greater than zero.";
+      return;
+    }
+
+    this.savingMonthlyExpenses = true;
+    this.monthlyExpensesError = "";
+
+    try {
+      await putJson("/api/settings/fire_monthly_expenses_eur", { value });
+      this.monthlyExpensesDraft = null;
+      await this.projection.refresh();
+    } catch (error) {
+      this.monthlyExpensesError = error.message;
+    } finally {
+      this.savingMonthlyExpenses = false;
+    }
+  }
+
+  renderFireCalculator(data) {
+    const fire = calculateFirePlan(
+      data.monthlyExpensesEur,
+      data.projection,
+      data.summary,
+    );
+    const fieldValue =
+      this.monthlyExpensesDraft ?? data.monthlyExpensesEur ?? "";
+
+    return html`
+      <form @submit=${(event) => this.applyMonthlyExpenses(event, data)}>
+        <tui-flex align="baseline" wrap>
+          <label
+            >Estimated monthly expenses on retirement&nbsp;<tui-input
+              aria-label="Estimated monthly expenses on retirement in EUR"
+              type="number"
+              min="0.01"
+              step="0.01"
+              size="8"
+              value=${fieldValue}
+              ?disabled=${this.savingMonthlyExpenses}
+              @input=${(event) =>
+                (this.monthlyExpensesDraft = event.currentTarget.value)}
+            ></tui-input
+          ></label>
+          <span>&nbsp;</span><tui-button
+            type="submit"
+            ?disabled=${this.savingMonthlyExpenses}
+            >${this.savingMonthlyExpenses ? "Saving…" : "Save & calculate"}</tui-button
+          >
+        </tui-flex>
+      </form>
+      ${this.monthlyExpensesError
+        ? html`<tui-text variant="error"
+            >${this.monthlyExpensesError}</tui-text
+          >`
+        : ""}
+      ${fire
+        ? html`
+            <div aria-hidden="true">&nbsp;</div>
+            <tui-flex wrap>
+              <span style="white-space: nowrap"
+                >F.U. Money&nbsp;<tui-text variant="success"
+                  >${formatCurrency(fire.targetEur, "EUR", 0)}</tui-text
+                ></span
+              >
+              <span style="white-space: nowrap"
+                >&nbsp;&nbsp;Projected FIRE&nbsp;<tui-text variant="success"
+                  >${fire.achievement
+                    ? fire.achievement.months_ahead === 0
+                      ? "Funded now"
+                      : String(fire.achievement.date).slice(0, 4)
+                    : "Not reached under current assumptions"}</tui-text
+                ></span
+              >
+            </tui-flex>
+            <div>
+              ${formatCurrency(fire.monthlyExpensesEur, "EUR", 0)}/month is
+              ${formatCurrency(fire.annualExpensesEur, "EUR", 0)}/year.
+              F.U. Money is 25× annual expenses. A 4% annual withdrawal is
+              ${formatCurrency(fire.annualWithdrawalEur, "EUR", 0)}/year, or
+              ${formatCurrency(fire.monthlyWithdrawalEur, "EUR", 0)}/month.
+            </div>
+            <div>
+              The projected year estimates that the portfolio's actual
+              Historical MWR and current Net/mo continue. The 4% rate is annual
+              and paid monthly.
+            </div>
+          `
+        : html`<div>Enter monthly household expenses to calculate FIRE.</div>`}
+    `;
   }
 
   renderNetDeposit(summary) {
@@ -286,7 +400,9 @@ class SentinelPortfolioValue extends LitElement {
     const startYear = String(data.summary.start_date).slice(0, 4);
     const endYear = checkpoints.at(-1).date.getUTCFullYear();
 
-    return html`${this.renderMetrics(data.summary, startYear, endYear)}
+    return html`${this.renderFireCalculator(data)}
+    <div aria-hidden="true">&nbsp;</div>
+    ${this.renderMetrics(data.summary, startYear, endYear)}
     ${this.renderTable(checkpoints)}`;
   }
 
@@ -308,7 +424,9 @@ class SentinelPortfolioValue extends LitElement {
       content = this.renderProjection(this.projection.value);
     }
 
-    return html`<tui-box heading="Portfolio value" border="single"
+    return html`<tui-box
+      heading="FIRE (Financial Independence, Retire Early)"
+      border="single"
       >${content}</tui-box
     >`;
   }

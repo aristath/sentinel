@@ -69,6 +69,28 @@ async def test_set_setting_rejects_removed_strategy_knobs(deps):
 
 
 @pytest.mark.asyncio
+async def test_set_setting_persists_fire_monthly_expenses(deps):
+    from sentinel.api.routers.settings import set_setting
+
+    result = await set_setting("fire_monthly_expenses_eur", {"value": 2345.67}, deps)
+
+    assert result == {"status": "ok"}
+    assert await deps.db.get_setting("fire_monthly_expenses_eur") == 2345.67
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [True, "2000", 0, -1, float("inf")])
+async def test_set_setting_rejects_invalid_fire_monthly_expenses(deps, value):
+    from sentinel.api.routers.settings import set_setting
+
+    with pytest.raises(HTTPException, match="FIRE monthly expenses") as exc:
+        await set_setting("fire_monthly_expenses_eur", {"value": value}, deps)
+
+    assert exc.value.status_code == 400
+    assert await deps.db.get_setting("fire_monthly_expenses_eur") is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("key", "value"),
     [

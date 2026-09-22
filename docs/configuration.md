@@ -33,6 +33,7 @@ strategy-tuning form documented in [Settings API](api/settings.md).
 | `performance_benchmark_symbol` | `VWCE.EU` | Investable benchmark overlaid on portfolio performance |
 | `max_dividend_reinvestment_boost` | `0.15` | Maximum opportunity-score boost from undeployed dividends |
 | `ui_securities_table_columns` | seven default columns | Persisted securities-table column selection |
+| `fire_monthly_expenses_eur` | `null` | Estimated monthly household expenses on retirement used by the FIRE calculator |
 
 The default column array is `price`, `security`, `value`, `pnl`, `ideal`,
 `plan`, and `trade`.
