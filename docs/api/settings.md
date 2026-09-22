@@ -22,6 +22,7 @@ Returns all application settings, merging stored values with defaults. Runtime s
   "target_cash_pct": 0,
   "simulated_cash_eur": null,
   "fire_monthly_expenses_eur": null,
+  "fire_expected_inflation_pct": 2.11,
   "rebalance_threshold_pct": 5,
   "max_dividend_reinvestment_boost": 0.15,
   "tradernet_api_key": "...",
@@ -67,6 +68,7 @@ Returns all application settings, merging stored values with defaults. Runtime s
 | `min_cash_buffer` | Cash reserve ratio kept out of buy budgets during trade sizing |
 | `cooldown_enabled` | Master switch for planner cool-off checks. When false, recent-trade cooldown periods are ignored. |
 | `fire_monthly_expenses_eur` | Positive EUR estimate saved by the FIRE panel; `null` until entered |
+| `fire_expected_inflation_pct` | Annual inflation estimate saved by the FIRE panel; defaults to the mean of Greece's 2016-2025 all-items HICP annual rates, `2.11` |
 
 ---
 
@@ -79,6 +81,8 @@ JSON value. Clients should use keys and types from [Configuration](../configurat
 unknown keys are not automatically a supported application contract.
 
 `fire_monthly_expenses_eur` is validated as a finite number greater than zero.
+`fire_expected_inflation_pct` is validated as a finite percentage greater than
+`-100`.
 
 **Path params**
 - `key` — Setting key (e.g. `trading_mode`, `transaction_fee_fixed`)

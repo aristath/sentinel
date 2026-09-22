@@ -58,6 +58,7 @@ class TestSettingsDefaults:
             "min_cash_buffer",
             "simulated_cash_eur",
             "fire_monthly_expenses_eur",
+            "fire_expected_inflation_pct",
         ]
         for key in required_keys:
             assert key in DEFAULTS, f"Missing required default: {key}"
@@ -73,6 +74,10 @@ class TestSettingsDefaults:
     def test_defaults_fire_monthly_expenses_is_none(self):
         """FIRE expenses require an explicit household estimate."""
         assert DEFAULTS["fire_monthly_expenses_eur"] is None
+
+    def test_defaults_fire_expected_inflation_uses_greece_hicp_10y_average(self):
+        """Default is Greece's mean 2016-2025 all-items HICP annual rate."""
+        assert DEFAULTS["fire_expected_inflation_pct"] == 2.11
 
     def test_defaults_transaction_fees_positive(self):
         """Transaction fees should be positive."""

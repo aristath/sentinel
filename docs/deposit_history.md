@@ -53,12 +53,23 @@ F.U. Money = monthly expenses × 12 × 25
 ```
 
 The panel identifies the first month that reaches the target and reports its
-year. The table remains a 25-year view; when necessary, the FIRE date continues
-the same historical money-weighted return and `Net/mo` recurrence beyond that
-display window. If fixed assumptions cannot reach the target, the panel says so
-instead of inventing a date. The corresponding 4% withdrawal rate is an annual
-rate paid in monthly installments; it is not a 4% monthly withdrawal. Changing
-the `Net/mo` projection assumption also updates the projected FIRE year.
+year. Monthly expenses are entered in today's prices, then compounded by the
+editable expected annual inflation rate to every candidate retirement month.
+The portfolio must reach 25 times those inflation-adjusted annual expenses.
+The default `2.11%` rate is the arithmetic mean of Eurostat's Greece all-items
+HICP annual inflation rates for 2016 through 2025
+([dataset `prc_hicp_aind`](https://ec.europa.eu/eurostat/en/web/products-datasets/-/PRC_HICP_AIND),
+`geo=EL`, `coicop=CP00`, `unit=RCH_A_AVG`).
+
+The table remains a 25-year view; when necessary, the FIRE date continues the
+same historical money-weighted return, `Net/mo`, and inflation recurrence
+beyond that display window. If fixed assumptions cannot reach the moving
+inflation-adjusted target, the panel says so instead of inventing a date. The
+corresponding 4% withdrawal rate is an annual rate paid in monthly installments;
+it is not a 4% monthly withdrawal. After retirement, that withdrawal amount
+must continue rising with inflation to preserve the entered purchasing power.
+Changing the `Net/mo` or inflation assumption also updates the projected FIRE
+year.
 
 ## Planner meaning
 

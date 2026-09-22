@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-CdQgN7BG.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BGRoRgvb.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-CdQgN7BG.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-BGRoRgvb.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6564,53 +6564,80 @@ function projectedDate(currentDate, monthsAhead) {
 	const date = new Date(start + Math.round(monthsAhead * AVG_DAYS_PER_MONTH) * MILLISECONDS_PER_DAY);
 	return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : void 0;
 }
-function monthsToTarget(currentValue, targetEur, monthlyReturn, monthlyDeposit) {
-	if (Math.max(0, currentValue * (1 + monthlyReturn) + monthlyDeposit) <= currentValue) return;
-	if (monthlyReturn === 0) return Math.ceil((targetEur - currentValue) / monthlyDeposit);
-	const fixedPoint = -monthlyDeposit / monthlyReturn;
-	if (monthlyReturn < 0 && targetEur >= fixedPoint) return;
-	const ratio = (targetEur - fixedPoint) / (currentValue - fixedPoint);
-	const months = Math.ceil(Math.log(ratio) / Math.log(1 + monthlyReturn));
-	return Number.isSafeInteger(months) && months > 0 ? months : void 0;
+function fireValuesAtMonth(monthlyExpensesEur, annualInflation, monthsAhead) {
+	const monthlyExpenses = monthlyExpensesEur * (1 + annualInflation) ** (monthsAhead / 12);
+	const annualExpenses = monthlyExpenses * 12;
+	return {
+		monthly_expenses_eur: monthlyExpenses,
+		annual_expenses_eur: annualExpenses,
+		target_eur: annualExpenses * 25
+	};
 }
-function valueAtMonth(currentValue, monthlyReturn, monthlyDeposit, month) {
-	if (monthlyReturn === 0) return currentValue + monthlyDeposit * month;
-	const growth = (1 + monthlyReturn) ** month;
-	return currentValue * growth + monthlyDeposit * ((growth - 1) / monthlyReturn);
-}
-function findAchievement(targetEur, projection, summary) {
-	const available = projection.find((point) => Number(point.projected_value_eur) >= targetEur);
-	if (available) return available;
-	const currentValue = Number(summary?.current_value_eur);
+function findAchievement(monthlyExpensesEur, annualInflation, projection, summary) {
+	for (const point of projection) {
+		const monthsAhead = Number(point.months_ahead);
+		const projectedValue = Number(point.projected_value_eur);
+		const fireValues = fireValuesAtMonth(monthlyExpensesEur, annualInflation, monthsAhead);
+		if (projectedValue >= fireValues.target_eur) return {
+			...point,
+			...fireValues,
+			extended: false
+		};
+	}
 	const monthlyReturn = Number(summary?.monthly_return_rate ?? 0);
 	const monthlyDeposit = Number(summary?.avg_monthly_net_deposit_eur);
 	const currentDate = summary?.current_date;
 	const projectionMonths = Number(summary?.projection_months ?? 0);
-	if (!Number.isFinite(currentValue) || !Number.isFinite(monthlyReturn) || monthlyReturn <= -1 || !Number.isFinite(monthlyDeposit) || !currentDate) return;
-	const month = monthsToTarget(currentValue, targetEur, monthlyReturn, monthlyDeposit);
-	const date = month ? projectedDate(currentDate, month) : void 0;
-	return date ? {
-		date,
-		projected_value_eur: valueAtMonth(currentValue, monthlyReturn, monthlyDeposit, month),
-		months_ahead: month,
-		extended: month > projectionMonths
-	} : void 0;
+	let value = Number(summary?.current_value_eur);
+	let month = 0;
+	let fireValues = fireValuesAtMonth(monthlyExpensesEur, annualInflation, month);
+	let previousFundingRatio = value / fireValues.target_eur;
+	const portfolioGrowthFactor = 1 + monthlyReturn;
+	const monthlyInflationFactor = (1 + annualInflation) ** (1 / 12);
+	if (!Number.isFinite(value) || !Number.isSafeInteger(month) || !Number.isFinite(monthlyReturn) || monthlyReturn <= -1 || !Number.isFinite(monthlyDeposit) || !currentDate || !Number.isFinite(previousFundingRatio)) return;
+	while (Number.isSafeInteger(month)) {
+		month += 1;
+		value = Math.max(0, value * portfolioGrowthFactor + monthlyDeposit);
+		fireValues = fireValuesAtMonth(monthlyExpensesEur, annualInflation, month);
+		if (!Number.isFinite(fireValues.target_eur)) return;
+		if (value >= fireValues.target_eur) {
+			const date = projectedDate(currentDate, month);
+			return date ? {
+				date,
+				projected_value_eur: value,
+				months_ahead: month,
+				extended: month > projectionMonths,
+				...fireValues
+			} : void 0;
+		}
+		if (!Number.isFinite(value) || value === 0 && monthlyDeposit <= 0) return;
+		const fundingRatio = value / fireValues.target_eur;
+		if (monthlyInflationFactor >= 1 && portfolioGrowthFactor <= monthlyInflationFactor && fundingRatio <= previousFundingRatio) return;
+		previousFundingRatio = fundingRatio;
+	}
 }
-function calculateFirePlan(monthlyExpensesEur, projection, summary) {
+function calculateFirePlan(monthlyExpensesEur, expectedInflationPct, projection, summary) {
 	const monthlyExpenses = Number(monthlyExpensesEur);
-	if (!Number.isFinite(monthlyExpenses) || monthlyExpenses <= 0) return;
+	const inflationPct = Number(expectedInflationPct);
+	if (!Number.isFinite(monthlyExpenses) || monthlyExpenses <= 0 || !Number.isFinite(inflationPct) || inflationPct <= -100) return;
+	const annualInflation = inflationPct / 100;
 	const annualExpensesEur = monthlyExpenses * 12;
-	const targetEur = annualExpensesEur * 25;
-	const annualWithdrawalEur = targetEur * FIRE_WITHDRAWAL_RATE;
-	const monthlyWithdrawalEur = annualWithdrawalEur / 12;
-	if (!Number.isFinite(annualExpensesEur) || !Number.isFinite(targetEur) || !Number.isFinite(annualWithdrawalEur) || !Number.isFinite(monthlyWithdrawalEur)) return;
+	const currentTargetEur = annualExpensesEur * 25;
+	if (!Number.isFinite(annualExpensesEur) || !Number.isFinite(currentTargetEur)) return;
+	const achievement = findAchievement(monthlyExpenses, annualInflation, projection, summary);
+	const retirementTargetEur = achievement?.target_eur;
+	const annualWithdrawalEur = retirementTargetEur ? retirementTargetEur * FIRE_WITHDRAWAL_RATE : void 0;
 	return {
 		monthlyExpensesEur: monthlyExpenses,
 		annualExpensesEur,
-		targetEur,
+		expectedInflationPct: inflationPct,
+		currentTargetEur,
+		retirementMonthlyExpensesEur: achievement?.monthly_expenses_eur,
+		retirementAnnualExpensesEur: achievement?.annual_expenses_eur,
+		retirementTargetEur,
 		annualWithdrawalEur,
-		monthlyWithdrawalEur,
-		achievement: findAchievement(targetEur, projection, summary)
+		monthlyWithdrawalEur: annualWithdrawalEur ? annualWithdrawalEur / 12 : void 0,
+		achievement
 	};
 }
 //#endregion
@@ -6649,19 +6676,25 @@ function closestProjection(projection, target) {
 var SentinelPortfolioValue = class extends i {
 	static properties = {
 		editingNetDeposit: { state: true },
+		expectedInflationDraft: { state: true },
+		expectedInflationError: { state: true },
 		monthlyExpensesDraft: { state: true },
 		monthlyExpensesError: { state: true },
 		netDepositDraft: { state: true },
 		netDepositOverride: { state: true },
+		savingExpectedInflation: { state: true },
 		savingMonthlyExpenses: { state: true }
 	};
 	constructor() {
 		super();
 		this.editingNetDeposit = false;
+		this.expectedInflationDraft = null;
+		this.expectedInflationError = "";
 		this.monthlyExpensesDraft = null;
 		this.monthlyExpensesError = "";
 		this.netDepositDraft = "";
 		this.netDepositOverride = null;
+		this.savingExpectedInflation = false;
 		this.savingMonthlyExpenses = false;
 	}
 	projection = new LiveResource(this, async (signal) => {
@@ -6670,6 +6703,7 @@ var SentinelPortfolioValue = class extends i {
 		const [projection, settings] = await Promise.all([getJson(`/api/portfolio/value-projection?${params}`, { signal }), getJson("/api/settings", { signal })]);
 		return {
 			...projection,
+			expectedInflationPct: settings.fire_expected_inflation_pct,
 			monthlyExpensesEur: settings.fire_monthly_expenses_eur
 		};
 	}, { interval: 3e5 });
@@ -6728,13 +6762,32 @@ var SentinelPortfolioValue = class extends i {
 			this.savingMonthlyExpenses = false;
 		}
 	}
+	async applyExpectedInflation(event, data) {
+		event.preventDefault();
+		const value = Number(this.expectedInflationDraft ?? data.expectedInflationPct);
+		if (!Number.isFinite(value) || value <= -100) {
+			this.expectedInflationError = "Expected annual inflation must be greater than -100%.";
+			return;
+		}
+		this.savingExpectedInflation = true;
+		this.expectedInflationError = "";
+		try {
+			await putJson("/api/settings/fire_expected_inflation_pct", { value });
+			this.expectedInflationDraft = null;
+			await this.projection.refresh();
+		} catch (error) {
+			this.expectedInflationError = error.message;
+		} finally {
+			this.savingExpectedInflation = false;
+		}
+	}
 	renderFireCalculator(data) {
-		const fire = calculateFirePlan(data.monthlyExpensesEur, data.projection, data.summary);
+		const fire = calculateFirePlan(data.monthlyExpensesEur, data.expectedInflationPct, data.projection, data.summary);
 		return b`
       <form @submit=${(event) => this.applyMonthlyExpenses(event, data)}>
         <tui-flex align="baseline" wrap>
           <label
-            >Estimated monthly expenses on retirement&nbsp;<tui-input
+            >Monthly retirement expenses in today's prices&nbsp;<tui-input
               aria-label="Estimated monthly expenses on retirement in EUR"
               type="number"
               min="0.01"
@@ -6755,12 +6808,41 @@ var SentinelPortfolioValue = class extends i {
       ${this.monthlyExpensesError ? b`<tui-text variant="error"
             >${this.monthlyExpensesError}</tui-text
           >` : ""}
+      <form @submit=${(event) => this.applyExpectedInflation(event, data)}>
+        <tui-flex align="baseline" wrap>
+          <label
+            >Expected annual inflation&nbsp;<tui-input
+              aria-label="Expected annual inflation percentage"
+              type="number"
+              min="-99.99"
+              step="0.01"
+              size="6"
+              value=${this.expectedInflationDraft ?? data.expectedInflationPct}
+              ?disabled=${this.savingExpectedInflation}
+              @input=${(event) => this.expectedInflationDraft = event.currentTarget.value}
+            ></tui-input
+            >%</label
+          >
+          <span>&nbsp;</span><tui-button
+            type="submit"
+            ?disabled=${this.savingExpectedInflation}
+            >${this.savingExpectedInflation ? "Saving…" : "Save inflation"}</tui-button
+          >
+        </tui-flex>
+        <div style="color: var(--tui-disabled-color); font-size: 0.75em">
+          Default: 2.11%, mean Greece all-items HICP inflation for 2016–2025
+          (Eurostat).
+        </div>
+      </form>
+      ${this.expectedInflationError ? b`<tui-text variant="error"
+            >${this.expectedInflationError}</tui-text
+          >` : ""}
       ${fire ? b`
             <div aria-hidden="true">&nbsp;</div>
             <tui-flex wrap>
               <span style="white-space: nowrap"
-                >F.U. Money&nbsp;<tui-text variant="success"
-                  >${formatCurrency(fire.targetEur, "EUR", 0)}</tui-text
+                >F.U. Money today&nbsp;<tui-text variant="success"
+                  >${formatCurrency(fire.currentTargetEur, "EUR", 0)}</tui-text
                 ></span
               >
               <span style="white-space: nowrap"
@@ -6769,17 +6851,28 @@ var SentinelPortfolioValue = class extends i {
                 ></span
               >
             </tui-flex>
+            ${fire.achievement ? b`
+                  <div>
+                    At ${fire.expectedInflationPct.toFixed(2)}% expected annual
+                    inflation, ${formatCurrency(fire.monthlyExpensesEur, "EUR", 0)}/month today is estimated to cost
+                    ${formatCurrency(fire.retirementMonthlyExpensesEur, "EUR", 0)}/month in
+                    ${String(fire.achievement.date).slice(0, 4)}.
+                  </div>
+                  <div>
+                    F.U. Money required then:
+                    ${formatCurrency(fire.retirementTargetEur, "EUR", 0)}. Its initial 4% annual withdrawal is
+                    ${formatCurrency(fire.annualWithdrawalEur, "EUR", 0)}/year, or
+                    ${formatCurrency(fire.monthlyWithdrawalEur, "EUR", 0)}/month.
+                  </div>
+                ` : b`<div>
+                  The portfolio does not catch the inflation-adjusted F.U.
+                  Money target under the current assumptions.
+                </div>`}
             <div>
-              ${formatCurrency(fire.monthlyExpensesEur, "EUR", 0)}/month is
-              ${formatCurrency(fire.annualExpensesEur, "EUR", 0)}/year.
-              F.U. Money is 25× annual expenses. A 4% annual withdrawal is
-              ${formatCurrency(fire.annualWithdrawalEur, "EUR", 0)}/year, or
-              ${formatCurrency(fire.monthlyWithdrawalEur, "EUR", 0)}/month.
-            </div>
-            <div>
-              The projected year estimates that the portfolio's actual
-              Historical MWR and current Net/mo continue. The 4% rate is annual
-              and paid monthly.
+              The estimate assumes the portfolio's actual Historical MWR,
+              current Net/mo, and expected inflation continue. After retirement,
+              withdrawals must keep rising with inflation to preserve today's
+              purchasing power.
             </div>
           ` : b`<div>Enter monthly household expenses to calculate FIRE.</div>`}
     `;

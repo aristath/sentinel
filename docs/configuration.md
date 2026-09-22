@@ -34,6 +34,7 @@ strategy-tuning form documented in [Settings API](api/settings.md).
 | `max_dividend_reinvestment_boost` | `0.15` | Maximum opportunity-score boost from undeployed dividends |
 | `ui_securities_table_columns` | seven default columns | Persisted securities-table column selection |
 | `fire_monthly_expenses_eur` | `null` | Estimated monthly household expenses on retirement used by the FIRE calculator |
+| `fire_expected_inflation_pct` | `2.11` | Expected annual inflation used by FIRE; defaults to the mean of Greece's 2016-2025 all-items HICP annual rates |
 
 The default column array is `price`, `security`, `value`, `pnl`, `ideal`,
 `plan`, and `trade`.

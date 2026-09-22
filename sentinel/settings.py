@@ -37,6 +37,8 @@ DEFAULTS = {
     "ui_securities_table_columns": ["price", "security", "value", "pnl", "ideal", "plan", "trade"],
     # FIRE planning
     "fire_monthly_expenses_eur": None,
+    # Mean Greece all-items HICP annual rate, 2016-2025 (Eurostat prc_hicp_aind)
+    "fire_expected_inflation_pct": 2.11,
     # Rebalancing
     "rebalance_threshold_pct": 5,  # Rebalance when 5% off target
     # Performance chart benchmark: trailing-1Y market return overlaid as context

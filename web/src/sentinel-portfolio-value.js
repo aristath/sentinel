@@ -60,20 +60,26 @@ function closestProjection(projection, target) {
 class SentinelPortfolioValue extends LitElement {
   static properties = {
     editingNetDeposit: { state: true },
+    expectedInflationDraft: { state: true },
+    expectedInflationError: { state: true },
     monthlyExpensesDraft: { state: true },
     monthlyExpensesError: { state: true },
     netDepositDraft: { state: true },
     netDepositOverride: { state: true },
+    savingExpectedInflation: { state: true },
     savingMonthlyExpenses: { state: true },
   };
 
   constructor() {
     super();
     this.editingNetDeposit = false;
+    this.expectedInflationDraft = null;
+    this.expectedInflationError = "";
     this.monthlyExpensesDraft = null;
     this.monthlyExpensesError = "";
     this.netDepositDraft = "";
     this.netDepositOverride = null;
+    this.savingExpectedInflation = false;
     this.savingMonthlyExpenses = false;
   }
 
@@ -96,6 +102,7 @@ class SentinelPortfolioValue extends LitElement {
 
       return {
         ...projection,
+        expectedInflationPct: settings.fire_expected_inflation_pct,
         monthlyExpensesEur: settings.fire_monthly_expenses_eur,
       };
     },
@@ -186,9 +193,36 @@ class SentinelPortfolioValue extends LitElement {
     }
   }
 
+  async applyExpectedInflation(event, data) {
+    event.preventDefault();
+    const value = Number(
+      this.expectedInflationDraft ?? data.expectedInflationPct,
+    );
+
+    if (!Number.isFinite(value) || value <= -100) {
+      this.expectedInflationError =
+        "Expected annual inflation must be greater than -100%.";
+      return;
+    }
+
+    this.savingExpectedInflation = true;
+    this.expectedInflationError = "";
+
+    try {
+      await putJson("/api/settings/fire_expected_inflation_pct", { value });
+      this.expectedInflationDraft = null;
+      await this.projection.refresh();
+    } catch (error) {
+      this.expectedInflationError = error.message;
+    } finally {
+      this.savingExpectedInflation = false;
+    }
+  }
+
   renderFireCalculator(data) {
     const fire = calculateFirePlan(
       data.monthlyExpensesEur,
+      data.expectedInflationPct,
       data.projection,
       data.summary,
     );
@@ -199,7 +233,7 @@ class SentinelPortfolioValue extends LitElement {
       <form @submit=${(event) => this.applyMonthlyExpenses(event, data)}>
         <tui-flex align="baseline" wrap>
           <label
-            >Estimated monthly expenses on retirement&nbsp;<tui-input
+            >Monthly retirement expenses in today's prices&nbsp;<tui-input
               aria-label="Estimated monthly expenses on retirement in EUR"
               type="number"
               min="0.01"
@@ -223,13 +257,46 @@ class SentinelPortfolioValue extends LitElement {
             >${this.monthlyExpensesError}</tui-text
           >`
         : ""}
+      <form @submit=${(event) => this.applyExpectedInflation(event, data)}>
+        <tui-flex align="baseline" wrap>
+          <label
+            >Expected annual inflation&nbsp;<tui-input
+              aria-label="Expected annual inflation percentage"
+              type="number"
+              min="-99.99"
+              step="0.01"
+              size="6"
+              value=${this.expectedInflationDraft ??
+              data.expectedInflationPct}
+              ?disabled=${this.savingExpectedInflation}
+              @input=${(event) =>
+                (this.expectedInflationDraft = event.currentTarget.value)}
+            ></tui-input
+            >%</label
+          >
+          <span>&nbsp;</span><tui-button
+            type="submit"
+            ?disabled=${this.savingExpectedInflation}
+            >${this.savingExpectedInflation ? "Saving…" : "Save inflation"}</tui-button
+          >
+        </tui-flex>
+        <div style="color: var(--tui-disabled-color); font-size: 0.75em">
+          Default: 2.11%, mean Greece all-items HICP inflation for 2016–2025
+          (Eurostat).
+        </div>
+      </form>
+      ${this.expectedInflationError
+        ? html`<tui-text variant="error"
+            >${this.expectedInflationError}</tui-text
+          >`
+        : ""}
       ${fire
         ? html`
             <div aria-hidden="true">&nbsp;</div>
             <tui-flex wrap>
               <span style="white-space: nowrap"
-                >F.U. Money&nbsp;<tui-text variant="success"
-                  >${formatCurrency(fire.targetEur, "EUR", 0)}</tui-text
+                >F.U. Money today&nbsp;<tui-text variant="success"
+                  >${formatCurrency(fire.currentTargetEur, "EUR", 0)}</tui-text
                 ></span
               >
               <span style="white-space: nowrap"
@@ -242,17 +309,50 @@ class SentinelPortfolioValue extends LitElement {
                 ></span
               >
             </tui-flex>
+            ${fire.achievement
+              ? html`
+                  <div>
+                    At ${fire.expectedInflationPct.toFixed(2)}% expected annual
+                    inflation, ${formatCurrency(
+                      fire.monthlyExpensesEur,
+                      "EUR",
+                      0,
+                    )}/month today is estimated to cost
+                    ${formatCurrency(
+                      fire.retirementMonthlyExpensesEur,
+                      "EUR",
+                      0,
+                    )}/month in
+                    ${String(fire.achievement.date).slice(0, 4)}.
+                  </div>
+                  <div>
+                    F.U. Money required then:
+                    ${formatCurrency(
+                      fire.retirementTargetEur,
+                      "EUR",
+                      0,
+                    )}. Its initial 4% annual withdrawal is
+                    ${formatCurrency(
+                      fire.annualWithdrawalEur,
+                      "EUR",
+                      0,
+                    )}/year, or
+                    ${formatCurrency(
+                      fire.monthlyWithdrawalEur,
+                      "EUR",
+                      0,
+                    )}/month.
+                  </div>
+                `
+              : html`<div>
+                  The portfolio does not catch the inflation-adjusted F.U.
+                  Money target under the current assumptions.
+                </div>`}
             <div>
-              ${formatCurrency(fire.monthlyExpensesEur, "EUR", 0)}/month is
-              ${formatCurrency(fire.annualExpensesEur, "EUR", 0)}/year.
-              F.U. Money is 25× annual expenses. A 4% annual withdrawal is
-              ${formatCurrency(fire.annualWithdrawalEur, "EUR", 0)}/year, or
-              ${formatCurrency(fire.monthlyWithdrawalEur, "EUR", 0)}/month.
-            </div>
-            <div>
-              The projected year estimates that the portfolio's actual
-              Historical MWR and current Net/mo continue. The 4% rate is annual
-              and paid monthly.
+              The estimate assumes the portfolio's actual Historical MWR,
+              current Net/mo, and expected inflation continue. After retirement,
+              withdrawals must keep rising with inflation to preserve today's
+              purchasing power.
             </div>
           `
         : html`<div>Enter monthly household expenses to calculate FIRE.</div>`}

@@ -91,6 +91,28 @@ async def test_set_setting_rejects_invalid_fire_monthly_expenses(deps, value):
 
 
 @pytest.mark.asyncio
+async def test_set_setting_persists_fire_expected_inflation(deps):
+    from sentinel.api.routers.settings import set_setting
+
+    result = await set_setting("fire_expected_inflation_pct", {"value": 3.25}, deps)
+
+    assert result == {"status": "ok"}
+    assert await deps.db.get_setting("fire_expected_inflation_pct") == 3.25
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [True, "2.5", -100, -101, float("inf")])
+async def test_set_setting_rejects_invalid_fire_expected_inflation(deps, value):
+    from sentinel.api.routers.settings import set_setting
+
+    with pytest.raises(HTTPException, match="FIRE expected inflation") as exc:
+        await set_setting("fire_expected_inflation_pct", {"value": value}, deps)
+
+    assert exc.value.status_code == 400
+    assert await deps.db.get_setting("fire_expected_inflation_pct") == 2.11
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("key", "value"),
     [
