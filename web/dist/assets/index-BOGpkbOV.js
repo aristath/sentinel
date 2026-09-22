@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-DHGoIfG7.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BTR3v3T_.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-DHGoIfG7.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-BTR3v3T_.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6589,7 +6589,22 @@ function closestProjection(projection, target) {
 	return closest;
 }
 var SentinelPortfolioValue = class extends i {
-	projection = new LiveResource(this, (signal) => getJson("/api/portfolio/value-projection?years=25", { signal }), { interval: 3e5 });
+	static properties = {
+		editingNetDeposit: { state: true },
+		netDepositDraft: { state: true },
+		netDepositOverride: { state: true }
+	};
+	constructor() {
+		super();
+		this.editingNetDeposit = false;
+		this.netDepositDraft = "";
+		this.netDepositOverride = null;
+	}
+	projection = new LiveResource(this, (signal) => {
+		const params = new URLSearchParams({ years: "25" });
+		if (this.netDepositOverride !== null) params.set("avg_monthly_net_deposit_eur", String(this.netDepositOverride));
+		return getJson(`/api/portfolio/value-projection?${params}`, { signal });
+	}, { interval: 3e5 });
 	createRenderRoot() {
 		return this;
 	}
@@ -6603,6 +6618,68 @@ var SentinelPortfolioValue = class extends i {
 				projectedNetDeposits: data.summary.current_net_deposits_eur + data.summary.avg_monthly_net_deposit_eur * point.months_ahead
 			};
 		}).filter(Boolean);
+	}
+	startNetDepositEdit(summary) {
+		this.netDepositDraft = String(summary.avg_monthly_net_deposit_eur);
+		this.editingNetDeposit = true;
+		this.updateComplete.then(() => this.querySelector("tui-input[aria-label=\"Monthly net deposit assumption\"]")?.select());
+	}
+	cancelNetDepositEdit() {
+		this.editingNetDeposit = false;
+		this.netDepositDraft = "";
+	}
+	applyNetDepositOverride(event) {
+		event.preventDefault();
+		const value = Number(this.netDepositDraft);
+		if (!Number.isFinite(value)) return;
+		this.netDepositOverride = value;
+		this.cancelNetDepositEdit();
+		this.projection.refresh();
+	}
+	resetNetDepositOverride() {
+		this.netDepositOverride = null;
+		this.cancelNetDepositEdit();
+		this.projection.refresh();
+	}
+	renderNetDeposit(summary) {
+		if (this.editingNetDeposit) return b`
+        <form
+          style="display: inline"
+          @submit=${this.applyNetDepositOverride}
+        >
+          <span style="white-space: nowrap"
+            >&nbsp;&nbsp;Net/mo&nbsp;<tui-input
+              aria-label="Monthly net deposit assumption"
+              type="number"
+              step="0.01"
+              size="8"
+              value=${this.netDepositDraft}
+              @input=${(event) => this.netDepositDraft = event.currentTarget.value}
+              @keydown=${(event) => {
+			if (event.key === "Escape") this.cancelNetDepositEdit();
+		}}
+            ></tui-input
+            >&nbsp;<tui-button type="submit">Apply</tui-button
+            >&nbsp;<tui-button @click=${this.cancelNetDepositEdit}
+              >Cancel</tui-button
+            ></span
+          >
+        </form>
+      `;
+		const overridden = this.netDepositOverride !== null;
+		return b`
+      <span style="white-space: nowrap"
+        >&nbsp;&nbsp;${summary.deposit_window_months}M net/mo&nbsp;<tui-button
+          aria-label="Edit monthly net deposit assumption"
+          @click=${() => this.startNetDepositEdit(summary)}
+          >${formatCurrency(summary.avg_monthly_net_deposit_eur, "EUR", 0)}</tui-button
+        >${overridden ? b`&nbsp;actual&nbsp;${formatCurrency(summary.actual_avg_monthly_net_deposit_eur, "EUR", 0)}&nbsp;<tui-button
+                aria-label="Reset monthly net deposit assumption to actual"
+                @click=${this.resetNetDepositOverride}
+                >Reset</tui-button
+              >` : ""}</span
+      >
+    `;
 	}
 	renderMetrics(summary, startYear, endYear) {
 		const pnlVariant = summary.total_pnl_pct >= 0 ? "success" : "error";
@@ -6618,10 +6695,7 @@ var SentinelPortfolioValue = class extends i {
             (${formatPercent(summary.total_pnl_pct, 1)} of net funding)</tui-text
           ></span
         >
-        <span style="white-space: nowrap"
-          >&nbsp;&nbsp;${summary.deposit_window_months}M
-          net/mo&nbsp;${formatCurrency(summary.avg_monthly_net_deposit_eur, "EUR", 0)}</span
-        >
+        ${this.renderNetDeposit(summary)}
         <span
           title="Since-inception money-weighted annual return used as the projection growth assumption"
           style="white-space: nowrap"

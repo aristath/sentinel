@@ -38,7 +38,8 @@ are excluded because they are not external contribution capital.
 
 The planner and `/api/portfolio/value-projection` use this net rate. An API
 projection override changes the scenario but does not rewrite cash-flow
-history.
+history. In the Portfolio value UI, select the displayed `6M net/mo` amount to
+edit the projection assumption; `Reset` restores the live rolling rate.
 
 ## Planner meaning
 

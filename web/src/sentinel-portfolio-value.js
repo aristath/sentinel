@@ -57,9 +57,33 @@ function closestProjection(projection, target) {
 }
 
 class SentinelPortfolioValue extends LitElement {
+  static properties = {
+    editingNetDeposit: { state: true },
+    netDepositDraft: { state: true },
+    netDepositOverride: { state: true },
+  };
+
+  constructor() {
+    super();
+    this.editingNetDeposit = false;
+    this.netDepositDraft = "";
+    this.netDepositOverride = null;
+  }
+
   projection = new LiveResource(
     this,
-    (signal) => getJson("/api/portfolio/value-projection?years=25", { signal }),
+    (signal) => {
+      const params = new URLSearchParams({ years: "25" });
+
+      if (this.netDepositOverride !== null) {
+        params.set(
+          "avg_monthly_net_deposit_eur",
+          String(this.netDepositOverride),
+        );
+      }
+
+      return getJson(`/api/portfolio/value-projection?${params}`, { signal });
+    },
     { interval: 300_000 },
   );
 
@@ -87,6 +111,98 @@ class SentinelPortfolioValue extends LitElement {
       .filter(Boolean);
   }
 
+  startNetDepositEdit(summary) {
+    this.netDepositDraft = String(summary.avg_monthly_net_deposit_eur);
+    this.editingNetDeposit = true;
+    this.updateComplete.then(() =>
+      this.querySelector(
+        'tui-input[aria-label="Monthly net deposit assumption"]',
+      )?.select(),
+    );
+  }
+
+  cancelNetDepositEdit() {
+    this.editingNetDeposit = false;
+    this.netDepositDraft = "";
+  }
+
+  applyNetDepositOverride(event) {
+    event.preventDefault();
+    const value = Number(this.netDepositDraft);
+
+    if (!Number.isFinite(value)) {
+      return;
+    }
+
+    this.netDepositOverride = value;
+    this.cancelNetDepositEdit();
+    this.projection.refresh();
+  }
+
+  resetNetDepositOverride() {
+    this.netDepositOverride = null;
+    this.cancelNetDepositEdit();
+    this.projection.refresh();
+  }
+
+  renderNetDeposit(summary) {
+    if (this.editingNetDeposit) {
+      return html`
+        <form
+          style="display: inline"
+          @submit=${this.applyNetDepositOverride}
+        >
+          <span style="white-space: nowrap"
+            >&nbsp;&nbsp;Net/mo&nbsp;<tui-input
+              aria-label="Monthly net deposit assumption"
+              type="number"
+              step="0.01"
+              size="8"
+              value=${this.netDepositDraft}
+              @input=${(event) =>
+                (this.netDepositDraft = event.currentTarget.value)}
+              @keydown=${(event) => {
+                if (event.key === "Escape") {
+                  this.cancelNetDepositEdit();
+                }
+              }}
+            ></tui-input
+            >&nbsp;<tui-button type="submit">Apply</tui-button
+            >&nbsp;<tui-button @click=${this.cancelNetDepositEdit}
+              >Cancel</tui-button
+            ></span
+          >
+        </form>
+      `;
+    }
+
+    const overridden = this.netDepositOverride !== null;
+
+    return html`
+      <span style="white-space: nowrap"
+        >&nbsp;&nbsp;${summary.deposit_window_months}M net/mo&nbsp;<tui-button
+          aria-label="Edit monthly net deposit assumption"
+          @click=${() => this.startNetDepositEdit(summary)}
+          >${formatCurrency(
+            summary.avg_monthly_net_deposit_eur,
+            "EUR",
+            0,
+          )}</tui-button
+        >${overridden
+          ? html`&nbsp;actual&nbsp;${formatCurrency(
+                summary.actual_avg_monthly_net_deposit_eur,
+                "EUR",
+                0,
+              )}&nbsp;<tui-button
+                aria-label="Reset monthly net deposit assumption to actual"
+                @click=${this.resetNetDepositOverride}
+                >Reset</tui-button
+              >`
+          : ""}</span
+      >
+    `;
+  }
+
   renderMetrics(summary, startYear, endYear) {
     const pnlVariant = summary.total_pnl_pct >= 0 ? "success" : "error";
     const runRateVariant =
@@ -107,14 +223,7 @@ class SentinelPortfolioValue extends LitElement {
             (${formatPercent(summary.total_pnl_pct, 1)} of net funding)</tui-text
           ></span
         >
-        <span style="white-space: nowrap"
-          >&nbsp;&nbsp;${summary.deposit_window_months}M
-          net/mo&nbsp;${formatCurrency(
-            summary.avg_monthly_net_deposit_eur,
-            "EUR",
-            0,
-          )}</span
-        >
+        ${this.renderNetDeposit(summary)}
         <span
           title="Since-inception money-weighted annual return used as the projection growth assumption"
           style="white-space: nowrap"
