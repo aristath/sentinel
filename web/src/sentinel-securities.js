@@ -861,6 +861,7 @@ class SentinelSecurities extends LitElement {
                       )
                     : ""
                 }
+                ${this.renderDetailRow("Name", security.name || "-")}
                 ${this.renderDetailRow("Geography", security.geography || "-")}
                 ${this.renderDetailRow("Industry", security.industry || "-")}
                 ${this.renderDetailRow("Lot", security.min_lot ?? "-")}
