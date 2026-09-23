@@ -3,6 +3,31 @@ export const FIRE_WITHDRAWAL_RATE = 0.04;
 const AVG_DAYS_PER_MONTH = 365.25 / 12;
 const MILLISECONDS_PER_DAY = 86_400_000;
 
+export function fireYearsRemaining(monthsAhead) {
+  const months = Number(monthsAhead);
+
+  if (!Number.isFinite(months) || months < 0) {
+    return undefined;
+  }
+
+  return Math.ceil(months / 12);
+}
+
+export function formatFireProjection(plan) {
+  const achievement = plan?.achievement;
+
+  if (!achievement) {
+    return "Not reached under current assumptions";
+  }
+  if (achievement.months_ahead === 0) {
+    return "Funded now";
+  }
+
+  const yearsRemaining = plan.yearsRemaining;
+  const unit = yearsRemaining === 1 ? "year" : "years";
+  return `${String(achievement.date).slice(0, 4)} (${yearsRemaining} ${unit} remaining)`;
+}
+
 function projectedDate(currentDate, monthsAhead) {
   const start = Date.parse(`${currentDate}T00:00:00Z`);
 
@@ -177,6 +202,9 @@ export function calculateFirePlan(
     annualWithdrawalEur,
     monthlyWithdrawalEur: annualWithdrawalEur
       ? annualWithdrawalEur / 12
+      : undefined,
+    yearsRemaining: achievement
+      ? fireYearsRemaining(achievement.months_ahead)
       : undefined,
     achievement,
   };

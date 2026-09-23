@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-D2avE1Wg.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-uTshdcB_.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-D2avE1Wg.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-uTshdcB_.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6567,6 +6567,19 @@ customElements.define("sentinel-portfolio-status", SentinelPortfolioStatus);
 var FIRE_WITHDRAWAL_RATE = .04;
 var AVG_DAYS_PER_MONTH = 365.25 / 12;
 var MILLISECONDS_PER_DAY = 864e5;
+function fireYearsRemaining(monthsAhead) {
+	const months = Number(monthsAhead);
+	if (!Number.isFinite(months) || months < 0) return;
+	return Math.ceil(months / 12);
+}
+function formatFireProjection(plan) {
+	const achievement = plan?.achievement;
+	if (!achievement) return "Not reached under current assumptions";
+	if (achievement.months_ahead === 0) return "Funded now";
+	const yearsRemaining = plan.yearsRemaining;
+	const unit = yearsRemaining === 1 ? "year" : "years";
+	return `${String(achievement.date).slice(0, 4)} (${yearsRemaining} ${unit} remaining)`;
+}
 function projectedDate(currentDate, monthsAhead) {
 	const start = Date.parse(`${currentDate}T00:00:00Z`);
 	if (!Number.isFinite(start)) return;
@@ -6646,6 +6659,7 @@ function calculateFirePlan(monthlyExpensesEur, expectedInflationPct, projection,
 		retirementTargetEur,
 		annualWithdrawalEur,
 		monthlyWithdrawalEur: annualWithdrawalEur ? annualWithdrawalEur / 12 : void 0,
+		yearsRemaining: achievement ? fireYearsRemaining(achievement.months_ahead) : void 0,
 		achievement
 	};
 }
@@ -6868,7 +6882,7 @@ var SentinelPortfolioValue = class extends i {
               >
               <span style="white-space: nowrap"
                 >&nbsp;&nbsp;Projected FIRE&nbsp;<tui-text variant="success"
-                  >${fire.achievement ? fire.achievement.months_ahead === 0 ? "Funded now" : String(fire.achievement.date).slice(0, 4) : "Not reached under current assumptions"}</tui-text
+                  >${formatFireProjection(fire)}</tui-text
                 ></span
               >
             </tui-flex>

@@ -57,9 +57,10 @@ F.U. Money = monthly expenses × 12 × 25
 ```
 
 The panel identifies the first month that reaches the target and reports its
-year. Monthly expenses are entered in today's prices, then compounded by the
-editable expected annual inflation rate to every candidate retirement month.
-The portfolio must reach 25 times those inflation-adjusted annual expenses.
+year plus whole years remaining, rounded up from the projected month count.
+Monthly expenses are entered in today's prices, then compounded by the editable
+expected annual inflation rate to every candidate retirement month. The
+portfolio must reach 25 times those inflation-adjusted annual expenses.
 The default `2.11%` rate is the arithmetic mean of Eurostat's Greece all-items
 HICP annual inflation rates for 2016 through 2025
 ([dataset `prc_hicp_aind`](https://ec.europa.eu/eurostat/en/web/products-datasets/-/PRC_HICP_AIND),

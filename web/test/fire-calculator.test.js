@@ -5,6 +5,8 @@ import {
   FIRE_EXPENSE_MULTIPLE,
   FIRE_WITHDRAWAL_RATE,
   calculateFirePlan,
+  fireYearsRemaining,
+  formatFireProjection,
 } from "../src/fire-calculator.js";
 
 test("calculates the 25x target and four-percent annual withdrawal", () => {
@@ -28,6 +30,8 @@ test("calculates the 25x target and four-percent annual withdrawal", () => {
   assert.equal(plan.retirementMonthlyExpensesEur, 2_000);
   assert.equal(plan.annualWithdrawalEur, 24_000);
   assert.equal(plan.monthlyWithdrawalEur, 2_000);
+  assert.equal(plan.yearsRemaining, 24);
+  assert.equal(formatFireProjection(plan), "2050 (24 years remaining)");
   assert.deepEqual(plan.achievement, {
     date: "2050-01-22",
     projected_value_eur: 605_000,
@@ -52,6 +56,16 @@ test("returns the current point when the target is already funded", () => {
   assert.equal(plan.currentTargetEur, 300_000);
   assert.equal(plan.retirementTargetEur, 300_000);
   assert.equal(plan.achievement.months_ahead, 0);
+  assert.equal(plan.yearsRemaining, 0);
+  assert.equal(formatFireProjection(plan), "Funded now");
+});
+
+test("rounds partial remaining years up and rejects invalid month counts", () => {
+  assert.equal(fireYearsRemaining(1), 1);
+  assert.equal(fireYearsRemaining(12), 1);
+  assert.equal(fireYearsRemaining(13), 2);
+  assert.equal(fireYearsRemaining(-1), undefined);
+  assert.equal(fireYearsRemaining(Number.POSITIVE_INFINITY), undefined);
 });
 
 test("extends the same projection assumptions beyond the displayed 25 years", () => {
@@ -74,6 +88,7 @@ test("extends the same projection assumptions beyond the displayed 25 years", ()
   assert.equal(plan.currentTargetEur, 1_500_000);
   assert.equal(plan.achievement.date, "2060-07-23");
   assert.equal(plan.achievement.months_ahead, 406);
+  assert.equal(plan.yearsRemaining, 34);
   assert.equal(plan.achievement.extended, true);
   assert.ok(plan.achievement.projected_value_eur >= plan.retirementTargetEur);
 });
@@ -126,6 +141,10 @@ test("reports no achievement when fixed assumptions cannot reach the target", ()
   );
 
   assert.equal(plan.achievement, undefined);
+  assert.equal(
+    formatFireProjection(plan),
+    "Not reached under current assumptions",
+  );
 });
 
 test("requires positive finite monthly expenses", () => {

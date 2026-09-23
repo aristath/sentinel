@@ -1,6 +1,9 @@
 import { LitElement, html } from "lit";
 import { getJson, putJson } from "./api.js";
-import { calculateFirePlan } from "./fire-calculator.js";
+import {
+  calculateFirePlan,
+  formatFireProjection,
+} from "./fire-calculator.js";
 import { formatCurrency, formatPercent } from "./format.js";
 import { LiveResource } from "./live-resource.js";
 
@@ -321,11 +324,7 @@ class SentinelPortfolioValue extends LitElement {
               >
               <span style="white-space: nowrap"
                 >&nbsp;&nbsp;Projected FIRE&nbsp;<tui-text variant="success"
-                  >${fire.achievement
-                    ? fire.achievement.months_ahead === 0
-                      ? "Funded now"
-                      : String(fire.achievement.date).slice(0, 4)
-                    : "Not reached under current assumptions"}</tui-text
+                  >${formatFireProjection(fire)}</tui-text
                 ></span
               >
             </tui-flex>
