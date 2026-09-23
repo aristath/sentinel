@@ -1,26 +1,28 @@
 # Rolling contribution history
 
-`sentinel/planner/deposit_history.py` provides the six-month contribution rates
-used by planning and portfolio projections. `DepositHistoryHelper` accepts
-injected database/currency services or uses their shared instances.
+`sentinel/planner/deposit_history.py` provides configurable rolling contribution
+rates used by planning and portfolio projections. `DepositHistoryHelper`
+accepts injected database, currency, and settings services or uses their shared
+instances.
 
 ## Window
 
-The window ends on today or an explicit `as_of_date` and starts 180 days
-earlier. It deliberately uses six 30-day months rather than calendar-month
-boundaries. Each amount is converted to EUR using the rate for its cash-flow
-date.
+The window ends on today or an explicit `as_of_date`. Its length comes from
+`strategy_deposit_history_months`, which accepts whole numbers from 1 through
+36 and defaults to 12. Each configured month represents 30 days rather than a
+calendar-month boundary. Each amount is converted to EUR using the rate for its
+cash-flow date.
 
 ## Deposit rate
 
 ```python
-average = await helper.get_rolling_6m_avg_deposit(as_of_date=None)
+average = await helper.get_rolling_avg_deposit(as_of_date=None)
 ```
 
 This includes only `card` deposits and returns:
 
 ```text
-EUR deposits in trailing window / 6
+EUR deposits in trailing window / configured months
 ```
 
 The unit is EUR per month, not average transaction size. No deposits returns
@@ -29,17 +31,19 @@ zero.
 ## Net contribution rate
 
 ```python
-average = await helper.get_rolling_6m_avg_net_deposit(as_of_date=None)
+average = await helper.get_rolling_avg_net_deposit(as_of_date=None)
 ```
 
 This adds `card` deposits and subtracts the absolute value of `card_payout`
-withdrawals, then divides by six. Dividends, fees, taxes, blocks, and unblocks
-are excluded because they are not external contribution capital.
+withdrawals, then divides by the configured number of months. Dividends, fees,
+taxes, blocks, and unblocks are excluded because they are not external
+contribution capital.
 
 The planner and `/api/portfolio/value-projection` use this net rate. An API
 projection override changes the scenario but does not rewrite cash-flow
-history. In the Portfolio value UI, select the displayed `6M net/mo` amount to
-edit the projection assumption; `Reset` restores the live rolling rate.
+history. In the Portfolio value UI, the label reflects the configured window
+(for example, `12M net/mo`). Select the amount to edit the projection
+assumption; `Reset` restores the live rolling rate.
 
 ## FIRE panel
 

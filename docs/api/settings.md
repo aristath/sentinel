@@ -27,6 +27,7 @@ Returns all application settings, merging stored values with defaults. Runtime s
   "max_dividend_reinvestment_boost": 0.15,
   "tradernet_api_key": "...",
   "tradernet_api_secret": "...",
+  "strategy_deposit_history_months": 12,
   "strategy_min_opp_score": 0.55,
   "strategy_ideal_qualifying_threshold": 0.65,
   "strategy_core_timing_min_score": 0.3,
@@ -69,6 +70,7 @@ Returns all application settings, merging stored values with defaults. Runtime s
 | `cooldown_enabled` | Master switch for planner cool-off checks. When false, recent-trade cooldown periods are ignored. |
 | `fire_monthly_expenses_eur` | Positive EUR estimate saved by the FIRE panel; `null` until entered |
 | `fire_expected_inflation_pct` | Annual inflation estimate saved by the FIRE panel; defaults to the mean of Greece's 2016-2025 all-items HICP annual rates, `2.11` |
+| `strategy_deposit_history_months` | Whole 30-day months of deposits and withdrawals used to calculate monthly net contributions; accepts `1`–`36` and defaults to `12` |
 
 ---
 
@@ -82,7 +84,8 @@ unknown keys are not automatically a supported application contract.
 
 `fire_monthly_expenses_eur` is validated as a finite number greater than zero.
 `fire_expected_inflation_pct` is validated as a finite percentage greater than
-`-100`.
+`-100`. `strategy_deposit_history_months` is validated as a whole number from
+`1` through `36`.
 
 **Path params**
 - `key` — Setting key (e.g. `trading_mode`, `transaction_fee_fixed`)

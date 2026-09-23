@@ -59,6 +59,7 @@ class TestSettingsDefaults:
             "simulated_cash_eur",
             "fire_monthly_expenses_eur",
             "fire_expected_inflation_pct",
+            "strategy_deposit_history_months",
         ]
         for key in required_keys:
             assert key in DEFAULTS, f"Missing required default: {key}"
@@ -92,6 +93,7 @@ class TestSettingsDefaults:
     def test_defaults_strategy_settings_exist(self):
         """Strategy-related settings should have defaults."""
         strategy_keys = [
+            "strategy_deposit_history_months",
             "strategy_min_opp_score",
             "strategy_ideal_qualifying_threshold",
             "strategy_core_timing_min_score",
@@ -134,6 +136,9 @@ class TestSettingsDefaults:
         ]
         for key in strategy_keys:
             assert key in DEFAULTS, f"Missing strategy default: {key}"
+
+    def test_default_deposit_history_window_is_twelve_months(self):
+        assert DEFAULTS["strategy_deposit_history_months"] == 12
 
     def test_defaults_cooldown_enabled(self):
         """Cooldown checks should be enabled unless explicitly disabled."""

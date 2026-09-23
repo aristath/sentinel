@@ -11,11 +11,33 @@ All settings are stored in the database and editable via the web UI.
 No hardcoded magic numbers.
 """
 
+import math
 import os
 from typing import Any
 
 from sentinel.database import Database
 from sentinel.utils.decorators import singleton
+
+STRATEGY_DEPOSIT_HISTORY_MONTHS_KEY = "strategy_deposit_history_months"
+STRATEGY_DEPOSIT_HISTORY_MONTHS_DEFAULT = 12
+STRATEGY_DEPOSIT_HISTORY_MONTHS_MIN = 1
+STRATEGY_DEPOSIT_HISTORY_MONTHS_MAX = 36
+
+
+def parse_strategy_deposit_history_months(value: Any) -> int | None:
+    """Return a valid whole-month window, or ``None`` for invalid input."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, float) and math.isfinite(value) and value.is_integer():
+        parsed = int(value)
+    else:
+        return None
+    if not STRATEGY_DEPOSIT_HISTORY_MONTHS_MIN <= parsed <= STRATEGY_DEPOSIT_HISTORY_MONTHS_MAX:
+        return None
+    return parsed
+
 
 # Default settings - applied on first run, then configurable via UI
 DEFAULTS = {
@@ -54,6 +76,7 @@ DEFAULTS = {
     "freedom24_login": "",
     "freedom24_password": "",
     # Contrarian strategy
+    STRATEGY_DEPOSIT_HISTORY_MONTHS_KEY: STRATEGY_DEPOSIT_HISTORY_MONTHS_DEFAULT,
     "strategy_min_opp_score": 0.55,
     "strategy_ideal_qualifying_threshold": 0.65,
     "strategy_entry_t1_dd": -0.10,

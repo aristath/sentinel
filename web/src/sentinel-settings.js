@@ -218,6 +218,15 @@ const strategyDraftFields = [
 
 const strategyFields = [
   [
+    "strategy_deposit_history_months",
+    "Deposit History Months",
+    12,
+    1,
+    36,
+    1,
+    "Months of deposits and withdrawals used to calculate monthly net contributions",
+  ],
+  [
     "rebalance_threshold_pct",
     "Rebalance Threshold %",
     5,

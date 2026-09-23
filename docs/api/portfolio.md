@@ -215,13 +215,14 @@ parameters:
 | Parameter | Default | Constraint |
 |---|---:|---|
 | `years` | `10` | `5`, `10`, `15`, `20`, or `25` |
-| `avg_monthly_net_deposit_eur` | rolling six-month value | Optional finite override |
+| `avg_monthly_net_deposit_eur` | rolling configured-window value | Optional finite override |
 
 `history` contains realized value, deposits, and P&L. `projection` starts at the
 current value and contains monthly points through the selected horizon.
 `summary` records current value/deposits/P&L, the inferred return rate, actual
-and overridden monthly contribution, horizon, and projected totals. With no
-snapshots, both series are empty and `summary` is null.
+and overridden monthly contribution, the configured `deposit_window_months`,
+horizon, and projected totals. With no snapshots, both series are empty and
+`summary` is null.
 
 The projection is a scenario based on the money-weighted inception run-rate and
 monthly contributions; it is not a market forecast. When the historical

@@ -79,7 +79,7 @@ perfect dip.
 The rebalance engine:
 
 1. values current positions and cash in EUR;
-2. projects near-term capital using the rolling six-month net contribution;
+2. projects near-term capital using the configured rolling net contribution;
 3. compares projected target value with current value;
 4. filters unavailable, blocked, anomalous, disallowed, cooling-down, sub-lot,
    and sub-minimum trades;

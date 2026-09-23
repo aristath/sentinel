@@ -83,7 +83,11 @@ class RebalanceEngine:
         self._portfolio = portfolio or Portfolio()
         self._settings = settings or Settings()
         self._currency = currency or Currency()
-        self._deposit_history = DepositHistoryHelper(db=self._db, currency=self._currency)
+        self._deposit_history = DepositHistoryHelper(
+            db=self._db,
+            currency=self._currency,
+            settings=self._settings,
+        )
         self._last_security_data: dict[str, dict[str, Any]] = {}
 
     def get_last_security_data(self) -> dict[str, dict[str, Any]]:

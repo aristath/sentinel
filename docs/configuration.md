@@ -55,6 +55,7 @@ only used by `/api/portfolio/structure`, an unstable web-scraping integration.
 
 | Key | Default | Purpose |
 |---|---:|---|
+| `strategy_deposit_history_months` | `12` | Whole 30-day months of deposits and withdrawals used for the monthly net-contribution rate (`1`–`36`) |
 | `strategy_min_opp_score` | `0.55` | Score dividing core and opportunity timing classifications |
 | `strategy_ideal_qualifying_threshold` | `0.65` | Minimum AI research rating for a positive model target |
 | `strategy_entry_t1_dd` | `-0.10` | First drawdown tranche threshold |

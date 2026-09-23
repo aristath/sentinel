@@ -809,7 +809,7 @@ async def get_portfolio_value_projection(
 ) -> dict[str, Any]:
     """Portfolio value history plus a selected-horizon projection.
 
-    The forward series uses the same rolling 6-month net deposit helper the
+    The forward series uses the same configurable rolling net-deposit helper the
     planner uses, then compounds the portfolio by the money-weighted inception
     run-rate implied by dated net deposits/withdrawals and today's value.
     """
@@ -835,9 +835,16 @@ async def get_portfolio_value_projection(
     total_pnl_eur = current_value - current_net_deposits
     total_pnl_pct = (total_pnl_eur / current_net_deposits * 100.0) if current_net_deposits > 0 else 0.0
 
-    actual_avg_monthly_net_deposit = await DepositHistoryHelper(
-        db=deps.db, currency=deps.currency
-    ).get_rolling_6m_avg_net_deposit(as_of_date=today_iso)
+    deposit_history = DepositHistoryHelper(
+        db=deps.db,
+        currency=deps.currency,
+        settings=deps.settings,
+    )
+    deposit_window_months = await deposit_history.get_window_months()
+    actual_avg_monthly_net_deposit = await deposit_history.get_rolling_avg_net_deposit(
+        as_of_date=today_iso,
+        window_months=deposit_window_months,
+    )
     avg_monthly_net_deposit = (
         float(avg_monthly_net_deposit_eur)
         if avg_monthly_net_deposit_eur is not None
@@ -895,7 +902,7 @@ async def get_portfolio_value_projection(
         "avg_monthly_net_deposit_override_eur": (
             round(avg_monthly_net_deposit, 2) if avg_monthly_net_deposit_eur is not None else None
         ),
-        "deposit_window_months": DepositHistoryHelper.WINDOW_MONTHS,
+        "deposit_window_months": deposit_window_months,
         "projection_years": years,
         "projection_months": projection_months,
         "projected_value_eur": round(projected_value, 2),

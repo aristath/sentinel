@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BGRoRgvb.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-D2avE1Wg.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-BGRoRgvb.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-D2avE1Wg.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -5247,6 +5247,15 @@ var strategyDraftFields = [
 }));
 var strategyFields = [
 	[
+		"strategy_deposit_history_months",
+		"Deposit History Months",
+		12,
+		1,
+		36,
+		1,
+		"Months of deposits and withdrawals used to calculate monthly net contributions"
+	],
+	[
 		"rebalance_threshold_pct",
 		"Rebalance Threshold %",
 		5,
@@ -6644,6 +6653,7 @@ function calculateFirePlan(monthlyExpensesEur, expectedInflationPct, projection,
 //#region src/sentinel-portfolio-value.js
 var CHECKPOINT_COUNT = 5;
 var CHECKPOINT_INTERVAL = 5;
+var DEPOSIT_HISTORY_MONTHS_KEY = "strategy_deposit_history_months";
 function formatSignedCurrency(value, currency = "EUR", fractionDigits = 0) {
 	if (value === null || value === void 0) return "-";
 	return `${value > 0 ? "+" : ""}${formatCurrency(value, currency, fractionDigits)}`;
@@ -6707,6 +6717,17 @@ var SentinelPortfolioValue = class extends i {
 			monthlyExpensesEur: settings.fire_monthly_expenses_eur
 		};
 	}, { interval: 3e5 });
+	refreshForSetting = (event) => {
+		if (event.detail?.key === DEPOSIT_HISTORY_MONTHS_KEY) this.projection.refresh();
+	};
+	connectedCallback() {
+		super.connectedCallback();
+		window.addEventListener("sentinel-setting-changed", this.refreshForSetting);
+	}
+	disconnectedCallback() {
+		window.removeEventListener("sentinel-setting-changed", this.refreshForSetting);
+		super.disconnectedCallback();
+	}
 	createRenderRoot() {
 		return this;
 	}

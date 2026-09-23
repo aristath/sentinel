@@ -12,7 +12,13 @@ from typing_extensions import Annotated
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
 from sentinel.broker import Broker
 from sentinel.led import LEDController
-from sentinel.settings import REMOVED_SETTINGS
+from sentinel.settings import (
+    REMOVED_SETTINGS,
+    STRATEGY_DEPOSIT_HISTORY_MONTHS_KEY,
+    STRATEGY_DEPOSIT_HISTORY_MONTHS_MAX,
+    STRATEGY_DEPOSIT_HISTORY_MONTHS_MIN,
+    parse_strategy_deposit_history_months,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 STRATEGY_KEYS = {
@@ -32,6 +38,7 @@ STRATEGY_KEYS = {
 }
 PLANNER_SETTING_KEYS = {
     *STRATEGY_KEYS,
+    STRATEGY_DEPOSIT_HISTORY_MONTHS_KEY,
     "ai_research_multiplier_strength",
     "ai_research_multiplier_decay_factor",
     "ai_research_multiplier_decay_interval_days",
@@ -185,6 +192,17 @@ async def set_setting(
                 detail="FIRE expected inflation must be a finite percentage greater than -100",
             )
         setting_value = float(setting_value)
+    elif key == STRATEGY_DEPOSIT_HISTORY_MONTHS_KEY:
+        parsed_months = parse_strategy_deposit_history_months(setting_value)
+        if parsed_months is None:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "Deposit history months must be a whole number between "
+                    f"{STRATEGY_DEPOSIT_HISTORY_MONTHS_MIN} and {STRATEGY_DEPOSIT_HISTORY_MONTHS_MAX}"
+                ),
+            )
+        setting_value = parsed_months
     await deps.settings.set(key, setting_value)
     if key in PLANNER_SETTING_KEYS:
         invalidator = getattr(deps.db, "invalidate_planner_cache", None)

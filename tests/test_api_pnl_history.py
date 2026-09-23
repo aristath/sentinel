@@ -592,6 +592,7 @@ class TestValueProjection:
         deps.db = temp_db
         deps.currency = currency
         deps.broker = broker
+        deps.settings.get = AsyncMock(return_value=12)
 
         result = await get_portfolio_value_projection(deps, years=5)
 
@@ -603,29 +604,36 @@ class TestValueProjection:
         assert result["summary"]["current_net_deposits_eur"] == 1480.0
         assert result["history"][-1]["net_deposits_eur"] == 1480.0
         assert result["summary"]["total_pnl_pct"] == pytest.approx(35.14)
-        assert result["summary"]["avg_monthly_net_deposit_eur"] == 80.0
-        assert result["summary"]["actual_avg_monthly_net_deposit_eur"] == 80.0
+        assert result["summary"]["avg_monthly_net_deposit_eur"] == 40.0
+        assert result["summary"]["actual_avg_monthly_net_deposit_eur"] == 40.0
         assert result["summary"]["avg_monthly_net_deposit_override_eur"] is None
-        assert result["summary"]["deposit_window_months"] == 6
+        assert result["summary"]["deposit_window_months"] == 12
         assert result["summary"]["projection_years"] == 5
         assert result["summary"]["projection_months"] == 60
-        assert result["summary"]["projected_future_net_deposits_eur"] == 4800.0
-        assert result["summary"]["projected_net_deposits_eur"] == 6280.0
-        assert result["summary"]["actual_projected_future_net_deposits_eur"] == 4800.0
-        assert result["summary"]["actual_projected_net_deposits_eur"] == 6280.0
+        assert result["summary"]["projected_future_net_deposits_eur"] == 2400.0
+        assert result["summary"]["projected_net_deposits_eur"] == 3880.0
+        assert result["summary"]["actual_projected_future_net_deposits_eur"] == 2400.0
+        assert result["summary"]["actual_projected_net_deposits_eur"] == 3880.0
         assert result["summary"]["monthly_return_rate"] > 0
         assert result["summary"]["projected_value_eur"] > result["summary"]["current_value_eur"]
         assert result["summary"]["actual_projected_value_eur"] == result["summary"]["projected_value_eur"]
 
+        deps.settings.get.return_value = 6
+        six_month_result = await get_portfolio_value_projection(deps, years=5)
+
+        assert six_month_result["summary"]["deposit_window_months"] == 6
+        assert six_month_result["summary"]["avg_monthly_net_deposit_eur"] == 80.0
+
+        deps.settings.get.return_value = 12
         override = await get_portfolio_value_projection(deps, years=5, avg_monthly_net_deposit_eur=-250.0)
 
         assert override["summary"]["avg_monthly_net_deposit_eur"] == -250.0
-        assert override["summary"]["actual_avg_monthly_net_deposit_eur"] == 80.0
+        assert override["summary"]["actual_avg_monthly_net_deposit_eur"] == 40.0
         assert override["summary"]["avg_monthly_net_deposit_override_eur"] == -250.0
         assert override["summary"]["projected_future_net_deposits_eur"] == -15000.0
         assert override["summary"]["projected_net_deposits_eur"] == -13520.0
-        assert override["summary"]["actual_projected_future_net_deposits_eur"] == 4800.0
-        assert override["summary"]["actual_projected_net_deposits_eur"] == 6280.0
+        assert override["summary"]["actual_projected_future_net_deposits_eur"] == 2400.0
+        assert override["summary"]["actual_projected_net_deposits_eur"] == 3880.0
         assert override["summary"]["projected_value_eur"] < result["summary"]["projected_value_eur"]
         assert override["summary"]["actual_projected_value_eur"] == result["summary"]["projected_value_eur"]
 

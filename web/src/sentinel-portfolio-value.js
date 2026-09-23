@@ -6,6 +6,7 @@ import { LiveResource } from "./live-resource.js";
 
 const CHECKPOINT_COUNT = 5;
 const CHECKPOINT_INTERVAL = 5;
+const DEPOSIT_HISTORY_MONTHS_KEY = "strategy_deposit_history_months";
 
 function formatSignedCurrency(value, currency = "EUR", fractionDigits = 0) {
   if (value === null || value === undefined) {
@@ -108,6 +109,25 @@ class SentinelPortfolioValue extends LitElement {
     },
     { interval: 300_000 },
   );
+
+  refreshForSetting = (event) => {
+    if (event.detail?.key === DEPOSIT_HISTORY_MONTHS_KEY) {
+      this.projection.refresh();
+    }
+  };
+
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener("sentinel-setting-changed", this.refreshForSetting);
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener(
+      "sentinel-setting-changed",
+      this.refreshForSetting,
+    );
+    super.disconnectedCallback();
+  }
 
   createRenderRoot() {
     return this;

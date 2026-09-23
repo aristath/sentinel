@@ -113,6 +113,29 @@ async def test_set_setting_rejects_invalid_fire_expected_inflation(deps, value):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("value", [1, 12, 36, 12.0])
+async def test_set_setting_persists_deposit_history_months(deps, value):
+    from sentinel.api.routers.settings import set_setting
+
+    result = await set_setting("strategy_deposit_history_months", {"value": value}, deps)
+
+    assert result == {"status": "ok"}
+    assert await deps.db.get_setting("strategy_deposit_history_months") == int(value)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [True, "12", 0, 37, 1.5, float("inf")])
+async def test_set_setting_rejects_invalid_deposit_history_months(deps, value):
+    from sentinel.api.routers.settings import set_setting
+
+    with pytest.raises(HTTPException, match="Deposit history months") as exc:
+        await set_setting("strategy_deposit_history_months", {"value": value}, deps)
+
+    assert exc.value.status_code == 400
+    assert await deps.db.get_setting("strategy_deposit_history_months") == 12
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("key", "value"),
     [
@@ -124,6 +147,7 @@ async def test_set_setting_rejects_invalid_fire_expected_inflation(deps, value):
         ("strategy_max_funding_turnover_pct", 0.18),
         ("strategy_funding_conviction_bias", 1.2),
         ("strategy_fallback_wait_days", 45),
+        ("strategy_deposit_history_months", 18),
         ("cooldown_enabled", False),
         ("ai_research_multiplier_decay_factor", 0.85),
         ("min_cash_buffer", 0.01),
