@@ -3,6 +3,33 @@ export const FIRE_WITHDRAWAL_RATE = 0.04;
 const AVG_DAYS_PER_MONTH = 365.25 / 12;
 const MILLISECONDS_PER_DAY = 86_400_000;
 
+export function calculateProjectedMonthlyIncome(
+  projectedValueEur,
+  expectedInflationPct,
+  monthsAhead,
+) {
+  const value = Number(projectedValueEur);
+  const inflationPct = Number(expectedInflationPct);
+  const months = Number(monthsAhead);
+
+  if (
+    !Number.isFinite(value) ||
+    value < 0 ||
+    !Number.isFinite(inflationPct) ||
+    inflationPct <= -100 ||
+    !Number.isFinite(months) ||
+    months < 0
+  ) {
+    return undefined;
+  }
+
+  const monthlyIncomeEur = (value * FIRE_WITHDRAWAL_RATE) / 12;
+  const monthlyIncomeTodayEur =
+    monthlyIncomeEur / (1 + inflationPct / 100) ** (months / 12);
+
+  return { monthlyIncomeEur, monthlyIncomeTodayEur };
+}
+
 export function fireYearsRemaining(monthsAhead) {
   const months = Number(monthsAhead);
 

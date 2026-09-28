@@ -66,7 +66,22 @@ HICP annual inflation rates for 2016 through 2025
 ([dataset `prc_hicp_aind`](https://ec.europa.eu/eurostat/en/web/products-datasets/-/PRC_HICP_AIND),
 `geo=EL`, `coicop=CP00`, `unit=RCH_A_AVG`).
 
-The table remains a 25-year view; when necessary, the FIRE date continues the
+The portfolio value projections table shows every year for the next 25 years,
+using the projection point closest to the anniversary of the current date.
+Alongside portfolio value and net deposits, it shows the initial monthly income
+if retiring in each year and its buying power in today's money:
+
+```text
+Monthly income = projected portfolio value × 4% / 12
+Monthly income in today's money = monthly income / (1 + annual inflation rate)^(months ahead / 12)
+```
+
+The inflation rate is the panel's saved expected annual inflation percentage
+divided by 100. Changing inflation recalculates today's buying power; changing
+`Net/mo` also recalculates portfolio values and both income columns. The income
+columns remain available without entering retirement expenses.
+
+When necessary, the FIRE date continues the
 same historical money-weighted return, `Net/mo`, and inflation recurrence
 beyond that display window. If fixed assumptions cannot reach the moving
 inflation-adjusted target, the panel says so instead of inventing a date. The

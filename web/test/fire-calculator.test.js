@@ -5,9 +5,55 @@ import {
   FIRE_EXPENSE_MULTIPLE,
   FIRE_WITHDRAWAL_RATE,
   calculateFirePlan,
+  calculateProjectedMonthlyIncome,
   fireYearsRemaining,
   formatFireProjection,
 } from "../src/fire-calculator.js";
+
+test("calculates monthly retirement income from the projected portfolio value", () => {
+  const income = calculateProjectedMonthlyIncome(52_000, 2.11, 48);
+
+  assert.ok(Math.abs(income.monthlyIncomeEur - 173.33333333333334) < 1e-10);
+  assert.ok(Math.abs(income.monthlyIncomeTodayEur - 159.44429484296483) < 1e-10);
+});
+
+test("discounts monthly income for the actual projection month, including partial years", () => {
+  const income = calculateProjectedMonthlyIncome(300_000, 10, 18);
+
+  assert.equal(income.monthlyIncomeEur, 1_000);
+  assert.ok(Math.abs(income.monthlyIncomeTodayEur - 866.7841720414474) < 1e-10);
+});
+
+test("keeps income unchanged with no inflation or no elapsed time", () => {
+  assert.deepEqual(calculateProjectedMonthlyIncome(300_000, 0, 300), {
+    monthlyIncomeEur: 1_000,
+    monthlyIncomeTodayEur: 1_000,
+  });
+  assert.deepEqual(calculateProjectedMonthlyIncome(300_000, 2.11, 0), {
+    monthlyIncomeEur: 1_000,
+    monthlyIncomeTodayEur: 1_000,
+  });
+  assert.deepEqual(calculateProjectedMonthlyIncome(0, 2.11, 48), {
+    monthlyIncomeEur: 0,
+    monthlyIncomeTodayEur: 0,
+  });
+});
+
+test("increases today's buying power for expected deflation", () => {
+  const income = calculateProjectedMonthlyIncome(300_000, -10, 12);
+
+  assert.equal(income.monthlyIncomeEur, 1_000);
+  assert.ok(Math.abs(income.monthlyIncomeTodayEur - 1_111.111111111111) < 1e-10);
+});
+
+test("rejects invalid projected income assumptions", () => {
+  assert.equal(calculateProjectedMonthlyIncome(-1, 2.11, 12), undefined);
+  assert.equal(calculateProjectedMonthlyIncome(Infinity, 2.11, 12), undefined);
+  assert.equal(calculateProjectedMonthlyIncome(52_000, -100, 12), undefined);
+  assert.equal(calculateProjectedMonthlyIncome(52_000, Infinity, 12), undefined);
+  assert.equal(calculateProjectedMonthlyIncome(52_000, 2.11, -1), undefined);
+  assert.equal(calculateProjectedMonthlyIncome(52_000, 2.11, Infinity), undefined);
+});
 
 test("calculates the 25x target and four-percent annual withdrawal", () => {
   const plan = calculateFirePlan(

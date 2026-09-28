@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-uTshdcB_.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-RwTNSgVB.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-uTshdcB_.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-RwTNSgVB.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6567,6 +6567,17 @@ customElements.define("sentinel-portfolio-status", SentinelPortfolioStatus);
 var FIRE_WITHDRAWAL_RATE = .04;
 var AVG_DAYS_PER_MONTH = 365.25 / 12;
 var MILLISECONDS_PER_DAY = 864e5;
+function calculateProjectedMonthlyIncome(projectedValueEur, expectedInflationPct, monthsAhead) {
+	const value = Number(projectedValueEur);
+	const inflationPct = Number(expectedInflationPct);
+	const months = Number(monthsAhead);
+	if (!Number.isFinite(value) || value < 0 || !Number.isFinite(inflationPct) || inflationPct <= -100 || !Number.isFinite(months) || months < 0) return;
+	const monthlyIncomeEur = value * FIRE_WITHDRAWAL_RATE / 12;
+	return {
+		monthlyIncomeEur,
+		monthlyIncomeTodayEur: monthlyIncomeEur / (1 + inflationPct / 100) ** (months / 12)
+	};
+}
 function fireYearsRemaining(monthsAhead) {
 	const months = Number(monthsAhead);
 	if (!Number.isFinite(months) || months < 0) return;
@@ -6665,8 +6676,7 @@ function calculateFirePlan(monthlyExpensesEur, expectedInflationPct, projection,
 }
 //#endregion
 //#region src/sentinel-portfolio-value.js
-var CHECKPOINT_COUNT = 5;
-var CHECKPOINT_INTERVAL = 5;
+var CHECKPOINT_COUNT = 25;
 var DEPOSIT_HISTORY_MONTHS_KEY = "strategy_deposit_history_months";
 function formatSignedCurrency(value, currency = "EUR", fractionDigits = 0) {
 	if (value === null || value === void 0) return "-";
@@ -6675,11 +6685,11 @@ function formatSignedCurrency(value, currency = "EUR", fractionDigits = 0) {
 function checkpointDates(currentDate) {
 	const current = /* @__PURE__ */ new Date(`${currentDate}T00:00:00Z`);
 	if (Number.isNaN(current.getTime())) return [];
-	const firstYear = Math.floor(current.getUTCFullYear() / CHECKPOINT_INTERVAL) * CHECKPOINT_INTERVAL + 5;
+	const firstYear = current.getUTCFullYear() + 1;
 	const month = current.getUTCMonth();
 	const day = current.getUTCDate();
 	return Array.from({ length: CHECKPOINT_COUNT }, (_, index) => {
-		const year = firstYear + index * CHECKPOINT_INTERVAL;
+		const year = firstYear + index;
 		const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
 		return new Date(Date.UTC(year, month, Math.min(day, lastDay)));
 	});
@@ -6752,7 +6762,8 @@ var SentinelPortfolioValue = class extends i {
 			return {
 				date,
 				point,
-				projectedNetDeposits: data.summary.current_net_deposits_eur + data.summary.avg_monthly_net_deposit_eur * point.months_ahead
+				projectedNetDeposits: data.summary.current_net_deposits_eur + data.summary.avg_monthly_net_deposit_eur * point.months_ahead,
+				income: calculateProjectedMonthlyIncome(point.projected_value_eur, data.expectedInflationPct, point.months_ahead)
 			};
 		}).filter(Boolean);
 	}
@@ -6977,39 +6988,70 @@ var SentinelPortfolioValue = class extends i {
       </tui-flex>
     `;
 	}
-	renderTable(checkpoints) {
+	renderTable(checkpoints, expectedInflationPct) {
 		if (checkpoints.length === 0) return b`<span>Not enough data yet</span>`;
 		return b`
-      <table aria-label="Portfolio value projections" style="border-spacing: 0">
-        <thead>
-          <tr>
-            <th scope="col" style="text-align: left">Year&nbsp;&nbsp;</th>
-            <th scope="col" style="text-align: right">Value&nbsp;&nbsp;</th>
-            <th
-              scope="col"
-              aria-label="Projected net deposits"
-              style="text-align: right"
-            >
-              Net deposits
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          ${checkpoints.map(({ date, point, projectedNetDeposits }) => b`
-              <tr>
-                <th scope="row" style="font: inherit; text-align: left">
-                  ${date.getUTCFullYear()}&nbsp;&nbsp;
-                </th>
-                <td style="text-align: right">
-                  ${formatCurrency(point.projected_value_eur, "EUR", 0)}&nbsp;&nbsp;
-                </td>
-                <td style="text-align: right">
-                  ${formatCurrency(projectedNetDeposits, "EUR", 0)}
-                </td>
-              </tr>
-            `)}
-        </tbody>
-      </table>
+      <div style="max-width: 100%; overflow-x: auto">
+        <table
+          aria-label="Portfolio value projections"
+          style="border-spacing: 0; white-space: nowrap"
+        >
+          <thead>
+            <tr>
+              <th scope="col" style="text-align: left">Year&nbsp;&nbsp;</th>
+              <th scope="col" style="text-align: right">Value&nbsp;&nbsp;</th>
+              <th
+                scope="col"
+                aria-label="Projected net deposits"
+                style="text-align: right"
+              >
+                Net deposits&nbsp;&nbsp;
+              </th>
+              <th
+                scope="col"
+                title="Initial monthly withdrawal if retiring that year: 4% of projected portfolio value divided by 12"
+                style="text-align: right"
+              >
+                Monthly income&nbsp;&nbsp;
+              </th>
+              <th
+                scope="col"
+                title="Projected monthly withdrawal discounted by expected annual inflation to today's purchasing power"
+                style="text-align: right"
+              >
+                Monthly income in today's money
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            ${checkpoints.map(({ date, point, projectedNetDeposits, income }) => b`
+                <tr>
+                  <th scope="row" style="font: inherit; text-align: left">
+                    ${date.getUTCFullYear()}&nbsp;&nbsp;
+                  </th>
+                  <td style="text-align: right">
+                    ${formatCurrency(point.projected_value_eur, "EUR", 0)}&nbsp;&nbsp;
+                  </td>
+                  <td style="text-align: right">
+                    ${formatCurrency(projectedNetDeposits, "EUR", 0)}&nbsp;&nbsp;
+                  </td>
+                  <td style="text-align: right">
+                    ${formatCurrency(income?.monthlyIncomeEur)}&nbsp;&nbsp;
+                  </td>
+                  <td style="text-align: right">
+                    ${formatCurrency(income?.monthlyIncomeTodayEur)}
+                  </td>
+                </tr>
+              `)}
+          </tbody>
+        </table>
+      </div>
+      <div style="color: var(--tui-disabled-color); font-size: 0.75em">
+        Monthly income assumes retiring in that year and withdrawing 4% of the
+        projected value annually, divided by 12. Today's money accounts for
+        ${Number(expectedInflationPct).toFixed(2)}%
+        expected annual inflation.
+      </div>
     `;
 	}
 	renderProjection(data) {
@@ -7020,7 +7062,7 @@ var SentinelPortfolioValue = class extends i {
 		return b`${this.renderFireCalculator(data)}
     <div aria-hidden="true">&nbsp;</div>
     ${this.renderMetrics(data.summary, startYear, endYear)}
-    ${this.renderTable(checkpoints)}`;
+    ${this.renderTable(checkpoints, data.expectedInflationPct)}`;
 	}
 	render() {
 		let content;

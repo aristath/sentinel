@@ -2,13 +2,13 @@ import { LitElement, html } from "lit";
 import { getJson, putJson } from "./api.js";
 import {
   calculateFirePlan,
+  calculateProjectedMonthlyIncome,
   formatFireProjection,
 } from "./fire-calculator.js";
 import { formatCurrency, formatPercent } from "./format.js";
 import { LiveResource } from "./live-resource.js";
 
-const CHECKPOINT_COUNT = 5;
-const CHECKPOINT_INTERVAL = 5;
+const CHECKPOINT_COUNT = 25;
 const DEPOSIT_HISTORY_MONTHS_KEY = "strategy_deposit_history_months";
 
 function formatSignedCurrency(value, currency = "EUR", fractionDigits = 0) {
@@ -30,15 +30,12 @@ function checkpointDates(currentDate) {
     return [];
   }
 
-  const firstYear =
-    Math.floor(current.getUTCFullYear() / CHECKPOINT_INTERVAL) *
-      CHECKPOINT_INTERVAL +
-    5;
+  const firstYear = current.getUTCFullYear() + 1;
   const month = current.getUTCMonth();
   const day = current.getUTCDate();
 
   return Array.from({ length: CHECKPOINT_COUNT }, (_, index) => {
-    const year = firstYear + index * CHECKPOINT_INTERVAL;
+    const year = firstYear + index;
     const lastDay = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
     return new Date(Date.UTC(year, month, Math.min(day, lastDay)));
   });
@@ -151,6 +148,11 @@ class SentinelPortfolioValue extends LitElement {
           projectedNetDeposits:
             data.summary.current_net_deposits_eur +
             data.summary.avg_monthly_net_deposit_eur * point.months_ahead,
+          income: calculateProjectedMonthlyIncome(
+            point.projected_value_eur,
+            data.expectedInflationPct,
+            point.months_ahead,
+          ),
         };
       })
       .filter(Boolean);
@@ -468,44 +470,75 @@ class SentinelPortfolioValue extends LitElement {
     `;
   }
 
-  renderTable(checkpoints) {
+  renderTable(checkpoints, expectedInflationPct) {
     if (checkpoints.length === 0) {
       return html`<span>Not enough data yet</span>`;
     }
 
     return html`
-      <table aria-label="Portfolio value projections" style="border-spacing: 0">
-        <thead>
-          <tr>
-            <th scope="col" style="text-align: left">Year&nbsp;&nbsp;</th>
-            <th scope="col" style="text-align: right">Value&nbsp;&nbsp;</th>
-            <th
-              scope="col"
-              aria-label="Projected net deposits"
-              style="text-align: right"
-            >
-              Net deposits
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          ${checkpoints.map(
-            ({ date, point, projectedNetDeposits }) => html`
-              <tr>
-                <th scope="row" style="font: inherit; text-align: left">
-                  ${date.getUTCFullYear()}&nbsp;&nbsp;
-                </th>
-                <td style="text-align: right">
-                  ${formatCurrency(point.projected_value_eur, "EUR", 0)}&nbsp;&nbsp;
-                </td>
-                <td style="text-align: right">
-                  ${formatCurrency(projectedNetDeposits, "EUR", 0)}
-                </td>
-              </tr>
-            `,
-          )}
-        </tbody>
-      </table>
+      <div style="max-width: 100%; overflow-x: auto">
+        <table
+          aria-label="Portfolio value projections"
+          style="border-spacing: 0; white-space: nowrap"
+        >
+          <thead>
+            <tr>
+              <th scope="col" style="text-align: left">Year&nbsp;&nbsp;</th>
+              <th scope="col" style="text-align: right">Value&nbsp;&nbsp;</th>
+              <th
+                scope="col"
+                aria-label="Projected net deposits"
+                style="text-align: right"
+              >
+                Net deposits&nbsp;&nbsp;
+              </th>
+              <th
+                scope="col"
+                title="Initial monthly withdrawal if retiring that year: 4% of projected portfolio value divided by 12"
+                style="text-align: right"
+              >
+                Monthly income&nbsp;&nbsp;
+              </th>
+              <th
+                scope="col"
+                title="Projected monthly withdrawal discounted by expected annual inflation to today's purchasing power"
+                style="text-align: right"
+              >
+                Monthly income in today's money
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            ${checkpoints.map(
+              ({ date, point, projectedNetDeposits, income }) => html`
+                <tr>
+                  <th scope="row" style="font: inherit; text-align: left">
+                    ${date.getUTCFullYear()}&nbsp;&nbsp;
+                  </th>
+                  <td style="text-align: right">
+                    ${formatCurrency(point.projected_value_eur, "EUR", 0)}&nbsp;&nbsp;
+                  </td>
+                  <td style="text-align: right">
+                    ${formatCurrency(projectedNetDeposits, "EUR", 0)}&nbsp;&nbsp;
+                  </td>
+                  <td style="text-align: right">
+                    ${formatCurrency(income?.monthlyIncomeEur)}&nbsp;&nbsp;
+                  </td>
+                  <td style="text-align: right">
+                    ${formatCurrency(income?.monthlyIncomeTodayEur)}
+                  </td>
+                </tr>
+              `,
+            )}
+          </tbody>
+        </table>
+      </div>
+      <div style="color: var(--tui-disabled-color); font-size: 0.75em">
+        Monthly income assumes retiring in that year and withdrawing 4% of the
+        projected value annually, divided by 12. Today's money accounts for
+        ${Number(expectedInflationPct).toFixed(2)}%
+        expected annual inflation.
+      </div>
     `;
   }
 
@@ -522,7 +555,7 @@ class SentinelPortfolioValue extends LitElement {
     return html`${this.renderFireCalculator(data)}
     <div aria-hidden="true">&nbsp;</div>
     ${this.renderMetrics(data.summary, startYear, endYear)}
-    ${this.renderTable(checkpoints)}`;
+    ${this.renderTable(checkpoints, data.expectedInflationPct)}`;
   }
 
   render() {
