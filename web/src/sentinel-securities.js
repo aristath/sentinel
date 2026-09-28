@@ -10,6 +10,7 @@ const DEFAULT_COLUMNS = [
   "value",
   "pnl",
   "ideal",
+  "deviation",
   "plan",
   "trade",
 ];
@@ -173,6 +174,11 @@ class SentinelSecurities extends LitElement {
             Number(left.ideal_allocation || 0) -
             Number(right.ideal_allocation || 0);
           break;
+        case "deviation":
+          result =
+            left.current_allocation - left.ideal_allocation -
+            (right.current_allocation - right.ideal_allocation);
+          break;
         case "recommendation":
           result = recommendationValue(left) - recommendationValue(right);
           break;
@@ -194,11 +200,24 @@ class SentinelSecurities extends LitElement {
   get selectedColumns() {
     const configured =
       this.visibleColumns ?? this.columnSettings.value?.[COLUMN_SETTING_KEY];
-    const valid = Array.isArray(configured)
-      ? configured.filter((column) => DEFAULT_COLUMNS.includes(column))
-      : [];
+    let columns = DEFAULT_COLUMNS;
 
-    const selected = new Set(valid.length > 0 ? valid : DEFAULT_COLUMNS);
+    if (Array.isArray(configured)) {
+      // Existing selections predate the deviation column. Preserve their
+      // hidden columns while making the new column available by default.
+      const valid = configured.filter((column) =>
+        DEFAULT_COLUMNS.includes(column),
+      );
+      if (valid.length > 0) {
+        columns = [...valid, "deviation"];
+      }
+    } else if (Array.isArray(configured?.hidden)) {
+      columns = DEFAULT_COLUMNS.filter(
+        (column) => !configured.hidden.includes(column),
+      );
+    }
+
+    const selected = new Set(columns);
     selected.add("security");
     return selected;
   }
@@ -394,19 +413,23 @@ class SentinelSecurities extends LitElement {
       return;
     }
 
-    const ordered = DEFAULT_COLUMNS.filter((candidate) => next.has(candidate));
-    this.visibleColumns = ordered;
+    const selection = {
+      hidden: DEFAULT_COLUMNS.filter((candidate) => !next.has(candidate)),
+    };
+    this.visibleColumns = selection;
     this.columnsBusy = true;
     this.errorMessage = "";
 
     try {
-      await putJson(`/api/settings/${COLUMN_SETTING_KEY}`, { value: ordered });
+      await putJson(`/api/settings/${COLUMN_SETTING_KEY}`, { value: selection });
       this.columnSettings.value = {
         ...this.columnSettings.value,
-        [COLUMN_SETTING_KEY]: ordered,
+        [COLUMN_SETTING_KEY]: selection,
       };
     } catch (error) {
-      this.visibleColumns = [...previous];
+      this.visibleColumns = {
+        hidden: DEFAULT_COLUMNS.filter((candidate) => !previous.has(candidate)),
+      };
       this.errorMessage = error.message;
     } finally {
       this.columnsBusy = false;
@@ -736,6 +759,17 @@ class SentinelSecurities extends LitElement {
             : ""
         }
         ${
+          this.columnVisible("deviation")
+            ? html`<td
+                title="Current allocation minus ideal allocation; negative means underweight and positive means overweight"
+                style="text-align: left; vertical-align: top; white-space: nowrap"
+              >
+                <span aria-hidden="true">│&nbsp;</span>
+                ${formatPercent(-idealDifference, 1).replace("%", " pp")}
+              </td>`
+            : ""
+        }
+        ${
           this.columnVisible("plan")
             ? html`<td
                 style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
@@ -1039,6 +1073,7 @@ class SentinelSecurities extends LitElement {
             ${this.columnVisible("value") ? this.renderSortableHeader("Value", "value") : ""}
             ${this.columnVisible("pnl") ? this.renderSortableHeader("P/L", "pnl") : ""}
             ${this.columnVisible("ideal") ? this.renderSortableHeader("Ideal", "ideal") : ""}
+            ${this.columnVisible("deviation") ? this.renderSortableHeader("Deviation from ideal", "deviation") : ""}
             ${this.columnVisible("plan") ? this.renderSortableHeader("Plan", "recommendation") : ""}
             ${
               this.columnVisible("trade")
@@ -1107,6 +1142,14 @@ class SentinelSecurities extends LitElement {
               ?disabled=${this.columnsBusy}
               @change=${(event) => this.toggleColumn(event, "ideal")}
               >Ideal</tui-toggle
+            >
+          </div>
+          <div>
+            <tui-toggle
+              ?checked=${this.columnVisible("deviation")}
+              ?disabled=${this.columnsBusy}
+              @change=${(event) => this.toggleColumn(event, "deviation")}
+              >Deviation from ideal</tui-toggle
             >
           </div>
           <div>

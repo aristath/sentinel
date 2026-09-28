@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-RwTNSgVB.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-DosL-qKE.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-RwTNSgVB.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-DosL-qKE.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -7089,6 +7089,7 @@ var DEFAULT_COLUMNS = [
 	"value",
 	"pnl",
 	"ideal",
+	"deviation",
 	"plan",
 	"trade"
 ];
@@ -7196,6 +7197,9 @@ var SentinelSecurities = class extends i {
 				case "ideal":
 					result = Number(left.ideal_allocation || 0) - Number(right.ideal_allocation || 0);
 					break;
+				case "deviation":
+					result = left.current_allocation - left.ideal_allocation - (right.current_allocation - right.ideal_allocation);
+					break;
 				case "recommendation":
 					result = recommendationValue(left) - recommendationValue(right);
 					break;
@@ -7206,8 +7210,12 @@ var SentinelSecurities = class extends i {
 	}
 	get selectedColumns() {
 		const configured = this.visibleColumns ?? this.columnSettings.value?.[COLUMN_SETTING_KEY];
-		const valid = Array.isArray(configured) ? configured.filter((column) => DEFAULT_COLUMNS.includes(column)) : [];
-		const selected = new Set(valid.length > 0 ? valid : DEFAULT_COLUMNS);
+		let columns = DEFAULT_COLUMNS;
+		if (Array.isArray(configured)) {
+			const valid = configured.filter((column) => DEFAULT_COLUMNS.includes(column));
+			if (valid.length > 0) columns = [...valid, "deviation"];
+		} else if (Array.isArray(configured?.hidden)) columns = DEFAULT_COLUMNS.filter((column) => !configured.hidden.includes(column));
+		const selected = new Set(columns);
 		selected.add("security");
 		return selected;
 	}
@@ -7340,18 +7348,18 @@ var SentinelSecurities = class extends i {
 			this.errorMessage = "At least one table column must remain visible";
 			return;
 		}
-		const ordered = DEFAULT_COLUMNS.filter((candidate) => next.has(candidate));
-		this.visibleColumns = ordered;
+		const selection = { hidden: DEFAULT_COLUMNS.filter((candidate) => !next.has(candidate)) };
+		this.visibleColumns = selection;
 		this.columnsBusy = true;
 		this.errorMessage = "";
 		try {
-			await putJson(`/api/settings/${COLUMN_SETTING_KEY}`, { value: ordered });
+			await putJson(`/api/settings/${COLUMN_SETTING_KEY}`, { value: selection });
 			this.columnSettings.value = {
 				...this.columnSettings.value,
-				[COLUMN_SETTING_KEY]: ordered
+				[COLUMN_SETTING_KEY]: selection
 			};
 		} catch (error) {
-			this.visibleColumns = [...previous];
+			this.visibleColumns = { hidden: DEFAULT_COLUMNS.filter((candidate) => !previous.has(candidate)) };
 			this.errorMessage = error.message;
 		} finally {
 			this.columnsBusy = false;
@@ -7577,6 +7585,13 @@ var SentinelSecurities = class extends i {
                 <span aria-hidden="true">│&nbsp;</span>
                 ${this.renderColored(idealDifference, plainPercent(security.ideal_allocation))}
               </td>` : ""}
+        ${this.columnVisible("deviation") ? b`<td
+                title="Current allocation minus ideal allocation; negative means underweight and positive means overweight"
+                style="text-align: left; vertical-align: top; white-space: nowrap"
+              >
+                <span aria-hidden="true">│&nbsp;</span>
+                ${formatPercent(-idealDifference, 1).replace("%", " pp")}
+              </td>` : ""}
         ${this.columnVisible("plan") ? b`<td
                 style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
               >
@@ -7740,6 +7755,7 @@ var SentinelSecurities = class extends i {
             ${this.columnVisible("value") ? this.renderSortableHeader("Value", "value") : ""}
             ${this.columnVisible("pnl") ? this.renderSortableHeader("P/L", "pnl") : ""}
             ${this.columnVisible("ideal") ? this.renderSortableHeader("Ideal", "ideal") : ""}
+            ${this.columnVisible("deviation") ? this.renderSortableHeader("Deviation from ideal", "deviation") : ""}
             ${this.columnVisible("plan") ? this.renderSortableHeader("Plan", "recommendation") : ""}
             ${this.columnVisible("trade") ? b`<th
                     scope="col"
@@ -7803,6 +7819,14 @@ var SentinelSecurities = class extends i {
               ?disabled=${this.columnsBusy}
               @change=${(event) => this.toggleColumn(event, "ideal")}
               >Ideal</tui-toggle
+            >
+          </div>
+          <div>
+            <tui-toggle
+              ?checked=${this.columnVisible("deviation")}
+              ?disabled=${this.columnsBusy}
+              @change=${(event) => this.toggleColumn(event, "deviation")}
+              >Deviation from ideal</tui-toggle
             >
           </div>
           <div>

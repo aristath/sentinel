@@ -56,7 +56,7 @@ DEFAULTS = {
     "target_cash_pct": 0,  # Fully invested strategy
     "simulated_cash_eur": None,  # Override cash in research mode (None = use real)
     # Persisted UI preferences
-    "ui_securities_table_columns": ["price", "security", "value", "pnl", "ideal", "plan", "trade"],
+    "ui_securities_table_columns": {"hidden": []},
     # FIRE planning
     "fire_monthly_expenses_eur": None,
     # Mean Greece all-items HICP annual rate, 2016-2025 (Eurostat prc_hicp_aind)

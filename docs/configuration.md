@@ -32,12 +32,20 @@ strategy-tuning form documented in [Settings API](api/settings.md).
 | `rebalance_threshold_pct` | `5` | Portfolio-alignment threshold |
 | `performance_benchmark_symbol` | `VWCE.EU` | Investable benchmark overlaid on portfolio performance |
 | `max_dividend_reinvestment_boost` | `0.15` | Maximum opportunity-score boost from undeployed dividends |
-| `ui_securities_table_columns` | seven default columns | Persisted securities-table column selection |
+| `ui_securities_table_columns` | `{"hidden": []}` | Persisted hidden securities-table columns; all eight columns are shown by default |
 | `fire_monthly_expenses_eur` | `null` | Estimated monthly household expenses on retirement used by the FIRE calculator |
 | `fire_expected_inflation_pct` | `2.11` | Expected annual inflation used by FIRE; defaults to the mean of Greece's 2016-2025 all-items HICP annual rates |
 
-The default column array is `price`, `security`, `value`, `pnl`, `ideal`,
-`plan`, and `trade`.
+The available columns are `price`, `security`, `value`, `pnl`, `ideal`,
+`deviation`, `plan`, and `trade`. `security` is always visible. The column chooser
+saves hidden column IDs, for example `{"hidden": ["price", "plan"]}`. Existing
+arrays of visible columns remain supported and keep their previous selection,
+with the new deviation column shown by default.
+
+`Deviation from ideal` is current allocation minus ideal allocation, in
+percentage points (`pp`). A current allocation of 8% and ideal allocation of
+10% shows `-2.0 pp` (underweight); 12% against 10% shows `+2.0 pp` (overweight).
+The column is sortable and uses the current allocation before planned trades.
 
 ## Broker and Freedom24 settings
 
