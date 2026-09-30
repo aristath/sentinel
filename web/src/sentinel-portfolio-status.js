@@ -163,7 +163,7 @@ class SentinelPortfolioStatus extends LitElement {
               >Cash&nbsp;<tui-input
                 aria-label="Simulated cash in EUR"
                 type="number"
-                step="0.01"
+                step="any"
                 size="12"
                 value=${this.cashDraft}
                 ?disabled=${this.cashPending}

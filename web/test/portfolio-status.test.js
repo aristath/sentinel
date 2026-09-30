@@ -28,6 +28,24 @@ test("recognizes simulated cash only while research mode is active", () => {
   assert.equal(element.cashIsSimulated, false);
 });
 
+test("allows whole-number cash from a fractional live balance", () => {
+  const element = new SentinelPortfolioStatus();
+  element.settings.value = {
+    trading_mode: "research",
+    simulated_cash_eur: null,
+  };
+  element.portfolio.value = { total_cash_eur: 16.80048168640208 };
+  element.editingCash = true;
+  element.cashDraft = "1000";
+
+  const markup = element
+    .renderCash(element.portfolio.value)
+    .strings.join("");
+
+  assert.match(markup, /step="any"/);
+  assert.doesNotMatch(markup, /step="0\.01"/);
+});
+
 test("saves a finite simulated cash value and refreshes the portfolio", async (context) => {
   const element = new SentinelPortfolioStatus();
   element.settings.value = {
