@@ -101,6 +101,29 @@ async def test_set_setting_persists_fire_expected_inflation(deps):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("value", [12_345.67, -500.0, None])
+async def test_set_setting_persists_simulated_cash(deps, value):
+    from sentinel.api.routers.settings import set_setting
+
+    result = await set_setting("simulated_cash_eur", {"value": value}, deps)
+
+    assert result == {"status": "ok"}
+    assert await deps.db.get_setting("simulated_cash_eur") == value
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("value", [True, "12000", float("inf"), float("nan")])
+async def test_set_setting_rejects_invalid_simulated_cash(deps, value):
+    from sentinel.api.routers.settings import set_setting
+
+    with pytest.raises(HTTPException, match="Simulated cash") as exc:
+        await set_setting("simulated_cash_eur", {"value": value}, deps)
+
+    assert exc.value.status_code == 400
+    assert await deps.db.get_setting("simulated_cash_eur") is None
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("value", [True, "2.5", -100, -101, float("inf")])
 async def test_set_setting_rejects_invalid_fire_expected_inflation(deps, value):
     from sentinel.api.routers.settings import set_setting
@@ -152,6 +175,7 @@ async def test_set_setting_rejects_invalid_deposit_history_months(deps, value):
         ("ai_research_multiplier_decay_factor", 0.85),
         ("min_cash_buffer", 0.01),
         ("target_cash_pct", 5),
+        ("simulated_cash_eur", 12_000.0),
     ],
 )
 async def test_set_setting_invalidates_planner_cache_for_recommendation_settings(deps, key, value):

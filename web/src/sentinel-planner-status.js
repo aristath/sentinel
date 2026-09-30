@@ -14,6 +14,31 @@ class SentinelPlannerStatus extends LitElement {
     return this;
   }
 
+  refreshForCashSetting = (event) => {
+    if (
+      event.detail?.key === "simulated_cash_eur" ||
+      event.detail?.key === "trading_mode"
+    ) {
+      this.planner.refresh();
+    }
+  };
+
+  connectedCallback() {
+    super.connectedCallback();
+    window.addEventListener(
+      "sentinel-setting-changed",
+      this.refreshForCashSetting,
+    );
+  }
+
+  disconnectedCallback() {
+    window.removeEventListener(
+      "sentinel-setting-changed",
+      this.refreshForCashSetting,
+    );
+    super.disconnectedCallback();
+  }
+
   renderRecommendation(recommendation, index) {
     const isSell = recommendation.action === "sell";
     const percentage =

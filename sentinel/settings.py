@@ -195,6 +195,23 @@ REMOVED_SETTINGS = {
 }
 
 
+async def get_simulated_cash_eur(settings: "Settings") -> float | None:
+    """Return the active research-mode cash override, if one is configured."""
+    if await settings.get("trading_mode") != "research":
+        return None
+
+    value = await settings.get("simulated_cash_eur")
+    if value is None or isinstance(value, bool):
+        return None
+
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+
+    return parsed if math.isfinite(parsed) else None
+
+
 @singleton
 class Settings:
     """Single source of truth for application settings."""

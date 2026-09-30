@@ -11,6 +11,7 @@ from typing import Any
 from sentinel.broker import Broker
 from sentinel.currency import Currency
 from sentinel.database import Database
+from sentinel.settings import Settings, get_simulated_cash_eur
 from sentinel.utils.positions import PositionCalculator
 
 QUOTE_FALLBACK_TTL_SECONDS = 60 * 60
@@ -32,13 +33,18 @@ class PortfolioValuationService:
         db: Database | None = None,
         broker: Broker | None = None,
         currency: Currency | None = None,
+        settings: Settings | None = None,
     ):
         self._db = db or Database()
         self._broker = broker or Broker()
         self._currency = currency or Currency()
+        self._settings = settings or Settings()
 
     async def current(self) -> dict[str, Any]:
         positions, cash = await self._account_state()
+        simulated_cash_eur = await get_simulated_cash_eur(self._settings)
+        if simulated_cash_eur is not None:
+            cash = {"EUR": simulated_cash_eur}
         symbols = [position["symbol"] for position in positions if position.get("symbol")]
         quotes = await self._quotes(symbols)
         securities = await self._db.get_all_securities(active_only=False)

@@ -40,6 +40,10 @@ export class SentinelSecurityAllocation extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    window.addEventListener(
+      "sentinel-setting-changed",
+      this.refreshForCashSetting,
+    );
     if (typeof ResizeObserver !== "undefined") {
       this.resizeObserver = new ResizeObserver(([entry]) => {
         const compact = entry.contentRect.width <= 520;
@@ -53,8 +57,21 @@ export class SentinelSecurityAllocation extends LitElement {
 
   disconnectedCallback() {
     this.resizeObserver?.disconnect();
+    window.removeEventListener(
+      "sentinel-setting-changed",
+      this.refreshForCashSetting,
+    );
     super.disconnectedCallback();
   }
+
+  refreshForCashSetting = (event) => {
+    if (
+      event.detail?.key === "simulated_cash_eur" ||
+      event.detail?.key === "trading_mode"
+    ) {
+      this.allocation.refresh();
+    }
+  };
 
   storeCollapsed(event) {
     storeWidgetCollapsed("security-allocation", !event.currentTarget.open);

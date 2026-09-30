@@ -14,7 +14,7 @@ from sentinel.broker import Broker
 from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.security import Security
-from sentinel.settings import Settings
+from sentinel.settings import Settings, get_simulated_cash_eur
 from sentinel.universe import BROKER_POSITION_UNIVERSE_SOURCE, import_security_from_broker
 from sentinel.utils.positions import PositionCalculator
 
@@ -107,16 +107,7 @@ class Portfolio:
 
     async def _get_simulated_cash(self) -> float | None:
         """Return simulated cash if in research mode and setting is set, else None."""
-        mode = await self._settings.get("trading_mode")
-        if mode != "research":
-            return None
-        value = await self._settings.get("simulated_cash_eur")
-        if value is None:
-            return None
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
+        return await get_simulated_cash_eur(self._settings)
 
     async def get_cash_balances(self) -> dict[str, float]:
         """Get all cash balances per currency."""

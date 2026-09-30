@@ -103,6 +103,11 @@ class SentinelStatusBar extends LitElement {
         value: this.selectedMode,
       });
       await this.health.refresh();
+      window.dispatchEvent(
+        new CustomEvent("sentinel-setting-changed", {
+          detail: { key: "trading_mode", value: this.selectedMode },
+        }),
+      );
     } catch (error) {
       this.selectedMode = previousMode;
       console.error("Unable to update trading mode", error);

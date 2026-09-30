@@ -285,7 +285,12 @@ async def _daily_portfolio_value_history(
     deposits_by_date = await _cumulative_external_deposits_by_date(deps, cash_flows)
     daily = build_daily_pnl(snapshots, deposits_by_date)
     if current_value is None:
-        valuation = await PortfolioValuationService(db=deps.db, broker=deps.broker, currency=deps.currency).current()
+        valuation = await PortfolioValuationService(
+            db=deps.db,
+            broker=deps.broker,
+            currency=deps.currency,
+            settings=deps.settings,
+        ).current()
         current_value = float(valuation["total_value_eur"])
     if current_value > 0:
         live_net_deposits = (
@@ -586,6 +591,7 @@ async def get_portfolio(
         db=deps.db,
         portfolio=None,  # Uses singleton
         currency=deps.currency,
+        settings=deps.settings,
     )
     return await service.get_portfolio_state()
 
@@ -940,7 +946,12 @@ async def get_portfolio_period_stats(
     current_net_deposits = await _current_net_deposits_eur(deps, cash_flows)
     benchmark_symbol = await deps.settings.get("performance_benchmark_symbol", "VWCE.EU")
     benchmark_rows = await deps.db.get_prices(benchmark_symbol)
-    valuation = await PortfolioValuationService(db=deps.db, broker=deps.broker, currency=deps.currency).current()
+    valuation = await PortfolioValuationService(
+        db=deps.db,
+        broker=deps.broker,
+        currency=deps.currency,
+        settings=deps.settings,
+    ).current()
     current_value = valuation["total_value_eur"]
     snapshots = await deps.db.get_portfolio_snapshots()
     daily = await _daily_portfolio_value_history(

@@ -122,6 +122,7 @@ async def get_cashflows(
         db=deps.db,
         broker=deps.broker,
         currency=deps.currency,
+        settings=deps.settings,
     ).current()
     total_value = valuation["total_value_eur"]
 

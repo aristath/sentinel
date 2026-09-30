@@ -430,7 +430,12 @@ async def get_unified_view(
         ideal = {}
         current_allocs = {}
     else:
-        planner = Planner(db=deps.db, broker=deps.broker, portfolio=portfolio)
+        planner = Planner(
+            db=deps.db,
+            broker=deps.broker,
+            portfolio=portfolio,
+            settings=deps.settings,
+        )
         # Recommendations using settings default for min_trade_value
         eligible_symbols = await get_open_market_symbols(deps.broker, deps.db) if as_of is None else None
         recommendations = await planner.get_recommendations(as_of_date=as_of, eligible_symbols=eligible_symbols)

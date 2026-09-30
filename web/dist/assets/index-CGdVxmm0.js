@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-DosL-qKE.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-waeuz8B5.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-DosL-qKE.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-waeuz8B5.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6217,6 +6217,17 @@ var SentinelPlannerStatus = class extends i {
 	createRenderRoot() {
 		return this;
 	}
+	refreshForCashSetting = (event) => {
+		if (event.detail?.key === "simulated_cash_eur" || event.detail?.key === "trading_mode") this.planner.refresh();
+	};
+	connectedCallback() {
+		super.connectedCallback();
+		window.addEventListener("sentinel-setting-changed", this.refreshForCashSetting);
+	}
+	disconnectedCallback() {
+		window.removeEventListener("sentinel-setting-changed", this.refreshForCashSetting);
+		super.disconnectedCallback();
+	}
 	renderRecommendation(recommendation, index) {
 		const isSell = recommendation.action === "sell";
 		const percentage = isSell && recommendation.current_value_eur > 0 ? ` ${Math.round(Math.abs(recommendation.value_delta_eur) / recommendation.current_value_eur * 100)}%` : "";
@@ -6486,8 +6497,36 @@ customElements.define("sentinel-portfolio-pnl", SentinelPortfolioPnl);
 //#endregion
 //#region src/sentinel-portfolio-status.js
 var SentinelPortfolioStatus = class extends i {
+	static properties = {
+		cashDraft: { state: true },
+		cashError: { state: true },
+		cashPending: { state: true },
+		editingCash: { state: true }
+	};
+	constructor() {
+		super();
+		this.cashDraft = "";
+		this.cashError = "";
+		this.cashPending = false;
+		this.editingCash = false;
+	}
 	portfolio = new LiveResource(this, (signal) => getJson("/api/portfolio", { signal }), { interval: 6e4 });
 	cashFlows = new LiveResource(this, (signal) => getJson("/api/cashflows", { signal }), { interval: 3e5 });
+	settings = new LiveResource(this, (signal) => getJson("/api/settings", { signal }), { interval: 0 });
+	refreshForSetting = (event) => {
+		if (event.detail?.source !== this && (event.detail?.key === "simulated_cash_eur" || event.detail?.key === "trading_mode")) {
+			this.settings.refresh();
+			this.portfolio.refresh();
+		}
+	};
+	connectedCallback() {
+		super.connectedCallback();
+		window.addEventListener("sentinel-setting-changed", this.refreshForSetting);
+	}
+	disconnectedCallback() {
+		window.removeEventListener("sentinel-setting-changed", this.refreshForSetting);
+		super.disconnectedCallback();
+	}
 	createRenderRoot() {
 		return this;
 	}
@@ -6496,19 +6535,126 @@ var SentinelPortfolioStatus = class extends i {
 		if (balances.length === 0) return "";
 		return b`&nbsp;(${balances.map(([currency, amount], index) => b`${index > 0 ? ", " : ""}${currency}&nbsp;${formatCurrency(amount, currency)}`)})`;
 	}
+	get isResearchMode() {
+		return this.settings.value?.trading_mode === "research";
+	}
+	get simulatedCash() {
+		return this.settings.value?.simulated_cash_eur;
+	}
+	get cashIsSimulated() {
+		return this.isResearchMode && this.simulatedCash !== null && this.simulatedCash !== void 0;
+	}
+	startCashEdit() {
+		this.cashDraft = String(this.cashIsSimulated ? this.simulatedCash : this.portfolio.value?.total_cash_eur ?? 0);
+		this.cashError = "";
+		this.editingCash = true;
+		this.updateComplete.then(() => this.querySelector("tui-input[aria-label=\"Simulated cash in EUR\"]")?.select());
+	}
+	cancelCashEdit() {
+		this.cashDraft = "";
+		this.cashError = "";
+		this.editingCash = false;
+	}
+	async setCashOverride(value) {
+		this.cashPending = true;
+		this.cashError = "";
+		try {
+			await putJson("/api/settings/simulated_cash_eur", { value });
+			this.settings.value = {
+				...this.settings.value,
+				simulated_cash_eur: value
+			};
+			this.cancelCashEdit();
+			await this.portfolio.refresh();
+			window.dispatchEvent(new CustomEvent("sentinel-setting-changed", { detail: {
+				key: "simulated_cash_eur",
+				value,
+				source: this
+			} }));
+		} catch (error) {
+			this.cashError = error.message;
+		} finally {
+			this.cashPending = false;
+		}
+	}
+	async saveCash(event) {
+		event.preventDefault();
+		const draft = this.cashDraft.trim();
+		const value = draft === "" ? null : Number(draft);
+		if (value !== null && !Number.isFinite(value)) {
+			this.cashError = "Cash must be a finite number.";
+			return;
+		}
+		await this.setCashOverride(value);
+	}
+	renderCash(portfolio) {
+		if (this.editingCash && this.isResearchMode) return b`
+        <form @submit=${this.saveCash} style="display: inline">
+          <tui-flex align="baseline" wrap>
+            <label
+              >Cash&nbsp;<tui-input
+                aria-label="Simulated cash in EUR"
+                type="number"
+                step="0.01"
+                size="12"
+                value=${this.cashDraft}
+                ?disabled=${this.cashPending}
+                @input=${(event) => this.cashDraft = event.currentTarget.value}
+                @keydown=${(event) => {
+			if (event.key === "Escape") this.cancelCashEdit();
+		}}
+              ></tui-input
+            ></label>
+            <tui-button type="submit" ?disabled=${this.cashPending}
+              >${this.cashPending ? "Saving…" : "Apply"}</tui-button
+            >
+            <tui-button
+              type="button"
+              ?disabled=${this.cashPending}
+              @click=${this.cancelCashEdit}
+              >Cancel</tui-button
+            >
+          </tui-flex>
+        </form>
+      `;
+		return b`
+      <tui-flex align="baseline" wrap>
+        <span
+          >Cash&nbsp;<strong>${formatCurrency(portfolio.total_cash_eur)}</strong>${this.cashIsSimulated ? "" : this.renderCashBreakdown(portfolio.cash)}</span
+        >
+        ${this.cashIsSimulated ? b`<tui-text variant="warning">[simulated]</tui-text>` : ""}
+        ${this.isResearchMode ? b`
+              <tui-button
+                aria-label="Edit simulated cash"
+                title="Change the cash used by research-mode planning"
+                ?disabled=${this.cashPending}
+                @click=${this.startCashEdit}
+                >Edit</tui-button
+              >
+              ${this.cashIsSimulated ? b`<tui-button
+                    aria-label="Use real cash"
+                    title="Clear the simulated cash override"
+                    ?disabled=${this.cashPending}
+                    @click=${() => this.setCashOverride(null)}
+                    >Use real</tui-button
+                  >` : ""}
+            ` : ""}
+      </tui-flex>
+      ${this.cashError ? b`<tui-text variant="error">${this.cashError}</tui-text>` : ""}
+    `;
+	}
 	renderPortfolio() {
 		const portfolio = this.portfolio.value;
+		const totalProfit = Number(this.cashFlows.value?.total_profit);
 		return b`
       <tui-flex wrap>
         <span
-          >Value&nbsp;<strong
-            >${formatCurrency(portfolio.total_value_eur)}</strong
-          ></span
+          >Value&nbsp;<strong><tui-text variant=${totalProfit > 0 ? "success" : totalProfit < 0 ? "error" : void 0}
+              >${formatCurrency(portfolio.total_value_eur)}</tui-text
+            ></strong></span
         >
         <span aria-hidden="true">&nbsp;&nbsp;│&nbsp;&nbsp;</span>
-        <span
-          >Cash&nbsp;<strong>${formatCurrency(portfolio.total_cash_eur)}</strong>${this.renderCashBreakdown(portfolio.cash)}</span
-        >
+        ${this.renderCash(portfolio)}
       </tui-flex>
     `;
 	}
@@ -6516,37 +6662,28 @@ var SentinelPortfolioStatus = class extends i {
 		const cashFlows = this.cashFlows.value;
 		if (!cashFlows) return "";
 		const totalFees = cashFlows.fees + cashFlows.taxes;
-		const profitVariant = cashFlows.total_profit >= 0 ? "success" : "error";
 		return b`
       <tui-flex wrap>
         <span
-          >Deposits&nbsp;<tui-text variant="success"
-            >${formatCurrency(cashFlows.deposits)}</tui-text
-          ></span
+          >Deposits&nbsp;<strong>${formatCurrency(cashFlows.deposits)}</strong></span
         >
         <span aria-hidden="true">&nbsp;&nbsp;│&nbsp;&nbsp;</span>
         <span
-          >Withdrawals&nbsp;<tui-text variant="error"
-            >${formatCurrency(cashFlows.withdrawals)}</tui-text
-          ></span
+          >Withdrawals&nbsp;<strong>${formatCurrency(cashFlows.withdrawals)}</strong></span
         >
         <span aria-hidden="true">&nbsp;&nbsp;│&nbsp;&nbsp;</span>
         <span
-          >Dividends&nbsp;<tui-text variant="success"
-            >${formatCurrency(cashFlows.dividends)}</tui-text
-          ></span
+          >Dividends&nbsp;<strong>${formatCurrency(cashFlows.dividends)}</strong></span
         >
         <span aria-hidden="true">&nbsp;&nbsp;│&nbsp;&nbsp;</span>
         <span
-          >Fees&nbsp;<tui-text variant="error"
-            >${formatCurrency(totalFees)}</tui-text
-          ></span
+          >Fees&nbsp;<strong>${formatCurrency(totalFees)}</strong></span
         >
         <span aria-hidden="true">&nbsp;&nbsp;—&nbsp;&nbsp;</span>
         <span
-          >Total Profit&nbsp;<tui-text variant=${profitVariant}
-            >${formatCurrency(cashFlows.total_profit)}</tui-text
-          ></span
+          >Total Profit&nbsp;<strong><tui-text variant="warning"
+              >${formatCurrency(cashFlows.total_profit)}</tui-text
+            ></strong></span
         >
       </tui-flex>
     `;
@@ -7164,11 +7301,16 @@ var SentinelSecurities = class extends i {
 	connectedCallback() {
 		super.connectedCallback();
 		window.addEventListener("sentinel-security-list-change", this.securityListChanged);
+		window.addEventListener("sentinel-setting-changed", this.refreshForCashSetting);
 	}
 	disconnectedCallback() {
 		window.removeEventListener("sentinel-security-list-change", this.securityListChanged);
+		window.removeEventListener("sentinel-setting-changed", this.refreshForCashSetting);
 		super.disconnectedCallback();
 	}
+	refreshForCashSetting = (event) => {
+		if (event.detail?.key === "simulated_cash_eur" || event.detail?.key === "trading_mode") this.securities.refresh();
+	};
 	get allSecurities() {
 		return this.securities.value ?? [];
 	}
@@ -8326,6 +8468,7 @@ var SentinelSecurityAllocation = class extends i {
 	}
 	connectedCallback() {
 		super.connectedCallback();
+		window.addEventListener("sentinel-setting-changed", this.refreshForCashSetting);
 		if (typeof ResizeObserver !== "undefined") {
 			this.resizeObserver = new ResizeObserver(([entry]) => {
 				const compact = entry.contentRect.width <= 520;
@@ -8336,8 +8479,12 @@ var SentinelSecurityAllocation = class extends i {
 	}
 	disconnectedCallback() {
 		this.resizeObserver?.disconnect();
+		window.removeEventListener("sentinel-setting-changed", this.refreshForCashSetting);
 		super.disconnectedCallback();
 	}
+	refreshForCashSetting = (event) => {
+		if (event.detail?.key === "simulated_cash_eur" || event.detail?.key === "trading_mode") this.allocation.refresh();
+	};
 	storeCollapsed(event) {
 		storeWidgetCollapsed("security-allocation", !event.currentTarget.open);
 	}
@@ -8607,6 +8754,10 @@ var SentinelStatusBar = class extends i {
 		try {
 			await putJson("/api/settings/trading_mode", { value: this.selectedMode });
 			await this.health.refresh();
+			window.dispatchEvent(new CustomEvent("sentinel-setting-changed", { detail: {
+				key: "trading_mode",
+				value: this.selectedMode
+			} }));
 		} catch (error) {
 			this.selectedMode = previousMode;
 			console.error("Unable to update trading mode", error);

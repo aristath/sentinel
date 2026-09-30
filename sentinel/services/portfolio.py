@@ -6,6 +6,7 @@ from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.portfolio import Portfolio
 from sentinel.services.valuation import PortfolioValuationService
+from sentinel.settings import Settings
 
 
 class PortfolioService:
@@ -20,6 +21,7 @@ class PortfolioService:
         db: Database | None = None,
         portfolio: Portfolio | None = None,
         currency: Currency | None = None,
+        settings: Settings | None = None,
     ):
         """Initialize service with optional dependencies.
 
@@ -31,6 +33,7 @@ class PortfolioService:
         self._db = db or Database()
         self._portfolio = portfolio or Portfolio()
         self._currency = currency or Currency()
+        self._settings = settings or Settings()
 
     async def get_portfolio_state(self) -> dict:
         """Get complete portfolio state with enriched position data.
@@ -41,6 +44,7 @@ class PortfolioService:
         valuation = await PortfolioValuationService(
             db=self._db,
             currency=self._currency,
+            settings=self._settings,
         ).current()
 
         return {

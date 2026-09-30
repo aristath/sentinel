@@ -18,6 +18,7 @@ from sentinel.currency import Currency
 from sentinel.database import Database
 from sentinel.portfolio import Portfolio
 from sentinel.services.valuation import PortfolioValuationService
+from sentinel.settings import Settings
 
 from .allocation import AllocationCalculator
 from .analyzer import PortfolioAnalyzer
@@ -39,6 +40,7 @@ class Planner:
         db: Database | None = None,
         broker: Broker | None = None,
         portfolio: Portfolio | None = None,
+        settings: Settings | None = None,
     ):
         """Initialize planner with optional dependency injection.
 
@@ -51,6 +53,7 @@ class Planner:
         self._broker = broker or Broker()
         self._portfolio = portfolio or Portfolio()
         self._currency = Currency()
+        self._settings = settings or getattr(self._portfolio, "_settings", None) or Settings()
 
         # Initialize specialized components
         self._allocation_calculator = AllocationCalculator(
@@ -187,6 +190,7 @@ class Planner:
             db=self._db,
             broker=self._broker,
             currency=self._currency,
+            settings=self._settings,
         ).current()
         return PlannerState(
             positions=list(valuation.get("positions") or []),

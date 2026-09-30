@@ -46,6 +46,7 @@ PLANNER_SETTING_KEYS = {
     "min_position_pct",
     "min_cash_buffer",
     "target_cash_pct",
+    "simulated_cash_eur",
     "min_trade_value",
     "transaction_fee_fixed",
     "transaction_fee_percent",
@@ -180,6 +181,18 @@ async def set_setting(
                 detail="FIRE monthly expenses must be a finite number greater than zero",
             )
         setting_value = float(setting_value)
+    elif key == "simulated_cash_eur":
+        if setting_value is not None:
+            if (
+                isinstance(setting_value, bool)
+                or not isinstance(setting_value, int | float)
+                or not math.isfinite(setting_value)
+            ):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Simulated cash must be a finite number or null",
+                )
+            setting_value = float(setting_value)
     elif key == FIRE_EXPECTED_INFLATION_KEY:
         if (
             isinstance(setting_value, bool)

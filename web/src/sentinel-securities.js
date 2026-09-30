@@ -125,6 +125,10 @@ class SentinelSecurities extends LitElement {
       "sentinel-security-list-change",
       this.securityListChanged,
     );
+    window.addEventListener(
+      "sentinel-setting-changed",
+      this.refreshForCashSetting,
+    );
   }
 
   disconnectedCallback() {
@@ -132,8 +136,21 @@ class SentinelSecurities extends LitElement {
       "sentinel-security-list-change",
       this.securityListChanged,
     );
+    window.removeEventListener(
+      "sentinel-setting-changed",
+      this.refreshForCashSetting,
+    );
     super.disconnectedCallback();
   }
+
+  refreshForCashSetting = (event) => {
+    if (
+      event.detail?.key === "simulated_cash_eur" ||
+      event.detail?.key === "trading_mode"
+    ) {
+      this.securities.refresh();
+    }
+  };
 
   get allSecurities() {
     return this.securities.value ?? [];

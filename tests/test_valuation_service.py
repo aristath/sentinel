@@ -5,6 +5,17 @@ import pytest
 from sentinel.services.valuation import PortfolioValuationService
 
 
+def _settings(mode="research", simulated_cash=None):
+    settings = MagicMock()
+    settings.get = AsyncMock(
+        side_effect=lambda key, default=None: {
+            "trading_mode": mode,
+            "simulated_cash_eur": simulated_cash,
+        }.get(key, default)
+    )
+    return settings
+
+
 @pytest.mark.asyncio
 async def test_current_valuation_uses_quote_price_and_account_previous_close():
     db = MagicMock()
@@ -35,7 +46,12 @@ async def test_current_valuation_uses_quote_price_and_account_previous_close():
     currency = MagicMock()
     currency.to_eur = AsyncMock(side_effect=lambda amount, curr: amount * 0.1 if curr == "HKD" else amount)
 
-    valuation = await PortfolioValuationService(db=db, broker=broker, currency=currency).current()
+    valuation = await PortfolioValuationService(
+        db=db,
+        broker=broker,
+        currency=currency,
+        settings=_settings(),
+    ).current()
 
     assert valuation["positions"][0]["current_price"] == 88.7
     assert valuation["positions"][0]["price_source"] == "quote"
@@ -68,9 +84,66 @@ async def test_current_valuation_falls_back_to_database_account_state_when_broke
     currency = MagicMock()
     currency.to_eur = AsyncMock(side_effect=lambda amount, curr: amount)
 
-    valuation = await PortfolioValuationService(db=db, broker=broker, currency=currency).current()
+    valuation = await PortfolioValuationService(
+        db=db,
+        broker=broker,
+        currency=currency,
+        settings=_settings(),
+    ).current()
 
     assert valuation["positions"][0]["current_price"] == 100.0
     assert valuation["positions"][0]["price_source"] == "account"
     assert valuation["total_value_eur"] == 1050.0
     assert valuation["intraday_pnl_eur"] is None
+
+
+@pytest.mark.asyncio
+async def test_current_valuation_uses_simulated_cash_in_research_mode():
+    db = MagicMock()
+    db.get_all_securities = AsyncMock(return_value=[])
+    db.get_all_positions = AsyncMock(return_value=[])
+    db.get_cash_balances = AsyncMock(return_value={"EUR": 50.0})
+
+    broker = MagicMock()
+    broker.connected = False
+    broker.connect = AsyncMock(return_value=False)
+
+    currency = MagicMock()
+    currency.to_eur = AsyncMock(side_effect=lambda amount, curr: amount)
+
+    valuation = await PortfolioValuationService(
+        db=db,
+        broker=broker,
+        currency=currency,
+        settings=_settings(simulated_cash=12_345.67),
+    ).current()
+
+    assert valuation["cash"] == {"EUR": 12_345.67}
+    assert valuation["total_cash_eur"] == 12_345.67
+    assert valuation["total_value_eur"] == 12_345.67
+
+
+@pytest.mark.asyncio
+async def test_current_valuation_ignores_simulated_cash_in_live_mode():
+    db = MagicMock()
+    db.get_all_securities = AsyncMock(return_value=[])
+    db.get_all_positions = AsyncMock(return_value=[])
+    db.get_cash_balances = AsyncMock(return_value={"EUR": 50.0})
+
+    broker = MagicMock()
+    broker.connected = False
+    broker.connect = AsyncMock(return_value=False)
+
+    currency = MagicMock()
+    currency.to_eur = AsyncMock(side_effect=lambda amount, curr: amount)
+
+    valuation = await PortfolioValuationService(
+        db=db,
+        broker=broker,
+        currency=currency,
+        settings=_settings(mode="live", simulated_cash=12_345.67),
+    ).current()
+
+    assert valuation["cash"] == {"EUR": 50.0}
+    assert valuation["total_cash_eur"] == 50.0
+    assert valuation["total_value_eur"] == 50.0

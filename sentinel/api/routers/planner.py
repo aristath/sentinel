@@ -106,7 +106,12 @@ async def get_recommendations(
         settings=deps.settings,
         currency=deps.currency,
     )
-    planner = Planner(db=deps.db, broker=deps.broker, portfolio=portfolio)
+    planner = Planner(
+        db=deps.db,
+        broker=deps.broker,
+        portfolio=portfolio,
+        settings=deps.settings,
+    )
 
     # Use provided min_value or fall back to setting
     if min_value is None:

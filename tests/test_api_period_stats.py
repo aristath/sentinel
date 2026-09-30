@@ -73,7 +73,7 @@ def _fake_valuation(monkeypatch, total_value: float, intraday_pnl: float | None 
     from sentinel.api.routers import portfolio as portfolio_router
 
     class FakePortfolioValuationService:
-        def __init__(self, db=None, broker=None, currency=None):
+        def __init__(self, db=None, broker=None, currency=None, settings=None):
             pass
 
         async def current(self):
