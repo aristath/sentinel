@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-D-53ZaNA.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-gvKdpQ9R.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-D-53ZaNA.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-gvKdpQ9R.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -7227,6 +7227,8 @@ var DEFAULT_COLUMNS = [
 	"pnl",
 	"ideal",
 	"deviation",
+	"ai_score",
+	"opportunity_score",
 	"plan",
 	"trade"
 ];
@@ -7235,7 +7237,7 @@ function plainPercent(value, fractionDigits = 1) {
 	return Number.isFinite(number) ? `${number.toFixed(fractionDigits)}%` : "-";
 }
 function scorePercent(value, fractionDigits = 0) {
-	const number = Number(value);
+	const number = value == null ? NaN : Number(value);
 	return Number.isFinite(number) ? `${(number * 100).toFixed(fractionDigits)}%` : "-";
 }
 function variantFor(value) {
@@ -7342,6 +7344,12 @@ var SentinelSecurities = class extends i {
 				case "deviation":
 					result = left.current_allocation - left.ideal_allocation - (right.current_allocation - right.ideal_allocation);
 					break;
+				case "ai_score":
+					result = Number(left.ai_research_multiplier ?? 0) - Number(right.ai_research_multiplier ?? 0);
+					break;
+				case "opportunity_score":
+					result = Number(left.opp_score ?? 0) - Number(right.opp_score ?? 0);
+					break;
 				case "recommendation":
 					result = recommendationValue(left) - recommendationValue(right);
 					break;
@@ -7355,7 +7363,12 @@ var SentinelSecurities = class extends i {
 		let columns = DEFAULT_COLUMNS;
 		if (Array.isArray(configured)) {
 			const valid = configured.filter((column) => DEFAULT_COLUMNS.includes(column));
-			if (valid.length > 0) columns = [...valid, "deviation"];
+			if (valid.length > 0) columns = [
+				...valid,
+				"deviation",
+				"ai_score",
+				"opportunity_score"
+			];
 		} else if (Array.isArray(configured?.hidden)) columns = DEFAULT_COLUMNS.filter((column) => !configured.hidden.includes(column));
 		const selected = new Set(columns);
 		selected.add("security");
@@ -7734,6 +7747,20 @@ var SentinelSecurities = class extends i {
                 <span aria-hidden="true">│&nbsp;</span>
                 ${formatPercent(-idealDifference, 1).replace("%", " pp")}
               </td>` : ""}
+        ${this.columnVisible("ai_score") ? b`<td
+                title="AI research rating: 0% avoid, 50% neutral, 100% prefer"
+                style="text-align: left; vertical-align: top; white-space: nowrap"
+              >
+                <span aria-hidden="true">│&nbsp;</span>
+                ${scorePercent(security.ai_research_multiplier, 1)}
+              </td>` : ""}
+        ${this.columnVisible("opportunity_score") ? b`<td
+                title="Effective opportunity score after recent-dip memory and optional forecast adjustment"
+                style="text-align: left; vertical-align: top; white-space: nowrap"
+              >
+                <span aria-hidden="true">│&nbsp;</span>
+                ${scorePercent(security.opp_score, 1)}
+              </td>` : ""}
         ${this.columnVisible("plan") ? b`<td
                 style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
               >
@@ -7872,7 +7899,7 @@ var SentinelSecurities = class extends i {
       <div style="width: 100%; min-width: 0; overflow-x: auto">
         <table
           aria-label=${this.inactiveOnly ? "Inactive Securities" : "Securities"}
-          style="width: 100%; border-spacing: 0"
+          style="width: 100%; min-width: max-content; border-spacing: 0"
         >
           <thead>
             <tr>
@@ -7898,6 +7925,8 @@ var SentinelSecurities = class extends i {
             ${this.columnVisible("pnl") ? this.renderSortableHeader("P/L", "pnl") : ""}
             ${this.columnVisible("ideal") ? this.renderSortableHeader("Ideal", "ideal") : ""}
             ${this.columnVisible("deviation") ? this.renderSortableHeader("Deviation from ideal", "deviation") : ""}
+            ${this.columnVisible("ai_score") ? this.renderSortableHeader("AI score", "ai_score") : ""}
+            ${this.columnVisible("opportunity_score") ? this.renderSortableHeader("Opportunity score", "opportunity_score") : ""}
             ${this.columnVisible("plan") ? this.renderSortableHeader("Plan", "recommendation") : ""}
             ${this.columnVisible("trade") ? b`<th
                     scope="col"
@@ -7969,6 +7998,22 @@ var SentinelSecurities = class extends i {
               ?disabled=${this.columnsBusy}
               @change=${(event) => this.toggleColumn(event, "deviation")}
               >Deviation from ideal</tui-toggle
+            >
+          </div>
+          <div>
+            <tui-toggle
+              ?checked=${this.columnVisible("ai_score")}
+              ?disabled=${this.columnsBusy}
+              @change=${(event) => this.toggleColumn(event, "ai_score")}
+              >AI score</tui-toggle
+            >
+          </div>
+          <div>
+            <tui-toggle
+              ?checked=${this.columnVisible("opportunity_score")}
+              ?disabled=${this.columnsBusy}
+              @change=${(event) => this.toggleColumn(event, "opportunity_score")}
+              >Opportunity score</tui-toggle
             >
           </div>
           <div>

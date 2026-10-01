@@ -10,7 +10,7 @@ await import("../src/sentinel-securities.js");
 const SentinelSecurities = registry.get("sentinel-securities");
 const settingKey = "ui_securities_table_columns";
 
-test("shows deviation for an existing selection without restoring hidden columns", () => {
+test("shows new columns for a legacy selection without restoring hidden columns", () => {
   const element = new SentinelSecurities();
   element.columnSettings.value = {
     [settingKey]: ["security", "value", "pnl", "ideal", "trade"],
@@ -19,16 +19,20 @@ test("shows deviation for an existing selection without restoring hidden columns
   assert.equal(element.columnVisible("deviation"), true);
   assert.equal(element.columnVisible("price"), false);
   assert.equal(element.columnVisible("plan"), false);
-  assert.equal(element.selectedColumns.size, 6);
+  assert.equal(element.columnVisible("ai_score"), true);
+  assert.equal(element.columnVisible("opportunity_score"), true);
+  assert.equal(element.selectedColumns.size, 8);
 });
 
-test("supports explicitly hiding deviation while keeping security visible", () => {
+test("supports explicitly hiding new columns while keeping security visible", () => {
   const element = new SentinelSecurities();
   element.columnSettings.value = {
-    [settingKey]: { hidden: ["deviation", "price", "security"] },
+    [settingKey]: { hidden: ["deviation", "ai_score", "opportunity_score", "price", "security"] },
   };
 
   assert.equal(element.columnVisible("deviation"), false);
+  assert.equal(element.columnVisible("ai_score"), false);
+  assert.equal(element.columnVisible("opportunity_score"), false);
   assert.equal(element.columnVisible("price"), false);
   assert.equal(element.columnVisible("security"), true);
   assert.equal(element.columnVisible("plan"), true);

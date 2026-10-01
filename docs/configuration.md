@@ -32,7 +32,7 @@ strategy-tuning form documented in [Settings API](api/settings.md).
 | `rebalance_threshold_pct` | `5` | Portfolio-alignment threshold |
 | `performance_benchmark_symbol` | `VWCE.EU` | Investable benchmark overlaid on portfolio performance |
 | `max_dividend_reinvestment_boost` | `0.15` | Maximum opportunity-score boost from undeployed dividends |
-| `ui_securities_table_columns` | `{"hidden": []}` | Persisted hidden securities-table columns; all eight columns are shown by default |
+| `ui_securities_table_columns` | `{"hidden": []}` | Persisted hidden securities-table columns; all ten columns are shown by default, including AI score (AI research rating) and opportunity score (effective opportunity) as percentages |
 | `fire_monthly_expenses_eur` | `null` | Estimated monthly household expenses on retirement used by the FIRE calculator |
 | `fire_expected_inflation_pct` | `2.11` | Expected annual inflation used by FIRE; defaults to the mean of Greece's 2016-2025 all-items HICP annual rates |
 

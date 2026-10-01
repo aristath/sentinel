@@ -11,6 +11,8 @@ const DEFAULT_COLUMNS = [
   "pnl",
   "ideal",
   "deviation",
+  "ai_score",
+  "opportunity_score",
   "plan",
   "trade",
 ];
@@ -21,7 +23,7 @@ function plainPercent(value, fractionDigits = 1) {
 }
 
 function scorePercent(value, fractionDigits = 0) {
-  const number = Number(value);
+  const number = value == null ? Number.NaN : Number(value);
   return Number.isFinite(number)
     ? `${(number * 100).toFixed(fractionDigits)}%`
     : "-";
@@ -196,6 +198,14 @@ class SentinelSecurities extends LitElement {
             left.current_allocation - left.ideal_allocation -
             (right.current_allocation - right.ideal_allocation);
           break;
+        case "ai_score":
+          result =
+            Number(left.ai_research_multiplier ?? 0) -
+            Number(right.ai_research_multiplier ?? 0);
+          break;
+        case "opportunity_score":
+          result = Number(left.opp_score ?? 0) - Number(right.opp_score ?? 0);
+          break;
         case "recommendation":
           result = recommendationValue(left) - recommendationValue(right);
           break;
@@ -220,13 +230,13 @@ class SentinelSecurities extends LitElement {
     let columns = DEFAULT_COLUMNS;
 
     if (Array.isArray(configured)) {
-      // Existing selections predate the deviation column. Preserve their
-      // hidden columns while making the new column available by default.
+      // Legacy selections predate these columns. Preserve their hidden
+      // columns while showing the additions by default.
       const valid = configured.filter((column) =>
         DEFAULT_COLUMNS.includes(column),
       );
       if (valid.length > 0) {
-        columns = [...valid, "deviation"];
+        columns = [...valid, "deviation", "ai_score", "opportunity_score"];
       }
     } else if (Array.isArray(configured?.hidden)) {
       columns = DEFAULT_COLUMNS.filter(
@@ -787,6 +797,28 @@ class SentinelSecurities extends LitElement {
             : ""
         }
         ${
+          this.columnVisible("ai_score")
+            ? html`<td
+                title="AI research rating: 0% avoid, 50% neutral, 100% prefer"
+                style="text-align: left; vertical-align: top; white-space: nowrap"
+              >
+                <span aria-hidden="true">│&nbsp;</span>
+                ${scorePercent(security.ai_research_multiplier, 1)}
+              </td>`
+            : ""
+        }
+        ${
+          this.columnVisible("opportunity_score")
+            ? html`<td
+                title="Effective opportunity score after recent-dip memory and optional forecast adjustment"
+                style="text-align: left; vertical-align: top; white-space: nowrap"
+              >
+                <span aria-hidden="true">│&nbsp;</span>
+                ${scorePercent(security.opp_score, 1)}
+              </td>`
+            : ""
+        }
+        ${
           this.columnVisible("plan")
             ? html`<td
                 style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
@@ -1057,7 +1089,7 @@ class SentinelSecurities extends LitElement {
       <div style="width: 100%; min-width: 0; overflow-x: auto">
         <table
           aria-label=${this.inactiveOnly ? "Inactive Securities" : "Securities"}
-          style="width: 100%; border-spacing: 0"
+          style="width: 100%; min-width: max-content; border-spacing: 0"
         >
           <thead>
             <tr>
@@ -1091,6 +1123,8 @@ class SentinelSecurities extends LitElement {
             ${this.columnVisible("pnl") ? this.renderSortableHeader("P/L", "pnl") : ""}
             ${this.columnVisible("ideal") ? this.renderSortableHeader("Ideal", "ideal") : ""}
             ${this.columnVisible("deviation") ? this.renderSortableHeader("Deviation from ideal", "deviation") : ""}
+            ${this.columnVisible("ai_score") ? this.renderSortableHeader("AI score", "ai_score") : ""}
+            ${this.columnVisible("opportunity_score") ? this.renderSortableHeader("Opportunity score", "opportunity_score") : ""}
             ${this.columnVisible("plan") ? this.renderSortableHeader("Plan", "recommendation") : ""}
             ${
               this.columnVisible("trade")
@@ -1167,6 +1201,22 @@ class SentinelSecurities extends LitElement {
               ?disabled=${this.columnsBusy}
               @change=${(event) => this.toggleColumn(event, "deviation")}
               >Deviation from ideal</tui-toggle
+            >
+          </div>
+          <div>
+            <tui-toggle
+              ?checked=${this.columnVisible("ai_score")}
+              ?disabled=${this.columnsBusy}
+              @change=${(event) => this.toggleColumn(event, "ai_score")}
+              >AI score</tui-toggle
+            >
+          </div>
+          <div>
+            <tui-toggle
+              ?checked=${this.columnVisible("opportunity_score")}
+              ?disabled=${this.columnsBusy}
+              @change=${(event) => this.toggleColumn(event, "opportunity_score")}
+              >Opportunity score</tui-toggle
             >
           </div>
           <div>
