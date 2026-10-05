@@ -18,6 +18,7 @@ from mcp.server.mcpserver.exceptions import ToolError
 
 import sentinel.app as app_module
 import sentinel.mcp_server as server
+from sentinel.database import Database
 
 app = app_module.app
 DEPS = SimpleNamespace(marker="shared-sentinel-dependencies")
@@ -33,6 +34,8 @@ EXPECTED_TOOLS = {
     "portfolio_projection_get",
     "securities_overview_get",
     "securities_list",
+    "securities_search",
+    "security_broker_info_get",
     "security_get",
     "security_prices_get",
     "security_prices_sync",
@@ -171,6 +174,21 @@ BASE_CASES = [
         {},
         (DEPS,),
         result=_list_result("securities_list"),
+    ),
+    _case(
+        "securities_search",
+        "securities_api",
+        "search_securities",
+        {"query": "Airbus"},
+        (DEPS, "Airbus", None),
+        result=_list_result("securities_search"),
+    ),
+    _case(
+        "security_broker_info_get",
+        "securities_api",
+        "get_broker_security_info",
+        {"symbol": "AIR.EU"},
+        ("AIR.EU", DEPS),
     ),
     _case("security_get", "securities_api", "get_security", {"symbol": "AIR.EU"}, ("AIR.EU", DEPS)),
     _case(
@@ -418,6 +436,15 @@ BASE_CASES = [
 ]
 
 VARIANT_CASES = [
+    _case(
+        "securities_search",
+        "securities_api",
+        "search_securities",
+        {"query": "Airbus", "exchange": "EU"},
+        (DEPS, "Airbus", "EU"),
+        result=_list_result("securities_search"),
+        suffix="exchange",
+    ),
     _case(
         "portfolio_plan_get",
         "planner_api",
@@ -850,7 +877,7 @@ async def test_required_arguments_are_enforced_before_endpoint_execution(monkeyp
                 checked += 1
             endpoint.assert_not_awaited()
 
-    assert checked == 45
+    assert checked == 47
 
 
 @pytest.mark.asyncio
@@ -966,3 +993,65 @@ async def test_mounted_transport_lists_and_executes_tools_on_both_documented_url
     assert health.await_count == 2
     assert version.await_count == 2
     security.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("held", [False, True])
+async def test_mcp_discover_inspect_add_and_remove_with_real_universe_rules(monkeypatch, tmp_path, held):
+    db = Database(str(tmp_path / "mcp-universe.db"))
+    await db.connect()
+    broker = SimpleNamespace(
+        connected=True,
+        search_securities=AsyncMock(return_value=[{"t": "NEW.EU", "n": "New security", "mkt": "EU"}]),
+        get_security_info=AsyncMock(return_value={"short_name": "New security", "currency": "EUR", "lot": 1}),
+        add_stock_list_ticker=AsyncMock(return_value=True),
+        delete_stock_list_ticker=AsyncMock(return_value=True),
+        get_historical_prices_bulk=AsyncMock(return_value={}),
+        sell=AsyncMock(),
+    )
+    monkeypatch.setattr(server, "_deps", AsyncMock(return_value=SimpleNamespace(db=db, broker=broker)))
+    try:
+        async with Client(server.mcp) as client:
+            search = await client.call_tool("securities_search", {"query": "New"})
+            assert search.is_error is False
+            assert _unwrap_structured(search.structured_content)[0]["tracked"] is False
+            inspected = await client.call_tool("security_broker_info_get", {"symbol": "NEW.EU"})
+            assert inspected.is_error is False
+            assert await db.get_security("NEW.EU") is None
+
+            added = await client.call_tool("security_add", {"symbol": "NEW.EU"})
+            assert added.is_error is False
+            assert added.structured_content["re_enabled"] is False
+            row = await db.get_security("NEW.EU")
+            assert row and row["active"] == 1
+            duplicate = await client.call_tool("security_add", {"symbol": "NEW.EU"})
+            assert duplicate.is_error is True
+            assert "already exists" in duplicate.content[0].text
+            if held:
+                await db.upsert_position("NEW.EU", quantity=3, current_price=100, currency="EUR")
+
+            removed = await client.call_tool("security_remove", {"symbol": "NEW.EU"})
+            assert removed.is_error is False
+            assert removed.structured_content["retained_position"] is held
+            assert removed.structured_content["sold_quantity"] == 0
+            row = await db.get_security("NEW.EU")
+            assert row and row["active"] == int(held)
+            assert row["allow_buy"] == 0
+            assert row["allow_sell"] == int(held)
+            search = await client.call_tool("securities_search", {"query": "New"})
+            match = _unwrap_structured(search.structured_content)[0]
+            assert match["tracked"] is True
+            assert match["in_universe"] is held
+            assert match["allow_buy"] is False
+            if not held:
+                reactivated = await client.call_tool("security_add", {"symbol": "NEW.EU"})
+                assert reactivated.is_error is False
+                assert reactivated.structured_content["re_enabled"] is True
+                row = await db.get_security("NEW.EU")
+                assert row and row["active"] == 1 and row["allow_buy"] == 1
+        broker.add_stock_list_ticker.assert_any_await("NEW.EU")
+        broker.delete_stock_list_ticker.assert_awaited_once_with("NEW.EU")
+        broker.sell.assert_not_awaited()
+    finally:
+        await db.close()
+        db.remove_from_cache()

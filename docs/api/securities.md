@@ -80,6 +80,92 @@ Add a new security to the universe. Fetches metadata and 20 years of historical 
 **Errors**
 - `400` — Symbol missing or already active
 - `404` — Symbol not found at broker
+- `502` — Adding the symbol to Freedom24 Favorites failed
+
+---
+
+## `GET /api/securities/search`
+
+Searches Tradernet's catalog, including instruments outside Sentinel's universe.
+Does not change Favorites, local securities, or trading state.
+
+**Query params**
+
+- `query` (string, required) — Non-empty search text: symbol, name, or ISIN.
+- `exchange` (string, optional) — Broker exchange code, for example `FIX` or
+  `EU`. Filters the broker's initial candidates by market code. Trimmed and
+  uppercased; empty values are rejected.
+
+**Response**
+
+Up to 30 broker candidates before optional exchange filtering. A specific
+exchange can have matches beyond the broker's initial limit; narrow the query
+to find them. Original fields are preserved alongside normalized
+fields and local tracking status. `tracked` includes inactive local rows;
+`in_universe` means active. Local permissions are null for untracked symbols.
+
+```json
+[
+  {
+    "t": "AAPL.US",
+    "n": "Apple Inc.",
+    "isin": "US0378331005",
+    "mkt": "FIX",
+    "mkt_id": "30000000001",
+    "type": 1,
+    "kind": 1,
+    "x_curr": "USD",
+    "symbol": "AAPL.US",
+    "name": "Apple Inc.",
+    "market": "FIX",
+    "market_id": "30000000001",
+    "currency": "USD",
+    "instrument_type": 1,
+    "instrument_kind": 1,
+    "tracked": false,
+    "in_universe": false,
+    "allow_buy": null,
+    "allow_sell": null
+  }
+]
+```
+
+An empty list means a successful search with no matches.
+
+**Errors**
+
+- `400` — Blank query or explicitly blank exchange
+- `422` — Missing required query
+- `503` — Broker is not connected
+- `502` — Broker search failed or returned malformed data
+
+---
+
+## `GET /api/securities/{symbol}/broker-info`
+
+Returns broker metadata for an exact symbol, even if it is not tracked locally.
+Does not import the instrument or change Favorites.
+
+**Response**
+
+```json
+{
+  "symbol": "AAPL.US",
+  "info": {
+    "short_name": "Apple Inc.",
+    "currency": "USD",
+    "lot": 1
+  }
+}
+```
+
+The `info` object preserves the broker response fields.
+
+**Errors**
+
+- `400` — Blank symbol
+- `503` — Broker is not connected
+- `404` — Broker information unavailable (unknown symbol or failed lookup)
 
 ---
 

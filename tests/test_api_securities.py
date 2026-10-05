@@ -12,6 +12,141 @@ from sentinel.settings import Settings
 
 
 @pytest.mark.asyncio
+async def test_broker_search_includes_untracked_inactive_and_held_sell_only_symbols():
+    from sentinel.api.routers.securities import search_securities
+
+    deps = MagicMock()
+    deps.broker.connected = True
+    deps.broker.search_securities = AsyncMock(
+        return_value=[
+            {"t": "NEW.EU", "n": "New", "isin": "NEW-ISIN", "mkt": "EU", "type": 1, "kind": 7},
+            {"t": "OLD.EU", "n": "Old"},
+            {"t": "HELD.EU", "n": "Held"},
+        ]
+    )
+    deps.db.get_all_securities = AsyncMock(
+        return_value=[
+            {"symbol": "OLD.EU", "active": 0, "allow_buy": 0, "allow_sell": 0},
+            {"symbol": "HELD.EU", "active": 1, "allow_buy": 0, "allow_sell": 1},
+        ]
+    )
+
+    new, inactive, held = await search_securities(deps, " example ", " eu ")
+
+    deps.broker.search_securities.assert_awaited_once_with("example", "EU")
+    deps.db.get_all_securities.assert_awaited_once_with(active_only=False)
+    assert new["symbol"] == "NEW.EU"
+    assert new["name"] == "New"
+    assert new["isin"] == "NEW-ISIN"
+    assert new["market"] == "EU"
+    assert new["instrument_type"] == 1
+    assert new["instrument_kind"] == 7
+    assert new["tracked"] is False
+    assert new["in_universe"] is False
+    assert new["allow_buy"] is None
+    assert inactive["tracked"] is True
+    assert inactive["in_universe"] is False
+    assert held["in_universe"] is True
+    assert held["allow_buy"] is False
+    assert held["allow_sell"] is True
+    deps.db.upsert_security.assert_not_called()
+    deps.broker.add_stock_list_ticker.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("query", "exchange", "connected", "matches", "status"),
+    [
+        (" ", None, True, [], 400),
+        ("Apple", " ", True, [], 400),
+        ("Apple", None, False, [], 503),
+        ("Apple", None, True, None, 502),
+    ],
+)
+async def test_broker_search_validation_and_failure(query, exchange, connected, matches, status):
+    from sentinel.api.routers.securities import search_securities
+
+    deps = MagicMock()
+    deps.broker.connected = connected
+    deps.broker.search_securities = AsyncMock(return_value=matches)
+    with pytest.raises(HTTPException) as exc:
+        await search_securities(deps, query, exchange)
+    assert exc.value.status_code == status
+    if status != 502:
+        deps.broker.search_securities.assert_not_awaited()
+    deps.db.get_all_securities.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_isin_search_displays_company_name_instead_of_echoed_isin():
+    from sentinel.api.routers.securities import search_securities
+
+    deps = MagicMock()
+    deps.broker.connected = True
+    deps.broker.search_securities = AsyncMock(
+        return_value=[{"t": "AAPL.US", "n": "US0378331005", "nm": "Apple Inc.", "isin": "US0378331005"}]
+    )
+    deps.db.get_all_securities = AsyncMock(return_value=[])
+    results = await search_securities(deps, "US0378331005")
+    assert results[0]["name"] == "Apple Inc."
+    assert results[0]["isin"] == "US0378331005"
+    assert results[0]["n"] == "US0378331005"
+
+
+@pytest.mark.asyncio
+async def test_search_http_route_precedes_dynamic_symbol_lookup():
+    import httpx
+    from fastapi import FastAPI
+
+    from sentinel.api.dependencies import get_common_deps
+    from sentinel.api.routers.securities import router
+
+    deps = MagicMock()
+    deps.broker.connected = True
+    deps.broker.search_securities = AsyncMock(return_value=[])
+    deps.db.get_all_securities = AsyncMock(return_value=[])
+    test_app = FastAPI()
+    test_app.include_router(router, prefix="/api")
+    test_app.dependency_overrides[get_common_deps] = lambda: deps
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=test_app), base_url="http://test") as client:
+        response = await client.get("/api/securities/search", params={"query": "unknown"})
+    assert response.status_code == 200
+    assert response.json() == []
+    deps.db.get_security.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_broker_info_lookup_does_not_require_or_add_local_security():
+    from sentinel.api.routers.securities import get_broker_security_info
+
+    deps = MagicMock()
+    deps.broker.connected = True
+    info = {"short_name": "Apple", "currency": "USD", "lot": 1}
+    deps.broker.get_security_info = AsyncMock(return_value=info)
+    assert await get_broker_security_info(" AAPL.US ", deps) == {"symbol": "AAPL.US", "info": info}
+    deps.broker.get_security_info.assert_awaited_once_with("AAPL.US")
+    deps.db.get_security.assert_not_called()
+    deps.broker.add_stock_list_ticker.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("symbol", "connected", "status"), [(" ", True, 400), ("AAPL.US", False, 503), ("NO", True, 404)]
+)
+async def test_broker_info_validation_and_failure(symbol, connected, status):
+    from sentinel.api.routers.securities import get_broker_security_info
+
+    deps = MagicMock()
+    deps.broker.connected = connected
+    deps.broker.get_security_info = AsyncMock(return_value=None)
+    with pytest.raises(HTTPException) as exc:
+        await get_broker_security_info(symbol, deps)
+    assert exc.value.status_code == status
+    if status != 404:
+        deps.broker.get_security_info.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_get_unified_view_returns_empty_list_when_no_securities():
     """GET /api/unified returns empty list when no securities exist."""
     from sentinel.api.routers.securities import get_unified_view

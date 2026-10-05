@@ -49,10 +49,12 @@ operations and preserve their return values and failure behavior.
 |---|---|
 | `securities_overview_get` | Unified positions, prices, allocation, and plan view |
 | `securities_list` | Active and inactive universe rows |
+| `securities_search` | Search Tradernet's catalog by symbol, name, or ISIN, optionally restricted by exchange |
+| `security_broker_info_get` | Broker metadata for any exact symbol, including untracked instruments |
 | `security_get` | One security and its controls |
 | `security_prices_get` | Validated historical prices |
 | `security_prices_sync` | Synchronize one security's historical prices |
-| `security_add` | Add or re-enable a broker security |
+| `security_add` | Add to Freedom24 Favorites and add or re-enable in Sentinel |
 | `security_update` | Update aliases, execution controls, or AI multiplier |
 | `security_remove` | Apply the normal safe universe-removal rules |
 | `trades_get` | Filtered, paginated trade history |
@@ -63,6 +65,34 @@ operations and preserve their return values and failure behavior.
 `security_buy` and `security_sell` do not bypass Sentinel. They instantiate the
 same `Security` service used by the HTTP API, including its trading-mode,
 broker, quantity, and price protections.
+
+To discover and manage instruments:
+
+1. Call `securities_search` with `query`, for example `Apple`, `AAPL.US`, or
+   `US0378331005`. Tradernet returns up to 30 candidates, including securities
+   that Sentinel does not yet track. An optional `exchange` such as `FIX` or
+   `EU` filters those returned candidates by market code. It does not search
+   beyond the broker's initial result limit; use a more specific query if needed.
+2. Inspect the returned `symbol`, name, ISIN, market, currency, instrument type
+   and kind. Original broker fields are retained. `tracked` includes inactive
+   local rows; `in_universe` means the local row is active. `allow_buy` and
+   `allow_sell` are the local permissions, or null for untracked instruments.
+3. Call `security_broker_info_get` with an exact returned `symbol` for broker
+   details such as currency, market, and minimum lot. The result contains
+   `symbol` and the broker's `info` object. Search and lookup do not change
+   Favorites or local state.
+4. Call `security_add` with that symbol to add it to Favorites and import its
+   metadata and historical prices, or reactivate an inactive row. Adding an
+   already-active symbol returns an error.
+5. Call `security_remove` to remove it from Favorites. Owned symbols remain
+   active with buying disabled and selling enabled; unowned symbols become
+   inactive. No sell order is submitted. Repeating removal on an inactive row
+   permanently deletes its derived data only if there is no position or
+   historical transaction. Historical transactions are preserved.
+
+An empty search result means no matches. Broker disconnection and failed or
+malformed search responses return tool errors rather than an empty result.
+Broker metadata lookup returns an error when information is unavailable.
 
 ### Settings and scheduled jobs
 

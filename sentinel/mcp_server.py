@@ -132,6 +132,23 @@ async def securities_list() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
+async def securities_search(query: str, exchange: str | None = None) -> list[dict[str, Any]]:
+    """Search broker symbols, names, or ISINs beyond Sentinel's universe; up to 30 matches.
+
+    Optionally filter returned candidates by exchange (e.g. FIX or EU). Results include exact broker
+    symbols, instrument metadata, tracked/in_universe status, and local trade permissions.
+    Use security_broker_info_get to inspect a match and security_add to track it.
+    """
+    return await _call(securities_api.search_securities(await _deps(), query, exchange))
+
+
+@mcp.tool()
+async def security_broker_info_get(symbol: str) -> dict[str, Any]:
+    """Get broker metadata for an exact symbol, including symbols outside Sentinel's universe; read-only."""
+    return await _call(securities_api.get_broker_security_info(symbol, await _deps()))
+
+
+@mcp.tool()
 async def security_get(symbol: str) -> dict[str, Any]:
     """Get one security's metadata, current position, buy/sell permissions, and AI research preference."""
     return await _call(securities_api.get_security(symbol, await _deps()))
@@ -151,7 +168,11 @@ async def security_prices_sync(symbol: str, days: int = 365) -> dict[str, int]:
 
 @mcp.tool()
 async def security_add(symbol: str) -> dict[str, Any]:
-    """Add or reactivate a broker symbol in Sentinel's tracked universe; does not place an order."""
+    """Add or reactivate an exact broker symbol in Freedom24 Favorites and Sentinel's universe; no order.
+
+    Use securities_search to find the symbol first. Imports metadata and historical
+    prices. Already-active symbols return an error.
+    """
     return await _call(securities_api.add_security({"symbol": symbol}, await _deps()))
 
 
@@ -169,7 +190,11 @@ async def security_update(symbol: str, changes: dict[str, Any]) -> dict[str, Any
 
 @mcp.tool()
 async def security_remove(symbol: str) -> dict[str, Any]:
-    """Remove from Favorites and the active universe without selling; repeating may delete inactive derived data."""
+    """Remove from Favorites without selling: held symbols stay active with buys disabled, others become inactive.
+
+    Repeating on an inactive symbol permanently deletes derived data only when
+    there is no position or historical transaction; transaction history is preserved.
+    """
     return await _call(securities_api.delete_security(symbol, await _deps(), False))
 
 

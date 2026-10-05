@@ -153,6 +153,66 @@ async def add_security(
     }
 
 
+@router.get("/search")
+async def search_securities(
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+    query: str,
+    exchange: str | None = None,
+) -> list[dict[str, Any]]:
+    """Search the broker catalog without adding symbols to the universe."""
+    query = query.strip()
+    if not query:
+        raise HTTPException(status_code=400, detail="Search query is required")
+    if exchange is not None:
+        exchange = exchange.strip().upper()
+        if not exchange:
+            raise HTTPException(status_code=400, detail="Exchange must be non-empty when supplied")
+    if not deps.broker.connected:
+        raise HTTPException(status_code=503, detail="Broker is not connected")
+    matches = await deps.broker.search_securities(query, exchange)
+    if matches is None:
+        raise HTTPException(status_code=502, detail="Broker security search failed")
+    securities = {row["symbol"]: row for row in await deps.db.get_all_securities(active_only=False)}
+    results = []
+    for match in matches:
+        symbol = match["t"].strip()
+        local = securities.get(symbol)
+        results.append(
+            {
+                **match,
+                "symbol": symbol,
+                "name": match.get("nm") or match.get("ln") or match.get("n") or symbol,
+                "market": match.get("mkt"),
+                "market_id": match.get("mkt_id"),
+                "currency": match.get("x_curr"),
+                "instrument_type": match.get("type"),
+                "instrument_kind": match.get("kind"),
+                "tracked": local is not None,
+                "in_universe": bool(local and local.get("active")),
+                "allow_buy": bool(local.get("allow_buy")) if local else None,
+                "allow_sell": bool(local.get("allow_sell")) if local else None,
+            }
+        )
+    return results
+
+
+@router.get("/{symbol}/broker-info")
+async def get_broker_security_info(
+    symbol: str,
+    deps: Annotated[CommonDependencies, Depends(get_common_deps)],
+) -> dict[str, Any]:
+    """Inspect broker metadata even when a symbol is not tracked locally."""
+    symbol = symbol.strip()
+    if not symbol:
+        raise HTTPException(status_code=400, detail="Symbol is required")
+    if not deps.broker.connected:
+        raise HTTPException(status_code=503, detail="Broker is not connected")
+    info = await deps.broker.get_security_info(symbol)
+    if not info:
+        raise HTTPException(status_code=404, detail="Broker security information unavailable")
+    return {"symbol": symbol, "info": info}
+
+
 @router.delete("/{symbol}")
 async def delete_security(
     symbol: str,

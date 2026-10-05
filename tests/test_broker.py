@@ -39,6 +39,87 @@ def broker():
     return instance
 
 
+class TestSearchSecurities:
+    @pytest.mark.asyncio
+    async def test_search_uses_sdk_and_preserves_broker_fields(self, broker):
+        rows = [{"t": "AAPL.US", "n": "Apple Inc.", "isin": "US0378331005", "mkt": "FIX"}]
+        broker._api.find_symbol.return_value = {"found": rows, "code": 0}
+
+        assert await broker.search_securities("Apple", "FIX") == rows
+        broker._api.find_symbol.assert_called_once_with("Apple")
+
+    @pytest.mark.asyncio
+    async def test_filters_candidates_using_market_code_not_broken_sdk_exchange_query(self, broker):
+        us = {"t": "AAPL.US", "nm": "Apple", "mkt": "FIX"}
+        eu = {"t": "APC.EU", "nm": "Apple", "mkt": "EU"}
+        broker._api.find_symbol.return_value = {"found": [us, eu]}
+        assert await broker.search_securities("Apple", "eu") == [eu]
+        broker._api.find_symbol.assert_called_once_with("Apple")
+
+    @pytest.mark.asyncio
+    async def test_successful_search_without_matches(self, broker):
+        broker._api.find_symbol.return_value = {"found": []}
+        assert await broker.search_securities("no matches") == []
+        broker._api.find_symbol.assert_called_once_with("no matches")
+
+    @pytest.mark.asyncio
+    async def test_disconnected_search(self):
+        assert await Broker().search_securities("Apple") is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "response",
+        [
+            None,
+            [],
+            {},
+            {"found": None},
+            {"found": {}, "code": 0},
+            {"found": [], "code": 7},
+            {"found": [], "errMsg": "Not allowed"},
+            {"found": [], "error": "Not allowed"},
+            {"found": [None]},
+            {"found": [{"t": 123}]},
+            {"found": [{"t": " "}]},
+        ],
+    )
+    async def test_failures_are_not_reported_as_no_matches(self, broker, response):
+        broker._api.find_symbol.return_value = response
+        assert await broker.search_securities("Apple") is None
+
+    @pytest.mark.asyncio
+    async def test_sdk_failure(self, broker):
+        broker._api.find_symbol.side_effect = RuntimeError("Upstream unavailable")
+        assert await broker.search_securities("Apple") is None
+
+
+class TestGetSecurityInfo:
+    @pytest.mark.asyncio
+    async def test_preserves_metadata(self, broker):
+        info = {"short_name": "Apple Inc.", "currency": "USD", "lot": 1, "code": 0}
+        broker._api.security_info.return_value = info
+        assert await broker.get_security_info("AAPL.US") == info
+        broker._api.security_info.assert_called_once_with("AAPL.US")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "response",
+        [None, [], {}, {"code": 7}, {"errMsg": "Unknown ticker"}, {"error": "Unknown ticker"}],
+    )
+    async def test_rejects_error_payloads_instead_of_importing_them(self, broker, response):
+        broker._api.security_info.return_value = response
+        assert await broker.get_security_info("UNKNOWN") is None
+
+    @pytest.mark.asyncio
+    async def test_disconnected(self):
+        assert await Broker().get_security_info("AAPL.US") is None
+
+    @pytest.mark.asyncio
+    async def test_sdk_failure(self, broker):
+        broker._api.security_info.side_effect = RuntimeError("Upstream unavailable")
+        assert await broker.get_security_info("AAPL.US") is None
+
+
 class TestGetSecurityMetadata:
     """Verify Broker.get_security_metadata against captured Tradernet responses."""
 

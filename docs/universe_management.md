@@ -43,8 +43,16 @@ Imports normally request 20 years of historical prices. A metadata or history
 failure is logged and does not undo the security row; a later sync retries it.
 
 Manual security creation is available through `POST /api/securities`, described
-in [Securities API](api/securities.md). It is separate from Favorites
-reconciliation.
+in [Securities API](api/securities.md). It adds the symbol to Freedom24 Favorites
+before importing it locally; later Favorites reconciliation therefore retains it.
+The MCP `security_add` tool uses the same operation.
+
+`GET /api/securities/search` and MCP `securities_search` discover instruments in
+Tradernet's catalog before adding them. Search results distinguish active,
+inactive, and untracked local symbols and include exact broker symbols for
+subsequent operations. `GET /api/securities/{symbol}/broker-info` and MCP
+`security_broker_info_get` inspect broker metadata without importing the symbol.
+See [MCP](mcp.md#securities-and-account-history) for the complete workflow.
 
 ## Removal rules
 

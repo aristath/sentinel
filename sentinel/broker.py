@@ -143,6 +143,40 @@ class Broker:
     # Market Data
     # -------------------------------------------------------------------------
 
+    async def search_securities(self, query: str, exchange: str | None = None) -> list[dict] | None:
+        """Search Tradernet's catalog, including symbols outside the local universe.
+
+        The tickerFinder SDK operation returns at most 30 candidates; exchange
+        filtering is applied to those results. None means
+        unavailable or failed; an empty list means a successful search with no matches.
+        """
+        if not self._api:
+            return None
+        try:
+            # The SDK's query@exchange syntax currently returns no matches for
+            # known symbols. Search normally and filter the returned market codes.
+            response = await asyncio.to_thread(self._api.find_symbol, query)
+        except Exception as exc:
+            logger.error("Tradernet security search failed: %s", exc)
+            return None
+        if (
+            not isinstance(response, dict)
+            or response.get("errMsg")
+            or response.get("error")
+            or response.get("code") not in (None, 0, "0")
+        ):
+            logger.error("Tradernet security search returned an error or invalid response")
+            return None
+        rows = response.get("found")
+        if not isinstance(rows, list) or any(
+            not isinstance(row, dict) or not isinstance(row.get("t"), str) or not row["t"].strip() for row in rows
+        ):
+            logger.error("Tradernet security search returned invalid matches")
+            return None
+        if exchange is not None:
+            return [row for row in rows if str(row.get("mkt") or "").upper() == exchange.upper()]
+        return rows
+
     async def get_quote(self, symbol: str) -> Optional[dict]:
         """Get current quote for a symbol."""
         if not self._api:
@@ -583,10 +617,20 @@ class Broker:
         if not self._api:
             return None
         try:
-            return self._api.security_info(symbol)
+            response = self._api.security_info(symbol)
         except Exception as e:
             logger.error(f"Failed to get security info for {symbol}: {e}")
             return None
+        if (
+            not isinstance(response, dict)
+            or not response
+            or response.get("errMsg")
+            or response.get("error")
+            or response.get("code") not in (None, 0, "0")
+        ):
+            logger.error("Tradernet returned invalid security info for %s", symbol)
+            return None
+        return response
 
     async def get_security_metadata(self, symbol: str) -> Optional[dict]:
         """Fetch country-of-risk and TRBC industry for one ticker from `getAllSecurities`.
