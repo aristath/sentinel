@@ -99,7 +99,9 @@ only used by `/api/portfolio/structure`, an unstable web-scraping integration.
 
 Security ratings range from `0` (avoid) through `0.5` (neutral) to `1`
 (prefer). The fixed `decay:ai_research_multipliers` job moves stale stored
-ratings toward neutral.
+ratings toward neutral. Unrated securities store `NULL`, without a database
+default, and display `-` in the AI score column. They do not qualify for
+AI-derived targets, and the decay job never creates a rating for them.
 
 ## Forecasting settings
 

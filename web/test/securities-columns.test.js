@@ -10,6 +10,37 @@ await import("../src/sentinel-securities.js");
 const SentinelSecurities = registry.get("sentinel-securities");
 const settingKey = "ui_securities_table_columns";
 
+test("keeps unrated scores separate from zero in both sort directions", () => {
+  const element = new SentinelSecurities();
+  element.securities.value = [
+    { symbol: "NULL", ai_research_multiplier: null },
+    { symbol: "MISSING" },
+    { symbol: "MAX", ai_research_multiplier: 1 },
+    { symbol: "ZERO", ai_research_multiplier: 0 },
+  ];
+  element.changeSort("ai_score");
+  assert.deepEqual(element.visibleSecurities.map((s) => s.symbol), ["ZERO", "MAX", "MISSING", "NULL"]);
+  element.changeSort("ai_score");
+  assert.deepEqual(element.visibleSecurities.map((s) => s.symbol), ["MAX", "ZERO", "MISSING", "NULL"]);
+});
+
+test("renders missing AI scores as a dash in the table and expanded details", () => {
+  const element = new SentinelSecurities();
+  for (const [score, expected] of [[null, "-"], [undefined, "-"], [0, "0.0%"], [0.5, "50.0%"], [1, "100.0%"]]) {
+    const result = element.renderSecurityRow({ symbol: "SCORE", ai_research_multiplier: score });
+    const cells = result.values.flat(Infinity).filter((value) => value?.strings);
+    const cell = cells.find((value) => value.strings.join("").includes("AI research rating"));
+    assert.ok(cell);
+    assert.ok(cell.values.includes(expected));
+  }
+  const row = element.renderExpandedRow({ symbol: "NULL", ai_research_multiplier: null }, "details");
+  const details = row.values.flat(Infinity).filter((value) => value?.values);
+  const rating = details.find((value) => value.values.includes("AI research"));
+  assert.ok(rating);
+  assert.ok(rating.values.includes("-"));
+  assert.ok(!rating.values.includes("0.00"));
+});
+
 test("shows new columns for a legacy selection without restoring hidden columns", () => {
   const element = new SentinelSecurities();
   element.columnSettings.value = {

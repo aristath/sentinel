@@ -199,9 +199,19 @@ class SentinelSecurities extends LitElement {
             (right.current_allocation - right.ideal_allocation);
           break;
         case "ai_score":
+          if (
+            left.ai_research_multiplier == null ||
+            right.ai_research_multiplier == null
+          ) {
+            return (
+              Number(left.ai_research_multiplier == null) -
+                Number(right.ai_research_multiplier == null) ||
+              String(left.symbol).localeCompare(String(right.symbol))
+            );
+          }
           result =
-            Number(left.ai_research_multiplier ?? 0) -
-            Number(right.ai_research_multiplier ?? 0);
+            Number(left.ai_research_multiplier) -
+            Number(right.ai_research_multiplier);
           break;
         case "opportunity_score":
           result = Number(left.opp_score ?? 0) - Number(right.opp_score ?? 0);
@@ -922,7 +932,10 @@ class SentinelSecurities extends LitElement {
 
   renderExpandedRow(security, detailsId) {
     const aliasBusy = this.busyAction === `aliases:${security.symbol}`;
-    const multiplier = Number(security.ai_research_multiplier);
+    const multiplier =
+      security.ai_research_multiplier == null
+        ? Number.NaN
+        : Number(security.ai_research_multiplier);
 
     return html`
       <tr id=${detailsId}>

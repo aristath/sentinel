@@ -12,9 +12,9 @@ from sentinel.database import Database
 from sentinel.forecasting.scoring import adjusted_opportunity_score
 from sentinel.planner.preferences import (
     apply_max_cap,
-    normalize_ai_research_multiplier,
     normalize_weights,
     preference_tilt,
+    stored_ai_research_multiplier,
 )
 from sentinel.portfolio import Portfolio
 from sentinel.settings import DEFAULTS, Settings
@@ -128,10 +128,10 @@ class AllocationCalculator:
         forecasting_enabled = bool(config["forecasting_enabled"])
         forecast_timing_weight = config["forecasting_timing_weight"]
 
-        symbol_signals: dict[str, dict[str, float | int | str]] = {}
-        rebalance_signals: dict[str, dict[str, float | int | str]] = {}
+        symbol_signals: dict[str, dict] = {}
+        rebalance_signals: dict[str, dict] = {}
         ai_research_raw_weights: dict[str, float] = {}
-        preference_details: dict[str, dict[str, float]] = {}
+        preference_details: dict[str, dict] = {}
         symbols = [sec["symbol"] for sec in securities]
         forecast_scores: dict[str, dict] = {}
         if as_of_date is None and forecasting_enabled:
@@ -162,14 +162,15 @@ class AllocationCalculator:
             symbol = sec["symbol"]
             # The stored research rating is the truth — the weekly decay job has
             # already faded historical ratings; no read-time correction here.
-            stored_preference = normalize_ai_research_multiplier(sec.get("ai_research_multiplier", 0.5))
+            stored_preference = stored_ai_research_multiplier(sec.get("ai_research_multiplier"))
             preference_details[symbol] = {
                 "ai_research_multiplier": stored_preference,
             }
 
             raw = prices_by_symbol.get(symbol, [])
             closes = [float(p["close"]) for p in reversed(raw) if p.get("close") is not None]
-            signal: dict[str, float | int | str] = dict(compute_contrarian_signal(closes))
+            signal: dict = dict(compute_contrarian_signal(closes))
+            signal["ai_research_multiplier"] = stored_preference
             raw_opp = float(signal.get("opp_score", 0.0) or 0.0)
             recent_min = recent_dd252_min(closes, window_days=entry_memory_days)
             effective_opp = effective_opportunity_score(
@@ -207,7 +208,7 @@ class AllocationCalculator:
             # from the ideal entirely. Capital flows to qualifying securities.
             # Signals stay populated above so the rebalance engine can still
             # plan sells / maintenance on legacy holdings.
-            if stored_preference < ideal_qualifying_threshold:
+            if stored_preference is None or stored_preference < ideal_qualifying_threshold:
                 continue
             if not int(sec.get("allow_buy", 1) or 0):
                 continue
@@ -251,7 +252,7 @@ class AllocationCalculator:
                 "opportunity_target_pct": 0.0,
                 "final_target_pct": final_weight,
                 "allocation_sleeve": sleeve,
-                "ai_research_multiplier": detail.get("ai_research_multiplier", 0.5),
+                "ai_research_multiplier": detail["ai_research_multiplier"],
             }
 
         allocations = normalize_weights(allocations)

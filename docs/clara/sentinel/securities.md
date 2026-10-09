@@ -97,7 +97,7 @@ Update execution controls. Only the following fields are accepted; everything el
 | `aliases` | string | Comma-separated search aliases for companion apps |
 | `allow_buy` | int (0/1) | Whether buys are permitted |
 | `allow_sell` | int (0/1) | Whether sells are permitted |
-| `ai_research_multiplier` | float | Manual override of the AI research multiplier. Research tasks use `POST /api/securities/preference`. |
+| `ai_research_multiplier` | float or null | Manual override of the AI research multiplier; `null` clears the rating and its metadata. Missing scores stay `null`. Research tasks use `POST /api/securities/preference`. |
 | `ai_research_multiplier_analysis` | string | Optional rationale when setting `ai_research_multiplier` manually |
 | `active` | int (0/1) | Active flag |
 

@@ -123,6 +123,25 @@ async def test_add_security_ignores_client_supplied_geography_industry(deps: Com
     row = await deps.db.get_security("TEST.EU")
     assert row["geography"] != "Atlantis"
     assert row["industry"] != "Sandcastles"
+    assert row["ai_research_multiplier"] is None
+    assert row["ai_research_multiplier_updated_at"] is None
+    assert row["ai_research_multiplier_source"] is None
+    payload = client.get("/api/securities").json()
+    assert payload[0]["ai_research_multiplier"] is None
+
+
+@pytest.mark.asyncio
+async def test_null_override_clears_rating_and_metadata(deps: CommonDependencies):
+    await deps.db.upsert_security("TEST.EU", ai_research_multiplier=1.0)
+    await deps.db.update_ai_research_multiplier_preference(
+        "TEST.EU", ai_research_multiplier=1.0, source="manual", analysis="Rated"
+    )
+    client = _build_client(deps)
+    response = client.put("/api/securities/TEST.EU", json={"ai_research_multiplier": None})
+    assert response.status_code == 200
+    payload = response.json()
+    assert all(value is None for key, value in payload.items() if key.startswith("ai_research_multiplier"))
+    assert (await deps.db.get_security("TEST.EU"))["ai_research_multiplier"] is None
 
 
 @pytest.mark.asyncio

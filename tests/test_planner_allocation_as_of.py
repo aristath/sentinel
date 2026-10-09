@@ -70,6 +70,30 @@ def _allocation_settings(settings_values=None):
 
 
 @pytest.mark.asyncio
+async def test_unrated_securities_never_qualify_even_with_zero_threshold():
+    db = MagicMock()
+    db.cache_get = AsyncMock(return_value=None)
+    db.cache_set = AsyncMock()
+    db.get_all_securities = AsyncMock(
+        return_value=[
+            {"symbol": "MISSING"},
+            {"symbol": "NULL", "ai_research_multiplier": None},
+            {"symbol": "ZERO", "ai_research_multiplier": 0},
+            {"symbol": "RATED", "ai_research_multiplier": 0.8},
+        ]
+    )
+    db.get_prices = AsyncMock(return_value=_flat_prices())
+    db.get_uninvested_dividends = AsyncMock(return_value={})
+    calculator = AllocationCalculator(db=db, settings=_allocation_settings({"strategy_ideal_qualifying_threshold": 0}))
+    allocations = await calculator.calculate_ideal_portfolio()
+    assert set(allocations) == {"ZERO", "RATED"}
+    signals = calculator.get_last_signal_bundle()["rebalance_signals"]
+    assert signals["MISSING"].get("ai_research_multiplier") is None
+    assert signals["NULL"].get("ai_research_multiplier") is None
+    assert signals["ZERO"]["ai_research_multiplier"] == 0
+
+
+@pytest.mark.asyncio
 async def test_atomic_allocation_cache_restores_matching_signal_bundle():
     snapshot = {
         "ideal": {"AAA": 1.0},

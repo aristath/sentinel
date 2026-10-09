@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-gvKdpQ9R.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-Cl2EKNZO.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-gvKdpQ9R.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-Cl2EKNZO.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6257,7 +6257,7 @@ var SentinelPlannerStatus = class extends i {
 		const quantity = !target.isCash && Math.abs(quantityDelta) > 1e-4 ? b`&nbsp;·&nbsp;${quantityDelta > 0 ? "+" : "-"}${Math.abs(quantityDelta).toLocaleString()}
           sh` : "";
 		return b`
-      <span title=${target.isCash ? "Cash left after deploying all affordable whole-lot purchases" : `AI research ${Number(target.ai_research_multiplier ?? 0).toFixed(2)}, opportunity ${Number(target.opportunity_score ?? 0).toFixed(2)}`}
+      <span title=${target.isCash ? "Cash left after deploying all affordable whole-lot purchases" : `AI research ${target.ai_research_multiplier == null ? "-" : Number(target.ai_research_multiplier).toFixed(2)}, opportunity ${Number(target.opportunity_score ?? 0).toFixed(2)}`}
         >${index > 0 ? b`<span aria-hidden="true">&nbsp;&nbsp;</span>` : ""}${target.symbol}&nbsp;${formatCurrency(target.target_value_eur)}
         (${gap >= 0 ? "+" : "-"}${formatCurrency(Math.abs(gap))}${quantity})</span
       >
@@ -7345,7 +7345,8 @@ var SentinelSecurities = class extends i {
 					result = left.current_allocation - left.ideal_allocation - (right.current_allocation - right.ideal_allocation);
 					break;
 				case "ai_score":
-					result = Number(left.ai_research_multiplier ?? 0) - Number(right.ai_research_multiplier ?? 0);
+					if (left.ai_research_multiplier == null || right.ai_research_multiplier == null) return Number(left.ai_research_multiplier == null) - Number(right.ai_research_multiplier == null) || String(left.symbol).localeCompare(String(right.symbol));
+					result = Number(left.ai_research_multiplier) - Number(right.ai_research_multiplier);
 					break;
 				case "opportunity_score":
 					result = Number(left.opp_score ?? 0) - Number(right.opp_score ?? 0);
@@ -7825,7 +7826,7 @@ var SentinelSecurities = class extends i {
 	}
 	renderExpandedRow(security, detailsId) {
 		const aliasBusy = this.busyAction === `aliases:${security.symbol}`;
-		const multiplier = Number(security.ai_research_multiplier);
+		const multiplier = security.ai_research_multiplier == null ? NaN : Number(security.ai_research_multiplier);
 		return b`
       <tr id=${detailsId}>
         <td

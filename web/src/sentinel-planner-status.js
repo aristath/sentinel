@@ -99,7 +99,7 @@ class SentinelPlannerStatus extends LitElement {
         : "";
     const title = target.isCash
       ? "Cash left after deploying all affordable whole-lot purchases"
-      : `AI research ${Number(target.ai_research_multiplier ?? 0).toFixed(2)}, opportunity ${Number(
+      : `AI research ${target.ai_research_multiplier == null ? "-" : Number(target.ai_research_multiplier).toFixed(2)}, opportunity ${Number(
           target.opportunity_score ?? 0,
         ).toFixed(2)}`;
 

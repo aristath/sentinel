@@ -43,7 +43,7 @@ Returns all securities in the universe (including inactive ones).
 | `industry` | Refinitiv/LSEG TRBC industry name from Tradernet (`sector_code`). Auto‑filled by the metadata sync; blank for ETFs. Not editable via the API. |
 | `market_id` | Broker market identifier string |
 | `data` | Raw JSON metadata blob from broker (security details, market info) |
-| `ai_research_multiplier` | Stored AI research rating, 0 avoid, 0.5 neutral, 1 prefer |
+| `ai_research_multiplier` | Stored AI research rating, 0 avoid, 0.5 neutral, 1 prefer; `null` when unrated |
 | `ai_research_multiplier_updated_at` | Last per-security preference update timestamp |
 | `ai_research_multiplier_source` | Rating source, usually `ai_research`, `manual`, `decay`, or `migration` |
 | `ai_research_multiplier_analysis` | Human-readable rationale for the stored preference |
@@ -243,7 +243,7 @@ Update security metadata and execution controls. Only the following fields are a
 | `aliases` | string | Comma-separated search aliases for companion apps |
 | `allow_buy` | int (0/1) | Whether buys are permitted |
 | `allow_sell` | int (0/1) | Whether sells are permitted |
-| `ai_research_multiplier` | float | Manual override of the stored AI research multiplier. Research tasks use `POST /api/securities/preference`. |
+| `ai_research_multiplier` | float or null | Manual override of the stored AI research multiplier. `null` clears the rating and its metadata. Research tasks use `POST /api/securities/preference`. |
 | `ai_research_multiplier_analysis` | string | Optional rationale when setting `ai_research_multiplier` manually |
 | `active` | int (0/1) | Active flag |
 

@@ -1137,6 +1137,77 @@ class Database(TaskDatabaseMixin, BaseDatabase):
     # Schema
     # -------------------------------------------------------------------------
 
+    async def _migrate_nullable_ai_scores(self) -> None:
+        """Remove legacy score defaults without rebuilding history tables.
+
+        DROP/ADD changes only these columns, preserving all other columns,
+        rowids and foreign-key relationships. A savepoint makes the data and
+        schema change atomic, including restoration of dependent indexes.
+        """
+        cursor = await self.conn.execute("PRAGMA table_info(securities)")
+        columns = {row["name"]: row for row in await cursor.fetchall()}
+        score = columns["ai_research_multiplier"]
+        source = columns["ai_research_multiplier_source"]
+        if (
+            score["dflt_value"] is None
+            and not score["notnull"]
+            and source["dflt_value"] is None
+            and not source["notnull"]
+        ):
+            return
+
+        await self.conn.execute("SAVEPOINT nullable_ai_scores")
+        try:
+            await self.conn.execute(
+                """CREATE TEMP TABLE nullable_ai_score_values AS
+                   SELECT symbol, ai_research_multiplier, ai_research_multiplier_source FROM securities"""
+            )
+            cursor = await self.conn.execute(
+                """SELECT type, name, sql FROM sqlite_master
+                   WHERE tbl_name = 'securities' AND sql IS NOT NULL
+                     AND type IN ('index', 'trigger')
+                     AND instr(sql, 'ai_research_multiplier') > 0"""
+            )
+            dependencies = await cursor.fetchall()
+            for dependency in dependencies:
+                name = dependency["name"].replace('"', '""')
+                await self.conn.execute(f'DROP {dependency["type"]} "{name}"')  # noqa: S608
+            await self.conn.execute("ALTER TABLE securities DROP COLUMN ai_research_multiplier")
+            await self.conn.execute("ALTER TABLE securities ADD COLUMN ai_research_multiplier REAL")
+            await self.conn.execute("ALTER TABLE securities DROP COLUMN ai_research_multiplier_source")
+            await self.conn.execute("ALTER TABLE securities ADD COLUMN ai_research_multiplier_source TEXT")
+            await self.conn.execute(
+                """UPDATE securities SET
+                   ai_research_multiplier = (SELECT ai_research_multiplier FROM nullable_ai_score_values
+                                             WHERE symbol = securities.symbol),
+                   ai_research_multiplier_source = (SELECT ai_research_multiplier_source FROM nullable_ai_score_values
+                                                    WHERE symbol = securities.symbol)"""
+            )
+            # The old default plus migration provenance and no analysis is an
+            # unrated row, even if startup previously manufactured a timestamp.
+            await self.conn.execute(
+                """UPDATE securities
+                   SET ai_research_multiplier = NULL,
+                       ai_research_multiplier_updated_at = NULL,
+                       ai_research_multiplier_source = NULL,
+                       ai_research_multiplier_analysis = NULL
+                   WHERE (ai_research_multiplier_source IS NULL
+                          OR ai_research_multiplier_source IN ('', 'migration'))
+                     AND (ai_research_multiplier_analysis IS NULL
+                          OR trim(ai_research_multiplier_analysis) = '')
+                     AND (ai_research_multiplier IS NULL
+                          OR ai_research_multiplier IN (0.5, 1.0))"""
+            )
+            for dependency in dependencies:
+                await self.conn.execute(dependency["sql"])
+            await self.conn.execute("DROP TABLE nullable_ai_score_values")
+            await self.conn.execute("DELETE FROM cache WHERE key LIKE 'planner:%'")
+            await self.conn.execute("RELEASE nullable_ai_scores")
+        except BaseException:
+            await self.conn.execute("ROLLBACK TO nullable_ai_scores")
+            await self.conn.execute("RELEASE nullable_ai_scores")
+            raise
+
     async def _init_schema(self) -> None:
         """Initialize database schema."""
         await self.conn.executescript(SCHEMA)
@@ -1161,21 +1232,7 @@ class Database(TaskDatabaseMixin, BaseDatabase):
             if column not in security_columns:
                 await self.conn.execute(statement)
 
-        now_iso = datetime.now(timezone.utc).isoformat()
-        await self.conn.execute(
-            "UPDATE securities SET ai_research_multiplier = 0.5 WHERE ai_research_multiplier IS NULL"
-        )
-        await self.conn.execute(
-            """UPDATE securities
-                  SET ai_research_multiplier_updated_at = ?
-                WHERE ai_research_multiplier_updated_at IS NULL""",
-            (now_iso,),
-        )
-        await self.conn.execute(
-            """UPDATE securities
-               SET ai_research_multiplier_source = 'migration'
-               WHERE ai_research_multiplier_source IS NULL OR ai_research_multiplier_source = ''""",
-        )
+        await self._migrate_nullable_ai_scores()
         await self.conn.execute("DELETE FROM settings WHERE key = 'strategy_opportunity_target_max_pct'")
         await self.conn.execute("DROP TABLE IF EXISTS ai_requests")
         await self.conn.execute("DROP TABLE IF EXISTS ai_units")
@@ -1223,9 +1280,9 @@ CREATE TABLE IF NOT EXISTS securities (
     active INTEGER DEFAULT 1,
     allow_buy INTEGER DEFAULT 1,
     allow_sell INTEGER DEFAULT 1,
-    ai_research_multiplier REAL DEFAULT 0.5,  -- AI research rating (0 avoid, 0.5 neutral, 1 prefer)
+    ai_research_multiplier REAL,  -- NULL = unrated; 0 avoid, 0.5 neutral, 1 prefer
     ai_research_multiplier_updated_at TEXT,
-    ai_research_multiplier_source TEXT NOT NULL DEFAULT 'migration',
+    ai_research_multiplier_source TEXT,
     ai_research_multiplier_analysis TEXT,
     universe_source TEXT NOT NULL DEFAULT 'migration',
     universe_last_seen_at TEXT,

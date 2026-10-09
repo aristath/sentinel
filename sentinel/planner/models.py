@@ -11,7 +11,7 @@ class LongTermTarget:
     """Executable terminal target and current distance for one security."""
 
     symbol: str
-    ai_research_multiplier: float
+    ai_research_multiplier: float | None
     opportunity_score: float
     target_allocation: float
     current_value_eur: float

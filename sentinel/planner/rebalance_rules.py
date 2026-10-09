@@ -127,17 +127,18 @@ def generate_buy_reason(
     dip = float(signal.get("dip_score", 0.0))
     cap = float(signal.get("capitulation_score", 0.0))
     turn = int(signal.get("cycle_turn", 0))
-    ai_research_multiplier = float(signal.get("ai_research_multiplier", 0.5) or 0.5)
+    rating = signal.get("ai_research_multiplier")
+    ai_research_multiplier = "-" if rating is None else f"{float(rating):.2f}"
 
     if current_alloc == 0:
         return (
             f"New target entry ({lot_class} lot): opportunity={contrarian_score:.2f}, "
-            f"AI research={ai_research_multiplier:.2f}, dip={dip:.2f}, cap={cap:.2f}, turn={turn}"
+            f"AI research={ai_research_multiplier}, dip={dip:.2f}, cap={cap:.2f}, turn={turn}"
         )
 
     return (
         f"Target-gap buy: underweight by {underweight:.1f}%, opportunity={contrarian_score:.2f}, "
-        f"AI research={ai_research_multiplier:.2f}, dip={dip:.2f}, cap={cap:.2f}, turn={turn}, lot={lot_class}"
+        f"AI research={ai_research_multiplier}, dip={dip:.2f}, cap={cap:.2f}, turn={turn}, lot={lot_class}"
     )
 
 

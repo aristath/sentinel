@@ -51,6 +51,14 @@ Schema changes must support an existing production database:
 
 Do not require an operator to run raw SQL as the normal upgrade path.
 
+AI ratings have no database default. `ai_research_multiplier` and its source,
+analysis and update timestamp are `NULL` until a rating is explicitly recorded.
+Initialization never fills a missing score or manufactures a rating timestamp.
+The nullable-score migration removes legacy defaults and clears unauthored
+`0.5`/`1.0` values with migration provenance and no analysis. Genuine ratings,
+including explicit neutral, zero and maximum scores, retain their metadata.
+The upgrade preserves security rowids and history and invalidates planner caches.
+
 ## Concurrency
 
 All database operations use the shared async database layer. Long multi-step

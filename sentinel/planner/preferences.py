@@ -26,15 +26,23 @@ STRATEGIC_BUY_PRESSURE_THRESHOLD = 0.70
 DEFAULT_DECAY_FADE_FACTOR = 0.9
 
 
-def normalize_ai_research_multiplier(value: Any) -> float:
-    """Normalize an AI research multiplier into [0.0, 1.0]."""
+def stored_ai_research_multiplier(value: Any) -> float | None:
+    """Read a rating without manufacturing one for missing/invalid data."""
+    if value is None:
+        return None
     try:
         parsed = float(value)
     except (TypeError, ValueError, OverflowError):
-        return NEUTRAL_AI_RESEARCH_MULTIPLIER
+        return None
     if not math.isfinite(parsed):
-        return NEUTRAL_AI_RESEARCH_MULTIPLIER
+        return None
     return max(0.0, min(1.0, parsed))
+
+
+def normalize_ai_research_multiplier(value: Any) -> float:
+    """Numeric neutral tilt for internal arithmetic, never a stored/API rating."""
+    rating = stored_ai_research_multiplier(value)
+    return NEUTRAL_AI_RESEARCH_MULTIPLIER if rating is None else rating
 
 
 def parse_utc_datetime(value: object) -> datetime | None:
@@ -125,7 +133,8 @@ def has_strategic_buy_pressure(
     threshold: object = STRATEGIC_BUY_PRESSURE_THRESHOLD,
 ) -> bool:
     """Return whether a stored preference is meaningfully above neutral."""
-    return normalize_ai_research_multiplier(effective_multiplier) >= normalize_ai_research_multiplier(threshold)
+    rating = stored_ai_research_multiplier(effective_multiplier)
+    return rating is not None and rating >= normalize_ai_research_multiplier(threshold)
 
 
 def is_explicit_downgrade(security: dict[str, Any]) -> bool:
@@ -138,18 +147,16 @@ def is_explicit_downgrade(security: dict[str, Any]) -> bool:
     - `ai_research_multiplier <= 0.5` (at or below neutral), and
     - `ai_research_multiplier_updated_at` is present (the slider was actually touched).
 
-    Never-rated securities sit at the 0.5 default with a NULL timestamp, so they
+    Never-rated securities have a NULL rating and timestamp, so they
     are NOT downgrades — a name nobody has assessed must not be sold at a loss
-    just because it defaults to neutral. The weekly decay job only ever fades
+    just because it has no rating. The weekly decay job only ever fades
     values *toward* 0.5 (never across it) and skips already-neutral rows, so a
     `<= 0.5` value carrying a timestamp always traces back to a deliberate rating.
     """
     if parse_utc_datetime(security.get("ai_research_multiplier_updated_at")) is None:
         return False
-    return (
-        normalize_ai_research_multiplier(security.get("ai_research_multiplier", NEUTRAL_AI_RESEARCH_MULTIPLIER))
-        <= NEUTRAL_AI_RESEARCH_MULTIPLIER
-    )
+    rating = stored_ai_research_multiplier(security.get("ai_research_multiplier"))
+    return rating is not None and rating <= NEUTRAL_AI_RESEARCH_MULTIPLIER
 
 
 def normalize_weights(weights: dict[str, float]) -> dict[str, float]:
@@ -212,15 +219,16 @@ def apply_max_cap(weights: dict[str, float], max_position: float) -> dict[str, f
     return {symbol: weight for symbol, weight in capped.items() if weight > 0}
 
 
-def preference_snapshot(security: dict[str, Any], *, now: datetime | None = None) -> dict[str, float]:
+def preference_snapshot(security: dict[str, Any], *, now: datetime | None = None) -> dict[str, float | None]:
     """Return preference info for one security.
 
     The "effective" value is now identical to the stored value (no read-time
     fade), but we still surface `ai_research_multiplier_age_weeks` so the UI can show
     when the slider was last touched.
     """
-    stored = normalize_ai_research_multiplier(security.get("ai_research_multiplier", NEUTRAL_AI_RESEARCH_MULTIPLIER))
-    weeks = age_weeks(security.get("ai_research_multiplier_updated_at"), now=now)
+    stored = stored_ai_research_multiplier(security.get("ai_research_multiplier"))
+    timestamp = security.get("ai_research_multiplier_updated_at")
+    weeks = age_weeks(timestamp, now=now) if stored is not None and parse_utc_datetime(timestamp) is not None else None
     return {
         "ai_research_multiplier": stored,
         "ai_research_multiplier_age_weeks": weeks,

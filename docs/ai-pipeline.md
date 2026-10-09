@@ -142,6 +142,10 @@ logs. See [AI API](api/ai.md) and [Tasks API](api/tasks.md).
 
 `ai_research_multiplier` is bounded to `0..1`:
 
+Unrated securities have `NULL`, with no database default or fabricated update
+timestamp. The API preserves `null` and the UI displays `-`. Neither planning
+nor decay manufactures an AI rating for them.
+
 - `0`: avoid
 - `0.5`: neutral
 - `1`: prefer

@@ -1022,7 +1022,9 @@ class RebalanceEngine:
             lot_class=lot_class,
             ticket_pct=ticket_pct,
             memory_entry=memory_entry,
-            ai_research_multiplier=float(signal.get("ai_research_multiplier", 0.5) or 0.5),
+            ai_research_multiplier=(
+                None if signal.get("ai_research_multiplier") is None else float(signal["ai_research_multiplier"])
+            ),
             ai_research_target_pct=float(signal.get("ai_research_target_pct", 0.0) or 0.0),
             baseline_target_pct=float(signal.get("baseline_target_pct", 0.0) or 0.0),
             opportunity_target_pct=float(signal.get("opportunity_target_pct", 0.0) or 0.0),

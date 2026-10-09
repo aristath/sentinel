@@ -266,8 +266,8 @@ async def decay_ai_research_multipliers(db, settings=None) -> None:
         DEFAULT_DECAY_FADE_FACTOR,
         NEUTRAL_AI_RESEARCH_MULTIPLIER,
         decayed_ai_research_multiplier,
-        normalize_ai_research_multiplier,
         parse_utc_datetime,
+        stored_ai_research_multiplier,
     )
 
     if settings is None:
@@ -300,7 +300,9 @@ async def decay_ai_research_multipliers(db, settings=None) -> None:
         if updated_at > cutoff:
             continue
 
-        current = normalize_ai_research_multiplier(sec.get("ai_research_multiplier", NEUTRAL_AI_RESEARCH_MULTIPLIER))
+        current = stored_ai_research_multiplier(sec.get("ai_research_multiplier"))
+        if current is None:
+            continue
         if abs(current - NEUTRAL_AI_RESEARCH_MULTIPLIER) < 1e-9:
             # Already neutral — nothing to fade, no write needed.
             continue

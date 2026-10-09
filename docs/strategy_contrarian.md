@@ -11,7 +11,8 @@ Sentinel separates the long-term destination from short-term timing:
 
 ## Ideal allocation
 
-Each active security has an `ai_research_multiplier` from 0 through 1. A value
+Rated securities have an `ai_research_multiplier` from 0 through 1. Unrated
+securities have `NULL` and never qualify for an AI-derived target. A value
 of 0.5 is neutral. Securities below `strategy_ideal_qualifying_threshold`, or
 with buying disabled, receive no ideal weight. Qualifying ratings are converted
 to positive tilts with `ai_research_multiplier_strength`, normalized, and
@@ -91,7 +92,7 @@ The rebalance engine:
 
 An ordinary overweight is a funding source, not a standalone sell instruction.
 Lifecycle exits and explicit research downgrades are separate sell reasons.
-Never-rated neutral securities are not treated as explicit downgrades.
+Never-rated securities are not treated as explicit downgrades.
 
 Price anomaly detection can block a trade even when every strategy condition
 passes. All quantities respect broker lot sizes and configured fee/minimum-value

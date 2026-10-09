@@ -228,13 +228,13 @@ class TestPreferenceSnapshot:
         security = {"ai_research_multiplier": 0.8}
         snap = preference_snapshot(security)
         assert snap["ai_research_multiplier"] == 0.8
-        # age should be 0 since no updated_at
-        assert snap["ai_research_multiplier_age_weeks"] == 0.0
+        # Missing timestamp stays unknown.
+        assert snap["ai_research_multiplier_age_weeks"] is None
 
-    def test_missing_multiplier_defaults_to_neutral(self):
+    def test_missing_multiplier_stays_missing(self):
         security = {}
         snap = preference_snapshot(security)
-        assert snap["ai_research_multiplier"] == 0.5
+        assert snap["ai_research_multiplier"] is None
 
     def test_clamped_multiplier(self):
         security = {"ai_research_multiplier": 1.5}

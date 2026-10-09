@@ -406,6 +406,7 @@ class TestDecayAiResearchMultipliers:
             {"symbol": "FRESH.US", "ai_research_multiplier": 0.9, "ai_research_multiplier_updated_at": fresh_iso},
             {"symbol": "NEUTRAL.US", "ai_research_multiplier": 0.5, "ai_research_multiplier_updated_at": old_iso},
             {"symbol": "NULL_TS.US", "ai_research_multiplier": 0.8, "ai_research_multiplier_updated_at": None},
+            {"symbol": "UNRATED.US", "ai_research_multiplier": None, "ai_research_multiplier_updated_at": old_iso},
         ]
         mock_db.get_all_securities = AsyncMock(return_value=rows)
         mock_db.set_ai_research_multiplier = AsyncMock()
@@ -461,6 +462,7 @@ class TestDecayAiResearchMultipliers:
 
         called_symbols = {c.args[0] for c in db_with_rows.set_ai_research_multiplier.await_args_list}
         assert "NULL_TS.US" not in called_symbols
+        assert "UNRATED.US" not in called_symbols
 
     @pytest.mark.asyncio
     async def test_logs_count_of_decayed_rows(self, db_with_rows, mock_settings, caplog):

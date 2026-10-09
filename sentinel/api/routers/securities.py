@@ -361,6 +361,16 @@ async def update_security(
         await _invalidate_planner_cache(deps)
 
     if "ai_research_multiplier" in data:
+        if data["ai_research_multiplier"] is None:
+            await deps.db.upsert_security(
+                symbol,
+                ai_research_multiplier=None,
+                ai_research_multiplier_updated_at=None,
+                ai_research_multiplier_source=None,
+                ai_research_multiplier_analysis=None,
+            )
+            await _invalidate_planner_cache(deps)
+            return await _security_payload(symbol, deps)
         ai_research_multiplier = _validate_ai_research_multiplier(data.get("ai_research_multiplier"))
         analysis = data.get("ai_research_multiplier_analysis")
         if analysis is None:

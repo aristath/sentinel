@@ -252,7 +252,7 @@ class Planner:
         target_specs: dict[str, dict[str, Any]] = {}
         for symbol in set(ideal) | set(current) | recommendation_symbols:
             signal = signals.get(symbol) or {}
-            raw_ai_research_multiplier = signal.get("ai_research_multiplier", 0.5)
+            raw_ai_research_multiplier = signal.get("ai_research_multiplier")
             model_target_allocation = float(ideal.get(symbol, 0.0) or 0.0)
             current_value_eur = float(current.get(symbol, 0.0) or 0.0) * total_value
             model_target_value_eur = model_target_allocation * terminal_value
@@ -269,8 +269,8 @@ class Planner:
                 current_quantity = current_value_eur / (price * fx_rate)
             target_specs[symbol] = {
                 "symbol": symbol,
-                "ai_research_multiplier": float(
-                    0.5 if raw_ai_research_multiplier is None else raw_ai_research_multiplier
+                "ai_research_multiplier": (
+                    None if raw_ai_research_multiplier is None else float(raw_ai_research_multiplier)
                 ),
                 "opportunity_score": float(signal.get("opp_score", 0.0) or 0.0),
                 "current_value_eur": current_value_eur,
