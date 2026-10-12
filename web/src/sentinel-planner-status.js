@@ -97,8 +97,7 @@ class SentinelPlannerStatus extends LitElement {
       .sort(
         (left, right) =>
           Math.abs(Number(right.gap_eur)) - Math.abs(Number(left.gap_eur)),
-      )
-      .slice(0, 6);
+      );
   }
 
   renderTarget(target, index) {
@@ -141,7 +140,10 @@ class SentinelPlannerStatus extends LitElement {
             : html`<span>No pending actions</span>`
         }
       </tui-flex>
-      <tui-flex wrap>
+      <tui-flex
+        wrap
+        style="font-size: 0.85rem; color: var(--tui-disabled-color)"
+      >
         <span>${gapLabel}&nbsp;</span>
         ${
           targets.length > 0

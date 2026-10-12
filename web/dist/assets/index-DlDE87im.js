@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-Do00svgd.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-C9jMCnJM.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-Do00svgd.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-C9jMCnJM.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6256,7 +6256,7 @@ var SentinelPlannerStatus = class extends i {
 		};
 		const targets = [...plan.targets ?? []];
 		if (cashTarget.target_value_eur > 0 || Number(plan.current_cash_eur ?? 0) > 0) targets.push(cashTarget);
-		return targets.filter((target) => Math.abs(Number(target.gap_eur ?? 0)) > .005).sort((left, right) => Math.abs(Number(right.gap_eur)) - Math.abs(Number(left.gap_eur))).slice(0, 6);
+		return targets.filter((target) => Math.abs(Number(target.gap_eur ?? 0)) > .005).sort((left, right) => Math.abs(Number(right.gap_eur)) - Math.abs(Number(left.gap_eur)));
 	}
 	renderTarget(target, index) {
 		const gap = Number(target.gap_eur ?? 0);
@@ -6281,7 +6281,10 @@ var SentinelPlannerStatus = class extends i {
         <span>Current plan:&nbsp;</span>
         ${recommendations.length > 0 ? recommendations.map((recommendation, index) => this.renderRecommendation(recommendation, index)) : b`<span>No pending actions</span>`}
       </tui-flex>
-      <tui-flex wrap>
+      <tui-flex
+        wrap
+        style="font-size: 0.85rem; color: var(--tui-disabled-color)"
+      >
         <span>${gapLabel}&nbsp;</span>
         ${targets.length > 0 ? targets.map((target, index) => this.renderTarget(target, index)) : b`<span>Target unavailable</span>`}
       </tui-flex>
