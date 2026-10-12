@@ -1190,7 +1190,6 @@ class TestPlannerAsOfPropagation:
             as_of_date="2025-01-01",
             precomputed_rebalance_signals=None,
             precomputed_sleeves=None,
-            eligible_symbols=None,
             track_fallback_state=False,
             state=None,
         )

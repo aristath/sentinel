@@ -97,11 +97,10 @@ class Planner:
         self,
         min_trade_value: Optional[float] = None,
         as_of_date: Optional[str] = None,
-        eligible_symbols: set[str] | None = None,
         track_fallback_state: bool = False,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
-        """Generate trade recommendations to move toward ideal portfolio.
+        """Generate trade recommendations across all markets toward the ideal portfolio.
 
         Args:
             min_trade_value: Minimum trade value in EUR (uses setting if None)
@@ -124,7 +123,6 @@ class Planner:
             as_of_date=as_of_date,
             precomputed_rebalance_signals=signal_bundle.get("rebalance_signals"),
             precomputed_sleeves=signal_bundle.get("sleeves"),
-            eligible_symbols=eligible_symbols,
             track_fallback_state=track_fallback_state,
             state=state,
         )
@@ -133,11 +131,10 @@ class Planner:
         self,
         min_trade_value: Optional[float] = None,
         as_of_date: Optional[str] = None,
-        eligible_symbols: set[str] | None = None,
         track_fallback_state: bool = False,
         state: PlannerState | None = None,
     ) -> tuple[list[TradeRecommendation], LongTermPlan]:
-        """Generate today's actions and a whole-lot twelve-month deployment target."""
+        """Generate all-market actions and a whole-lot twelve-month deployment target."""
         state = await self._resolve_live_state(as_of_date=as_of_date, state=state)
         ideal, current, total_value, signal_bundle = await self._planning_inputs(
             as_of_date=as_of_date,
@@ -157,7 +154,6 @@ class Planner:
             precomputed_rebalance_signals=signal_bundle.get("rebalance_signals"),
             precomputed_sleeves=signal_bundle.get("sleeves"),
             avg_monthly_net_deposit_eur=avg_monthly_net_deposit_eur,
-            eligible_symbols=eligible_symbols,
             track_fallback_state=track_fallback_state,
             state=state,
         )

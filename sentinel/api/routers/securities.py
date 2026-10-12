@@ -8,7 +8,6 @@ from fastapi import APIRouter, Depends, HTTPException
 from typing_extensions import Annotated
 
 from sentinel.api.dependencies import CommonDependencies, get_common_deps
-from sentinel.markets import get_open_market_symbols
 from sentinel.planner.preferences import preference_snapshot, utc_now_iso
 from sentinel.security import Security
 from sentinel.strategy import classify_lot_size, compute_contrarian_signal
@@ -507,8 +506,7 @@ async def get_unified_view(
             settings=deps.settings,
         )
         # Recommendations using settings default for min_trade_value
-        eligible_symbols = await get_open_market_symbols(deps.broker, deps.db) if as_of is None else None
-        recommendations = await planner.get_recommendations(as_of_date=as_of, eligible_symbols=eligible_symbols)
+        recommendations = await planner.get_recommendations(as_of_date=as_of)
         recommendations_map = {r.symbol: r for r in recommendations}
 
         # Ideal and current allocations

@@ -186,7 +186,6 @@ class RebalanceEngine:
         precomputed_rebalance_signals: dict[str, dict[str, float | int | str]] | None = None,
         precomputed_sleeves: dict[str, str] | None = None,
         avg_monthly_net_deposit_eur: float | None = None,
-        eligible_symbols: set[str] | None = None,
         track_fallback_state: bool = False,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
@@ -211,7 +210,7 @@ class RebalanceEngine:
             min_trade_value = float(setting_value) if setting_value is not None else 100.0
 
         # Skip cache when as_of_date is set (e.g. backtest) or explicit state is supplied.
-        if as_of_date is None and state is None and eligible_symbols is None and not track_fallback_state:
+        if as_of_date is None and state is None and not track_fallback_state:
             cache_key = self._recommendation_cache_key(min_trade_value)
             cache_getter = getattr(self._db, "cache_get", None)
             if callable(cache_getter):
@@ -465,8 +464,6 @@ class RebalanceEngine:
         recommendations = []
 
         for symbol in all_symbols:
-            if eligible_symbols is not None and symbol not in eligible_symbols:
-                continue
             rec = await self._build_recommendation(
                 symbol,
                 ideal,
@@ -492,7 +489,6 @@ class RebalanceEngine:
             current=current,
             total_value=total_value,
             planning_total_value=planning_total_value,
-            eligible_symbols=eligible_symbols,
             state=state,
         )
         if deficit_sells:
@@ -526,7 +522,6 @@ class RebalanceEngine:
             preloaded_symbol_prices={
                 symbol: float(sec.get("price", 0.0) or 0.0) for symbol, sec in security_data.items()
             },
-            eligible_symbols=eligible_symbols,
             state=state,
         )
         recommendations = await self._select_executable_plan(
@@ -539,7 +534,7 @@ class RebalanceEngine:
         )
 
         # Cache result only when live and DB-backed (not as_of_date / explicit state).
-        if as_of_date is None and state is None and eligible_symbols is None and not track_fallback_state:
+        if as_of_date is None and state is None and not track_fallback_state:
             cache_key = self._recommendation_cache_key(min_trade_value)
             cache_setter = getattr(self._db, "cache_set", None)
             if callable(cache_setter):
@@ -1115,7 +1110,6 @@ class RebalanceEngine:
         preloaded_securities_map: dict[str, dict] | None = None,
         preloaded_symbol_scores: dict[str, float] | None = None,
         preloaded_symbol_prices: dict[str, float] | None = None,
-        eligible_symbols: set[str] | None = None,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Scale down buy recommendations to fit within available cash."""
@@ -1133,7 +1127,6 @@ class RebalanceEngine:
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
-            eligible_symbols=eligible_symbols,
             state=state,
         )
 
@@ -1144,7 +1137,6 @@ class RebalanceEngine:
         current: dict[str, float] | None = None,
         total_value: float | None = None,
         planning_total_value: float | None = None,
-        eligible_symbols: set[str] | None = None,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate sell recommendations if negative balances can't be covered."""
@@ -1155,7 +1147,6 @@ class RebalanceEngine:
             current=current,
             total_value=total_value,
             planning_total_value=planning_total_value,
-            eligible_symbols=eligible_symbols,
             state=state,
         )
 
@@ -1173,7 +1164,6 @@ class RebalanceEngine:
         preloaded_securities_map: dict[str, dict] | None = None,
         preloaded_symbol_scores: dict[str, float] | None = None,
         preloaded_symbol_prices: dict[str, float] | None = None,
-        eligible_symbols: set[str] | None = None,
         state: PlannerState | None = None,
     ) -> list[TradeRecommendation]:
         """Generate sell recommendations to cover remaining deficit."""
@@ -1191,7 +1181,6 @@ class RebalanceEngine:
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
-            eligible_symbols=eligible_symbols,
             state=state,
         )
 

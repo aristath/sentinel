@@ -106,7 +106,6 @@ async def apply_cash_constraint(
     preloaded_securities_map: dict[str, dict] | None = None,
     preloaded_symbol_scores: dict[str, float] | None = None,
     preloaded_symbol_prices: dict[str, float] | None = None,
-    eligible_symbols: set[str] | None = None,
     state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Scale down buy recommendations to fit within available cash."""
@@ -213,7 +212,6 @@ async def apply_cash_constraint(
             preloaded_securities_map=preloaded_securities_map,
             preloaded_symbol_scores=preloaded_symbol_scores,
             preloaded_symbol_prices=preloaded_symbol_prices,
-            eligible_symbols=eligible_symbols,
             state=state,
         )
         if funding_sells:
@@ -289,7 +287,6 @@ async def get_deficit_sells(
     current: dict[str, float] | None = None,
     total_value: float | None = None,
     planning_total_value: float | None = None,
-    eligible_symbols: set[str] | None = None,
     state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Generate sell recommendations if negative balances can't be covered."""
@@ -324,7 +321,6 @@ async def get_deficit_sells(
         total_value=total_value,
         planning_total_value=planning_total_value,
         reason_kind="cash_deficit",
-        eligible_symbols=eligible_symbols,
         state=state,
     )
 
@@ -344,7 +340,6 @@ async def generate_deficit_sells(
     preloaded_securities_map: dict[str, dict] | None = None,
     preloaded_symbol_scores: dict[str, float] | None = None,
     preloaded_symbol_prices: dict[str, float] | None = None,
-    eligible_symbols: set[str] | None = None,
     state: PlannerState | None = None,
 ) -> list[TradeRecommendation]:
     """Generate sell recommendations to cover remaining deficit."""
@@ -372,8 +367,6 @@ async def generate_deficit_sells(
     conviction_bias = float(await _setting(engine, "strategy_funding_conviction_bias", 1.0))
     for pos in positions:
         symbol = pos["symbol"]
-        if eligible_symbols is not None and symbol not in eligible_symbols:
-            continue
         qty = pos.get("quantity", 0)
         if qty <= 0:
             continue

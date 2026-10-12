@@ -41,6 +41,7 @@ class SentinelPlannerStatus extends LitElement {
 
   renderRecommendation(recommendation, index) {
     const isSell = recommendation.action === "sell";
+    const waitingForMarket = recommendation.market_open === false;
     const percentage =
       isSell && recommendation.current_value_eur > 0
         ? ` ${Math.round(
@@ -49,14 +50,25 @@ class SentinelPlannerStatus extends LitElement {
               100,
           )}%`
         : "";
-    const variant = isSell ? "error" : "success";
+    const variant = waitingForMarket ? "default" : isSell ? "error" : "success";
+    const title = [
+      waitingForMarket ? "Waiting for market to open" : "",
+      recommendation.reason ?? "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
 
+    // TuiText manages its own inline styles; scope the waiting color on a parent.
     return html`
-      <tui-text variant=${variant} title=${recommendation.reason ?? ""}
-        >${index > 0 ? html`<span aria-hidden="true">&nbsp;&nbsp;</span>` : ""}${recommendation.action.toUpperCase()}
-        ${formatCurrency(Math.abs(recommendation.value_delta_eur))}${percentage}
-        ${recommendation.symbol}</tui-text
+      <span
+        style=${waitingForMarket ? "--tui-color: var(--tui-disabled-color)" : ""}
       >
+        <tui-text variant=${variant} title=${title}
+          >${index > 0 ? html`<span aria-hidden="true">&nbsp;&nbsp;</span>` : ""}${recommendation.action.toUpperCase()}
+          ${formatCurrency(Math.abs(recommendation.value_delta_eur))}${percentage}
+          ${recommendation.symbol}</tui-text
+        >
+      </span>
     `;
   }
 
@@ -116,14 +128,11 @@ class SentinelPlannerStatus extends LitElement {
     const plan = planner.plan;
     const summary = planner.summary;
     const targets = this.targetItems(plan);
-    const cycleLabel = summary?.valid_for_minutes
-      ? `Next ${summary.valid_for_minutes} min:`
-      : "Next cycle:";
     const gapLabel = `${plan?.horizon_months ?? 12} mo gaps:`;
 
     return html`
       <tui-flex wrap>
-        <span>${cycleLabel}&nbsp;</span>
+        <span>Current plan:&nbsp;</span>
         ${
           recommendations.length > 0
             ? recommendations.map((recommendation, index) =>
@@ -159,7 +168,7 @@ class SentinelPlannerStatus extends LitElement {
                     ? html`
                         <span aria-hidden="true">&nbsp;·&nbsp;</span>
                         <span
-                          >cash after today
+                          >cash after trades
                           ${formatCurrency(summary.cash_after_plan)}</span
                         >
                       `

@@ -846,8 +846,8 @@ async def trading_check_markets(broker, db, planner) -> None:
     logger.info(f"Securities with open markets: {', '.join(open_securities)}")
 
     # Check for pending trades
-    recommendations = await planner.get_recommendations(eligible_symbols=open_securities)
-    actionable = [r for r in recommendations if r.symbol in open_securities]
+    recommendations = await planner.get_recommendations()
+    actionable = _market_executable_recommendations(recommendations, open_securities)
 
     if not actionable:
         logger.info("No actionable trades for open markets")
@@ -862,8 +862,8 @@ async def trading_execute(broker, db, planner, portfolio) -> None:
     """Replan from fresh broker state and submit at most one transaction.
 
     Only executes in LIVE trading mode. In research mode, logs what would happen.
-    Each invocation is independent: the previous plan is discarded and the next
-    order is selected from current broker state and currently open markets.
+    Replan across all markets using broker-confirmed state. Execute available
+    sells first; no buy may execute while any planned sell remains outstanding.
     """
     from sentinel.settings import Settings
 
@@ -898,15 +898,15 @@ async def trading_execute(broker, db, planner, portfolio) -> None:
         return
 
     recommendations = await planner.get_recommendations(
-        eligible_symbols=open_symbols,
         track_fallback_state=is_live,
     )
     if not recommendations:
         logger.info("No trade recommendations")
         return
 
-    # Filter to actionable (open markets only)
-    actionable = [r for r in recommendations if r.symbol in open_symbols]
+    # Market hours restrict execution, never planning. Planned sell proceeds
+    # cannot fund purchases until every sale has completed and state is refreshed.
+    actionable = _market_executable_recommendations(recommendations, open_symbols)
     if not actionable:
         logger.info("No actionable trades for open markets")
         return
@@ -1128,6 +1128,15 @@ def _execution_order_key(rec) -> tuple:
     if rec.action == "sell":
         return (1, 0, -float(rec.priority), str(rec.symbol))
     return (1, 1, *buy_rank_key(rec))
+
+
+def _market_executable_recommendations(
+    recommendations: list[TradeRecommendation], open_symbols: set[str]
+) -> list[TradeRecommendation]:
+    """Allow open-market sells first, or buys only when no sells remain."""
+    sells = [rec for rec in recommendations if rec.action == "sell"]
+    candidates = sells if sells else recommendations
+    return [rec for rec in candidates if rec.symbol in open_symbols]
 
 
 async def _execute_trade(broker, rec) -> str | None:

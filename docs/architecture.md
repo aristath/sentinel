@@ -63,12 +63,14 @@ plane or process.
 4. `AllocationCalculator` combines AI research ratings, portfolio constraints,
    deterministic opportunity signals, recent-event memory, and optional forecast
    scores into ideal weights.
-5. `RebalanceEngine` turns target gaps into lot-aware, fee-aware, market-aware
-   recommendations. Funding sells only exist to support an executable buy, apart
-   from explicit safety/exit rules.
+5. `RebalanceEngine` turns target gaps into lot-aware, fee-aware recommendations
+   across all markets, regardless of opening hours. Funding sells only exist to
+   support a planned buy, apart from explicit safety/exit rules.
 6. In `research` mode the result is advisory. In `live` mode
    `trading:execute` may submit at most one ranked transaction per execution
-   window and replans from broker-confirmed state on the next cycle.
+   window and replans from broker-confirmed state on the next cycle. Only trades
+   on open markets execute. All planned sells must complete before any buy;
+   closed-market buys do not block other buys.
 
 ## Two scheduling systems
 

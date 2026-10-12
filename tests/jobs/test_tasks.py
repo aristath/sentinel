@@ -718,9 +718,177 @@ class TestTradingExecute:
                 mock_db.invalidate_planner_cache.assert_awaited()
                 mock_db.set_planner_state.assert_awaited_once()
                 mock_planner.get_recommendations.assert_awaited_once_with(
-                    eligible_symbols={"AAPL.US"},
                     track_fallback_state=True,
                 )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("trades", "open_symbols", "expected_symbol"),
+        [
+            ([("ATHEX", "sell", 1), ("HKEX", "buy", 2)], {"HKEX"}, None),
+            ([("ATHEX", "sell", 1), ("HKEX", "sell", 2), ("BUY", "buy", 3)], {"HKEX", "BUY"}, "HKEX"),
+            ([("BUY", "buy", 1), ("SELL", "sell", 2)], {"BUY", "SELL"}, "SELL"),
+            ([("ATHEX", "buy", 1), ("HKEX", "buy", 2)], {"HKEX"}, "HKEX"),
+            ([("SECOND", "buy", 2), ("FIRST", "buy", 1)], {"FIRST", "SECOND"}, "FIRST"),
+            ([("ATHEX", "sell", 1), ("HKEX", "buy", 2)], set(), None),
+        ],
+    )
+    async def test_execute_holistic_plan_with_sales_before_buys(
+        self, mock_broker, mock_db, mock_planner, mock_portfolio, trades, open_symbols, expected_symbol
+    ):
+        from sentinel.jobs.tasks import trading_execute
+        from sentinel.planner.models import TradeRecommendation
+
+        recommendations = [
+            TradeRecommendation(
+                symbol=symbol,
+                action=action,
+                execution_rank=rank,
+                current_allocation=0.1,
+                target_allocation=0.2,
+                allocation_delta=0.1,
+                current_value_eur=1000.0,
+                target_value_eur=2000.0,
+                value_delta_eur=1000.0 if action == "buy" else -1000.0,
+                quantity=10,
+                price=100.0,
+                currency="EUR",
+                lot_size=1,
+                contrarian_score=0.8,
+                priority=1.0,
+                reason="test",
+            )
+            for symbol, action, rank in trades
+        ]
+        mock_planner.get_recommendations.return_value = recommendations
+        mock_db.get_all_securities.return_value = [
+            {"symbol": symbol, "data": {"mrkt": {"mkt_id": index}}} for index, (symbol, _, _) in enumerate(trades)
+        ]
+        mock_broker.get_market_status.return_value = {
+            "m": [
+                {"i": index, "s": "OPEN" if symbol in open_symbols else "CLOSED"}
+                for index, (symbol, _, _) in enumerate(trades)
+            ]
+        }
+
+        with (
+            patch("sentinel.settings.Settings") as settings,
+            patch("sentinel.jobs.tasks._execute_trade", new=AsyncMock(return_value="order")) as execute,
+        ):
+            settings.return_value.get = AsyncMock(return_value="live")
+            await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
+
+        if expected_symbol is None:
+            execute.assert_not_awaited()
+            mock_db.set_planner_state.assert_not_awaited()
+        else:
+            execute.assert_awaited_once()
+            assert execute.await_args.args[1].symbol == expected_symbol
+        if open_symbols:
+            mock_planner.get_recommendations.assert_awaited_once_with(track_fallback_state=True)
+
+    @pytest.mark.asyncio
+    async def test_execute_waits_for_submitted_sale_confirmation(
+        self, mock_broker, mock_db, mock_planner, mock_portfolio
+    ):
+        from sentinel.jobs.tasks import trading_execute
+
+        with (
+            patch("sentinel.settings.Settings") as settings,
+            patch("sentinel.jobs.tasks._reconcile_submitted_trade", new=AsyncMock(return_value=False)),
+            patch("sentinel.jobs.tasks._execute_trade", new=AsyncMock()) as execute,
+        ):
+            settings.return_value.get = AsyncMock(return_value="live")
+            await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
+
+        execute.assert_not_awaited()
+        mock_planner.get_recommendations.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_execute_buys_only_after_all_sales_are_confirmed(
+        self, mock_broker, mock_db, mock_planner, mock_portfolio
+    ):
+        from dataclasses import asdict
+
+        from sentinel.jobs.tasks import trading_execute
+        from sentinel.planner.models import TradeRecommendation
+
+        def recommendation(symbol, action, rank):
+            return TradeRecommendation(
+                symbol=symbol,
+                action=action,
+                execution_rank=rank,
+                current_allocation=0.1,
+                target_allocation=0.2,
+                allocation_delta=0.1,
+                current_value_eur=1000.0,
+                target_value_eur=2000.0,
+                value_delta_eur=1000.0 if action == "buy" else -1000.0,
+                quantity=10,
+                price=100.0,
+                currency="EUR",
+                lot_size=1,
+                contrarian_score=0.8,
+                priority=1.0,
+                reason="test",
+            )
+
+        first_sale = recommendation("ATHEX", "sell", 1)
+        second_sale = recommendation("HKEX", "sell", 2)
+        buy = recommendation("BUY", "buy", 3)
+        mock_planner.get_recommendations.side_effect = [
+            [first_sale, second_sale, buy],
+            [second_sale, buy],
+            [buy],
+        ]
+        mock_db.get_all_securities.return_value = [
+            {"symbol": symbol, "data": {"mrkt": {"mkt_id": 1}}} for symbol in ("ATHEX", "HKEX", "BUY")
+        ]
+        submission = None
+        fills = []
+
+        async def remember_submission(key, payload):
+            nonlocal submission
+            submission = payload
+
+        async def forget_submission(key):
+            nonlocal submission
+            submission = None
+
+        mock_db.set_planner_state.side_effect = remember_submission
+        mock_db.get_planner_state.side_effect = lambda key: submission
+        mock_db.delete_planner_state.side_effect = forget_submission
+        mock_db.get_trades.side_effect = lambda **kwargs: fills
+        mock_db.get_job_schedule.return_value = {"interval_minutes": 20}
+
+        with (
+            patch("sentinel.settings.Settings") as settings,
+            patch(
+                "sentinel.jobs.tasks._execute_trade", new=AsyncMock(side_effect=["sale-1", "sale-2", "buy"])
+            ) as execute,
+        ):
+            settings.return_value.get = AsyncMock(return_value="live")
+            await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
+            assert execute.await_args.args[1] == first_sale
+            assert submission["recommendation"] == asdict(first_sale)
+
+            # Submission without a broker-confirmed fill cannot advance the plan.
+            await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
+            assert execute.await_count == 1
+            assert mock_planner.get_recommendations.await_count == 1
+
+            fills.append({"quantity": 10, "price": 100.0, "raw_data": {"order_id": "sale-1"}})
+            await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
+            assert execute.await_args.args[1] == second_sale
+
+            await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
+            assert execute.await_count == 2
+            assert mock_planner.get_recommendations.await_count == 2
+
+            fills.append({"quantity": 10, "price": 100.0, "raw_data": {"order_id": "sale-2"}})
+            await trading_execute(mock_broker, mock_db, mock_planner, mock_portfolio)
+            assert execute.await_args.args[1] == buy
+            assert execute.await_count == 3
 
     @pytest.mark.asyncio
     async def test_execute_submits_only_first_ranked_trade(self, mock_broker, mock_db, mock_planner, mock_portfolio):

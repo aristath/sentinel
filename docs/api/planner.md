@@ -10,6 +10,13 @@ The planner separates destination from timing. AI research multipliers define lo
 
 Returns today's trade recommendations, the fresh twelve-month destination behind them, and a fee-adjusted cash summary. The plan is a terminal target snapshot, not a schedule of future orders.
 
+Recommendations cover all markets, including those currently closed. Market
+hours restrict execution only. While any recommended sell remains outstanding,
+execution can submit an open-market sell but cannot submit a buy. Once no sells
+remain, the highest-ranked open-market buy can execute; a closed-market buy does
+not block other buys. Each execution cycle refreshes broker-confirmed state and
+recalculates the complete plan.
+
 **Query params**
 - `min_value` (float, optional) — Minimum trade value in EUR. Defaults to the `min_trade_value` setting.
 
@@ -37,7 +44,8 @@ Returns today's trade recommendations, the fresh twelve-month destination behind
       "timing_eligible": true,
       "target_gap_ratio": 0.62,
       "is_fallback": false,
-      "execution_rank": 1
+      "execution_rank": 1,
+      "market_open": true
     }
   ],
   "plan": {
@@ -91,7 +99,8 @@ Returns today's trade recommendations, the fresh twelve-month destination behind
 | `timing_eligible` | Whether the opportunity gate prefers this buy now; false buys are convergence fallbacks only |
 | `target_gap_ratio` | Fraction of the terminal target amount still missing |
 | `is_fallback` | Whether the buy was released by the persistent convergence window |
-| `execution_rank` | Order within the complete executable trade set; funding sells come before their buys |
+| `execution_rank` | Rank within the complete trade plan across all markets; all sells precede buys |
+| `market_open` | Whether the trade's market is currently known to be open; display metadata that never filters or changes the plan |
 
 **Plan fields**
 
@@ -106,7 +115,7 @@ Returns today's trade recommendations, the fresh twelve-month destination behind
 | `cash_gap_eur` | Target cash minus current cash |
 | `targets` | Every positive target plus current target-zero holdings, with terminal EUR amounts and current gaps |
 
-Normal allocation drift does not create a standalone sell. Non-mandatory sells are selected only when needed to fund a buy that is executable in the current market and cash context. If no normally timed buy is executable, the planner waits `strategy_fallback_wait_days` before allowing one convergence fallback.
+Normal allocation drift does not create a standalone sell. Non-mandatory sells are selected only when needed to fund a buy that satisfies strategy and cash constraints, regardless of market hours. If no normally timed buy can be planned, the planner waits `strategy_fallback_wait_days` before allowing one convergence fallback.
 
 **Summary fields**
 

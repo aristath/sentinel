@@ -82,7 +82,7 @@ The rebalance engine:
 1. values current positions and cash in EUR;
 2. projects near-term capital using the configured rolling net contribution;
 3. compares projected target value with current value;
-4. filters unavailable, blocked, anomalous, disallowed, cooling-down, sub-lot,
+4. filters blocked, anomalous, disallowed, cooling-down, sub-lot,
    and sub-minimum trades;
 5. caps buys at the maximum position value;
 6. ranks executable buys by opportunity timing, target gap, research rating,
@@ -107,6 +107,11 @@ economics.
   authoritative.
 - A later planning cycle uses broker-confirmed state; the planner does not assume
   an order filled merely because it was submitted.
+- Planning includes every market regardless of opening hours. Execution submits
+  at most one open-market trade per cycle. If the plan contains any sells, all
+  buys wait until those sales complete; available sales may execute in any order.
+  Once no sells remain, execution chooses the highest-ranked open-market buy,
+  skipping closed-market buys.
 
 See [Configuration](configuration.md) for every strategy setting, [Planner API](api/planner.md)
 for returned data, and [Forecasting](forecasting.md) for the optional timing

@@ -1,5 +1,6 @@
 """Tests for the twelve-month plan returned with recommendations."""
 
+from dataclasses import replace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -41,7 +42,8 @@ def _plan() -> LongTermPlan:
 
 
 @pytest.mark.asyncio
-async def test_recommendations_endpoint_includes_fixed_plan_snapshot():
+@pytest.mark.parametrize("market_status", [{"m": [{"i": 1, "s": "OPEN"}]}, {"m": [{"i": 1, "s": "CLOSED"}]}, None])
+async def test_recommendations_endpoint_includes_fixed_plan_snapshot(market_status):
     import sentinel.api.routers.planner as planner_router
 
     rec = TradeRecommendation(
@@ -64,20 +66,29 @@ async def test_recommendations_endpoint_includes_fixed_plan_snapshot():
         target_gap_ratio=0.75,
     )
     planner = MagicMock()
-    planner.get_recommendations_with_plan = AsyncMock(return_value=([rec], _plan()))
+    planner.get_recommendations_with_plan = AsyncMock(
+        return_value=([rec, replace(rec, symbol="BBB", execution_rank=2)], _plan())
+    )
     portfolio = MagicMock()
     portfolio.total_cash_eur = AsyncMock(return_value=1_500.0)
     fee_calculator = MagicMock()
     fee_calculator.calculate_batch = AsyncMock(
         return_value={
             "total_sell_value": 0.0,
-            "total_buy_value": 1_000.0,
+            "total_buy_value": 2_000.0,
             "total_fees": 4.0,
             "sell_fees": 0.0,
             "buy_fees": 4.0,
         }
     )
     deps = MagicMock()
+    deps.broker.get_market_status = AsyncMock(return_value=market_status)
+    deps.db.get_all_securities = AsyncMock(
+        return_value=[
+            {"symbol": "AAA", "data": {"mrkt": {"mkt_id": 1}}},
+            {"symbol": "BBB", "data": {"mrkt": {"mkt_id": 2}}},
+        ]
+    )
     deps.settings.get = AsyncMock(return_value=100.0)
     deps.db.get_job_schedule = AsyncMock(return_value={"interval_minutes": 60, "interval_market_open_minutes": 20})
 
@@ -85,7 +96,6 @@ async def test_recommendations_endpoint_includes_fixed_plan_snapshot():
         patch.object(planner_router, "Planner", return_value=planner),
         patch.object(planner_router, "Portfolio", return_value=portfolio),
         patch.object(planner_router, "FeeCalculator", return_value=fee_calculator),
-        patch.object(planner_router, "get_open_market_symbols", AsyncMock(return_value={"AAA"})),
     ):
         result = await planner_router.get_recommendations(deps)
 
@@ -116,10 +126,14 @@ async def test_recommendations_endpoint_includes_fixed_plan_snapshot():
     assert result["recommendations"][0]["target_gap_ratio"] == 0.75
     assert result["recommendations"][0]["is_fallback"] is False
     assert result["recommendations"][0]["reason_code"] is None
+    assert result["recommendations"][0]["symbol"] == "AAA"
+    assert [trade["symbol"] for trade in result["recommendations"]] == ["AAA", "BBB"]
+    assert result["recommendations"][1]["market_open"] is False
+    assert result["recommendations"][0]["market_open"] is bool(market_status and market_status["m"][0]["s"] == "OPEN")
     assert result["summary"]["valid_for_minutes"] == 20
     assert result["summary"]["current_cash"] == 1_000.0
     portfolio.total_cash_eur.assert_not_awaited()
     planner.get_recommendations_with_plan.assert_awaited_once_with(
         min_trade_value=100.0,
-        eligible_symbols={"AAA"},
     )
+    deps.broker.get_market_status.assert_awaited_once_with("*")

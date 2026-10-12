@@ -44,6 +44,13 @@ Fixed jobs can be inspected, run, and rescheduled through the
 [Jobs API](api/jobs.md). Manual `run` bypasses the schedule timing gate but does
 not bypass the job's internal safety logic.
 
+`trading:execute` replans across all markets from refreshed broker state. Market
+hours only determine which planned trades may execute. While any planned sell
+remains, it may submit an open-market sell but no buy. Sales may execute out of
+rank order when their markets open. With no remaining sells, it submits the
+highest-ranked open-market buy, skipping closed-market buys. An outstanding
+submitted order must be reconciled before another transaction is submitted.
+
 ## Editable task schedules
 
 An enabled folder task may define either or both:

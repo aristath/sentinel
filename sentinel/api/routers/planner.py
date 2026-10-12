@@ -19,7 +19,7 @@ from sentinel.utils.fees import FeeCalculator
 router = APIRouter(prefix="/planner", tags=["planner"])
 
 
-def _serialize_recommendation(r) -> dict:
+def _serialize_recommendation(r, *, market_open: bool) -> dict:
     return {
         "symbol": r.symbol,
         "action": r.action,
@@ -46,6 +46,7 @@ def _serialize_recommendation(r) -> dict:
         "target_gap_ratio": r.target_gap_ratio,
         "is_fallback": r.is_fallback,
         "execution_rank": r.execution_rank,
+        "market_open": market_open,
     }
 
 
@@ -117,11 +118,11 @@ async def get_recommendations(
     if min_value is None:
         min_value = await deps.settings.get("min_trade_value", default=100.0)
 
-    open_symbols = await get_open_market_symbols(deps.broker, deps.db)
     recommendations, long_term_plan = await planner.get_recommendations_with_plan(
         min_trade_value=min_value,
-        eligible_symbols=open_symbols,
     )
+    # Annotate the complete plan for display; market hours never filter planning.
+    open_symbols = await get_open_market_symbols(deps.broker, deps.db)
 
     schedule = await deps.db.get_job_schedule("trading:execute")
     valid_for_minutes = None
@@ -143,7 +144,9 @@ async def get_recommendations(
     # Cash after plan: start + sells - sell_fees - buys - buy_fees
     cash_after_plan = current_cash + total_sell_value - sell_fees - total_buy_value - buy_fees
     return {
-        "recommendations": [_serialize_recommendation(r) for r in recommendations],
+        "recommendations": [
+            _serialize_recommendation(r, market_open=r.symbol in open_symbols) for r in recommendations
+        ],
         "plan": _serialize_plan(long_term_plan),
         "summary": {
             "current_cash": current_cash,

@@ -227,7 +227,7 @@ async def test_get_unified_view_with_as_of_no_prediction_fields():
     with patch("sentinel.planner.Planner", return_value=mock_planner):
         result = await get_unified_view(mock_deps, period="1Y", as_of="2024-01-15")
     assert isinstance(result, list)
-    mock_planner.get_recommendations.assert_awaited_once_with(as_of_date="2024-01-15", eligible_symbols=None)
+    mock_planner.get_recommendations.assert_awaited_once_with(as_of_date="2024-01-15")
     mock_planner.calculate_ideal_portfolio.assert_awaited_once_with(as_of_date="2024-01-15")
     mock_planner.get_current_allocations.assert_awaited_once_with(as_of_date="2024-01-15")
     mock_deps.db.get_prices_bulk.assert_any_await(["AAPL"], days=365, end_date="2024-01-15")
@@ -239,6 +239,7 @@ async def test_get_unified_view_without_as_of_no_prediction_fields():
     from sentinel.api.routers.securities import get_unified_view
 
     mock_deps = _make_unified_mocks(one_security=True)
+    mock_deps.broker.get_market_status.return_value = {"m": [{"i": 1, "s": "CLOSED"}]}
     mock_planner = MagicMock()
     mock_planner.get_recommendations = AsyncMock(return_value=[])
     mock_planner.calculate_ideal_portfolio = AsyncMock(return_value={})
@@ -247,7 +248,8 @@ async def test_get_unified_view_without_as_of_no_prediction_fields():
     with patch("sentinel.planner.Planner", return_value=mock_planner):
         result = await get_unified_view(mock_deps, period="1Y", as_of=None)
     assert isinstance(result, list)
-    mock_planner.get_recommendations.assert_awaited_once_with(as_of_date=None, eligible_symbols={"AAPL"})
+    mock_planner.get_recommendations.assert_awaited_once_with(as_of_date=None)
+    mock_deps.broker.get_market_status.assert_not_awaited()
     mock_planner.calculate_ideal_portfolio.assert_awaited_once_with(as_of_date=None)
     mock_planner.get_current_allocations.assert_awaited_once_with(as_of_date=None)
     mock_deps.db.get_prices_bulk.assert_any_await(["AAPL"], days=365, end_date=None)

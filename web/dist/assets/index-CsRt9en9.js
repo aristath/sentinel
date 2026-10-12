@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-Cl2EKNZO.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-Do00svgd.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-Cl2EKNZO.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-Do00svgd.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -6230,13 +6230,20 @@ var SentinelPlannerStatus = class extends i {
 	}
 	renderRecommendation(recommendation, index) {
 		const isSell = recommendation.action === "sell";
+		const waitingForMarket = recommendation.market_open === false;
 		const percentage = isSell && recommendation.current_value_eur > 0 ? ` ${Math.round(Math.abs(recommendation.value_delta_eur) / recommendation.current_value_eur * 100)}%` : "";
+		const variant = waitingForMarket ? "default" : isSell ? "error" : "success";
+		const title = [waitingForMarket ? "Waiting for market to open" : "", recommendation.reason ?? ""].filter(Boolean).join(" · ");
 		return b`
-      <tui-text variant=${isSell ? "error" : "success"} title=${recommendation.reason ?? ""}
-        >${index > 0 ? b`<span aria-hidden="true">&nbsp;&nbsp;</span>` : ""}${recommendation.action.toUpperCase()}
-        ${formatCurrency(Math.abs(recommendation.value_delta_eur))}${percentage}
-        ${recommendation.symbol}</tui-text
+      <span
+        style=${waitingForMarket ? "--tui-color: var(--tui-disabled-color)" : ""}
       >
+        <tui-text variant=${variant} title=${title}
+          >${index > 0 ? b`<span aria-hidden="true">&nbsp;&nbsp;</span>` : ""}${recommendation.action.toUpperCase()}
+          ${formatCurrency(Math.abs(recommendation.value_delta_eur))}${percentage}
+          ${recommendation.symbol}</tui-text
+        >
+      </span>
     `;
 	}
 	targetItems(plan) {
@@ -6268,11 +6275,10 @@ var SentinelPlannerStatus = class extends i {
 		const plan = planner.plan;
 		const summary = planner.summary;
 		const targets = this.targetItems(plan);
-		const cycleLabel = summary?.valid_for_minutes ? `Next ${summary.valid_for_minutes} min:` : "Next cycle:";
 		const gapLabel = `${plan?.horizon_months ?? 12} mo gaps:`;
 		return b`
       <tui-flex wrap>
-        <span>${cycleLabel}&nbsp;</span>
+        <span>Current plan:&nbsp;</span>
         ${recommendations.length > 0 ? recommendations.map((recommendation, index) => this.renderRecommendation(recommendation, index)) : b`<span>No pending actions</span>`}
       </tui-flex>
       <tui-flex wrap>
@@ -6294,7 +6300,7 @@ var SentinelPlannerStatus = class extends i {
                 ${summary ? b`
                         <span aria-hidden="true">&nbsp;·&nbsp;</span>
                         <span
-                          >cash after today
+                          >cash after trades
                           ${formatCurrency(summary.cash_after_plan)}</span
                         >
                       ` : ""}

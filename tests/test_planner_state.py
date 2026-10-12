@@ -98,7 +98,6 @@ class TestPlannerStateInputs:
             as_of_date=None,
             precomputed_rebalance_signals=None,
             precomputed_sleeves=None,
-            eligible_symbols=None,
             track_fallback_state=False,
             state=state,
         )
