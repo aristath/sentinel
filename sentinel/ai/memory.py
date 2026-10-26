@@ -1,13 +1,11 @@
-"""pgvector memory store for the AI research pipeline.
+"""Sentinel's BGE-M3 pgvector memory store for the AI research pipeline.
 
-Parity port of the ``clara-postgres`` (pgvector/pg17) memory backend that Clara's
-research tasks write to via the mem0 OSS library (``infer: false``). Sentinel talks
-to the same database directly with ``asyncpg`` — no mem0 dependency, no Clara API in
-the loop — so rows are byte-for-byte indistinguishable from what Clara wrote and the
-semantic dedup keeps working across the cutover.
+Sentinel uses its own ``sentinel_memories`` collection in the host's PostgreSQL
+database. Its payload format preserves the historical mem0 records, but its
+1,024-dimensional BGE-M3 vectors are independent of Clara's Go memory store.
 
-Layout (confirmed against the live DB):
-    clara_memories(id uuid PK, vector vector(768), payload jsonb)
+Layout:
+    sentinel_memories(id uuid PK, vector vector(1024), payload jsonb)
 
 ``store`` embeds the *full* compacted content, runs a tag/metadata-scoped similarity
 search embedding the *truncated* dedup query, and either reinforces an existing row
@@ -38,6 +36,13 @@ import asyncpg
 import httpx
 
 from sentinel.ai.errors import MemoryStoreError
+from sentinel.ai.memory_config import (
+    DEFAULT_EMBED_BASE_URL,
+    DEFAULT_EMBED_DIMS,
+    DEFAULT_EMBED_MODEL,
+    DEFAULT_MEMORY_COLLECTION,
+    DEFAULT_MEMORY_USER_ID,
+)
 
 DEFAULT_DUPLICATE_SIMILARITY = 0.96
 DEFAULT_EMBED_TIMEOUT_MS = 30_000
@@ -870,7 +875,7 @@ def _normalize_embedding(value: Any, expected_dims: "int | None", index: int) ->
 
 @dataclass
 class MemoryStore:
-    """Direct asyncpg + pgvector client for the shared ``clara_memories`` store."""
+    """Direct asyncpg + pgvector client for Sentinel's configured research-memory collection."""
 
     user_id: str
     collection: str
@@ -942,7 +947,13 @@ class MemoryStore:
     # -- embeddings -----------------------------------------------------------
 
     async def _embed(self, text: str, timeout_ms: int = DEFAULT_EMBED_TIMEOUT_MS) -> "list[float]":
-        body: dict[str, Any] = {"model": self.embed_model, "input": text}
+        return (await self.embed_many([text], timeout_ms=timeout_ms))[0]
+
+    async def embed_many(self, texts: list[str], timeout_ms: int = DEFAULT_EMBED_TIMEOUT_MS) -> list[list[float]]:
+        """Embed a migration batch in input order, splitting only capacity errors."""
+        if not texts:
+            return []
+        body: dict[str, Any] = {"model": self.embed_model, "input": texts[0] if len(texts) == 1 else texts}
         if self.embed_dims:
             body["dimensions"] = self.embed_dims
         headers = {"Content-Type": "application/json"}
@@ -957,17 +968,32 @@ class MemoryStore:
             raise MemoryStoreError(f"Embedding request failed: {exc}") from exc
         response_text = response.text
         if not response.is_success:
-            # Parity: the 413 case uses the same long message (JS throws
-            # EmbeddingBatchTooLargeError(message) with the long message).
+            capacity_error = response.status_code == 413 or (
+                response.status_code == 400
+                and any(s in response_text.lower() for s in ("too large", "too big", "exceed", "too many tokens"))
+            )
+            if capacity_error and len(texts) > 1:
+                middle = (len(texts) + 1) // 2
+                return await self.embed_many(texts[:middle], timeout_ms) + await self.embed_many(
+                    texts[middle:], timeout_ms
+                )
             raise MemoryStoreError(f"Embedding request failed with {response.status_code}: {response_text[:500]}")
         try:
             payload = json.loads(response_text)
         except json.JSONDecodeError:
             raise MemoryStoreError("Embedding response was not valid JSON") from None
         rows = payload.get("data") or []
-        if len(rows) != 1:
-            raise MemoryStoreError(f"Embedding response count mismatch: got {len(rows)}, expected 1")
-        return _normalize_embedding(rows[0].get("embedding"), self.embed_dims, 0)
+        if len(rows) != len(texts):
+            raise MemoryStoreError(f"Embedding response count mismatch: got {len(rows)}, expected {len(texts)}")
+        ordered: dict[int, list[float]] = {}
+        for position, row in enumerate(rows):
+            if not isinstance(row, dict):
+                raise MemoryStoreError("Embedding response contained an invalid row")
+            index = row.get("index", position)
+            if type(index) is not int or index < 0 or index >= len(texts) or index in ordered:
+                raise MemoryStoreError("Embedding response contained invalid or duplicate indices")
+            ordered[index] = _normalize_embedding(row.get("embedding"), self.embed_dims, index)
+        return [ordered[i] for i in range(len(texts))]
 
     # -- public API -----------------------------------------------------------
 
@@ -1218,15 +1244,15 @@ def _uuid4_hex() -> str:
 async def make_memory_store(settings: Any) -> MemoryStore:
     """Build a MemoryStore from Sentinel settings (mirrors ``LLMClient.from_settings``)."""
     return MemoryStore(
-        user_id=str(await settings.get("ai_memory_user_id", "clara")),
-        collection=str(await settings.get("ai_memory_collection", "clara_memories")),
+        user_id=str(await settings.get("ai_memory_user_id", DEFAULT_MEMORY_USER_ID)),
+        collection=str(await settings.get("ai_memory_collection", DEFAULT_MEMORY_COLLECTION)),
         pg_host=str(await settings.get("ai_pg_host", "127.0.0.1")),
         pg_port=int(await settings.get("ai_pg_port", 5432)),
         pg_database=str(await settings.get("ai_pg_database", "clara_memories")),
         pg_user=str(await settings.get("ai_pg_user", "clara")),
         pg_password=str(await settings.get("ai_pg_password", "")),
-        embed_base_url=str(await settings.get("ai_embed_base_url", "http://127.0.0.1:18200/v1")),
-        embed_model=str(await settings.get("ai_embed_model", "ibm-granite/granite-embedding-311m-multilingual-r2")),
-        embed_dims=int(await settings.get("ai_embed_dims", 768)),
+        embed_base_url=str(await settings.get("ai_embed_base_url", DEFAULT_EMBED_BASE_URL)),
+        embed_model=str(await settings.get("ai_embed_model", DEFAULT_EMBED_MODEL)),
+        embed_dims=int(await settings.get("ai_embed_dims", DEFAULT_EMBED_DIMS)),
         dedup_threshold=float(await settings.get("ai_dedup_similarity_threshold", 0.96)),
     )

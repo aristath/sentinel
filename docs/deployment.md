@@ -110,6 +110,47 @@ revision will immediately reset it again. The durable rollback is therefore:
 Do not use a manual hard reset in a working development checkout as a rollback
 procedure.
 
+## BGE-M3 memory migration
+
+The embedding server on port 18200 serves `BAAI/bge-m3`, with 1,024-dimensional
+vectors. Sentinel's dedicated target is `sentinel_memories`; its historical
+owner value remains `clara`. Existing Granite settings and vectors are not
+updated merely by deploying new defaults.
+
+Regenerate the configured owner's records while Sentinel remains online:
+
+```bash
+source .venv/bin/activate
+python scripts/migrate_memory_embeddings.py --source-collection clara_memories
+```
+
+The command creates a separate target, preserves UUIDs and complete payloads,
+and leaves the shared source table and other owners untouched. It resumes an
+interrupted rebuild by embedding only missing or changed records. The target
+is marked with its source, owner, model and dimensions; an unrelated existing
+table is rejected rather than overwritten. Empty texts, invalid embeddings or
+an incomplete copy prevent activation.
+
+Once current jobs and editable task runs are idle, stop Sentinel's writers and
+run the same command with activation enabled:
+
+```bash
+python scripts/migrate_memory_embeddings.py \
+  --source-collection clara_memories --activate
+```
+
+This catches up changed records, verifies every source ID and payload against
+the target, and atomically updates `ai_embed_base_url`, `ai_embed_model`,
+`ai_embed_dims` and `ai_memory_collection` through Sentinel's database API.
+Restart the service after the intended revision is committed and pushed. Account
+for `sentinel-deploy.timer` during this brief cutover so an automatic release
+cannot restart writers midway through activation.
+
+Verify the running settings, memory count and a real semantic search. Do not
+reuse a 768-dimensional column for BGE-M3, and do not delete the old shared
+collection as part of this migration. Clara's independent Go-memory rebuild
+does not migrate these PostgreSQL records.
+
 ## SQLite backup and restore
 
 The default data directory is `data/`, unless `SENTINEL_DATA_DIR` changes it.

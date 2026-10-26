@@ -157,15 +157,23 @@ These are service defaults, not Vite or Sentinel HTTP ports.
 | `ai_pg_user` | `clara` | Database user |
 | `ai_pg_password` | environment/empty | Database password |
 | `ai_embed_base_url` | `http://127.0.0.1:18200/v1` | OpenAI-compatible embeddings endpoint |
-| `ai_embed_model` | `ibm-granite/granite-embedding-311m-multilingual-r2` | Embedding model |
-| `ai_embed_dims` | `768` | Stored vector dimension |
+| `ai_embed_model` | `BAAI/bge-m3` | BGE-M3 embedding model |
+| `ai_embed_dims` | `1024` | Stored vector dimension |
 | `ai_memory_user_id` | `clara` | mem0-compatible user identity |
-| `ai_memory_collection` | `clara_memories` | pgvector collection/table identity |
+| `ai_memory_collection` | `sentinel_memories` | Sentinel's dedicated pgvector collection |
 | `ai_stale_after_days` | `7` | Research-unit staleness window |
 | `ai_dedup_similarity_threshold` | `0.96` | Similarity at which a memory is reinforced/skipped instead of inserted |
 
 The password can be supplied by `SENTINEL_AI_PG_PASSWORD`; the environment value
 becomes the default when the process imports `sentinel.settings`.
+
+Existing database settings override these defaults. Moving from Granite's
+768-dimensional vectors requires regenerating the records in a separate
+collection before changing the model, dimensions and collection together. Follow
+[the BGE-M3 migration procedure](deployment.md#bge-m3-memory-migration).
+Clara's Go memory store is separate; rebuilding it does not rebuild Sentinel's
+PostgreSQL vectors. The `0.96` setting above controls duplicate detection, not
+Clara's automatic-recall threshold.
 
 ## LED and backup settings
 

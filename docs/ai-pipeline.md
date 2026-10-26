@@ -64,7 +64,7 @@ schedule.
 | Browser search | `http://127.0.0.1:8891` | Browser-backed search where required |
 | URL summarizer | `http://127.0.0.1:8890` | Fetch and distill sources |
 | PostgreSQL/pgvector | `127.0.0.1:5432` | mem0-compatible research memory |
-| Embeddings API | `http://127.0.0.1:18200/v1` | Memory similarity and retrieval |
+| Embeddings API | `http://127.0.0.1:18200/v1` | BGE-M3 Q8 CPU memory similarity and retrieval |
 
 Configure these through [Configuration](configuration.md). Satellite failures
 must make the affected task fail visibly; they must not disable portfolio,
@@ -103,10 +103,17 @@ to `POST /api/memory/dedup-store`. Similarity at or above
 `ai_dedup_similarity_threshold` reinforces/skips a duplicate rather than
 creating a redundant vector record. Tags and metadata preserve unit context.
 
-Memory is shared with Clara-compatible mem0 data, so database identity,
-collection, user ID, embedding model, and vector dimensions must remain aligned.
-Changing embedding dimensions without a data migration is incompatible with
-existing vectors.
+Research memory uses Sentinel's own `sentinel_memories` PostgreSQL collection
+with 1,024-dimensional BGE-M3 vectors. Payloads retain the mem0-compatible format
+and historical `clara` owner value, but the collection is independent of Clara's
+Go memory store. The embedding service is shared; its model and dimensions must
+match Sentinel's settings and stored vectors.
+
+Existing Granite installations need the [BGE-M3 migration](deployment.md#bge-m3-memory-migration).
+It copies only the configured owner's records, preserves their UUIDs and complete
+payloads, and leaves the old shared collection untouched. Changing dimensions or
+pointing at a different model without regenerating vectors is incompatible with
+the existing index.
 
 ## Monitoring and manual control
 

@@ -15,6 +15,13 @@ import math
 import os
 from typing import Any
 
+from sentinel.ai.memory_config import (
+    DEFAULT_EMBED_BASE_URL,
+    DEFAULT_EMBED_DIMS,
+    DEFAULT_EMBED_MODEL,
+    DEFAULT_MEMORY_COLLECTION,
+    DEFAULT_MEMORY_USER_ID,
+)
 from sentinel.database import Database
 from sentinel.utils.decorators import singleton
 
@@ -136,21 +143,19 @@ DEFAULTS = {
     "ai_browser_search_base_url": "http://127.0.0.1:8891",
     "ai_firefox_mcp_base_url": "http://127.0.0.1:8892",
     "ai_url_summarizer_base_url": "http://127.0.0.1:8890",
-    # Research memory: pgvector Postgres (clara-postgres) with mem0 tables.
-    # Connection identity matches Clara's mem0 config; the password is stored in
+    # Research memory: Sentinel's dedicated BGE-M3 pgvector collection.
+    # PostgreSQL is shared with Clara's host; the password is stored in
     # Sentinel settings (or supplied through SENTINEL_AI_PG_PASSWORD).
     "ai_pg_host": "127.0.0.1",
     "ai_pg_port": 5432,
     "ai_pg_database": "clara_memories",
     "ai_pg_user": "clara",
     "ai_pg_password": os.environ.get("SENTINEL_AI_PG_PASSWORD", ""),
-    "ai_embed_base_url": "http://127.0.0.1:18200/v1",
-    "ai_embed_model": "ibm-granite/granite-embedding-311m-multilingual-r2",
-    "ai_embed_dims": 768,
-    # mem0 identity: rows are shared with Clara's chat memory, so the user_id
-    # and collection must match what the Node mem0 client writes.
-    "ai_memory_user_id": "clara",
-    "ai_memory_collection": "clara_memories",
+    "ai_embed_base_url": DEFAULT_EMBED_BASE_URL,
+    "ai_embed_model": DEFAULT_EMBED_MODEL,
+    "ai_embed_dims": DEFAULT_EMBED_DIMS,
+    "ai_memory_user_id": DEFAULT_MEMORY_USER_ID,
+    "ai_memory_collection": DEFAULT_MEMORY_COLLECTION,
     # Staleness windows. A unit older than its window is eligible for
     # re-analysis; NULL last_analyzed_at counts as maximally stale.
     "ai_stale_after_days": 7,
