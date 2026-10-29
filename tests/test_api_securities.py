@@ -12,6 +12,45 @@ from sentinel.settings import Settings
 
 
 @pytest.mark.asyncio
+async def test_security_cooldown_http_round_trip_and_cache_invalidation(tmp_path):
+    import httpx
+    from fastapi import FastAPI
+
+    from sentinel.api.dependencies import get_common_deps
+    from sentinel.api.routers.securities import router
+
+    db = Database(str(tmp_path / "cooldown.db"))
+    await db.connect()
+    try:
+        await db.upsert_security("TEST.EU", name="Test")
+        await db.upsert_security("OTHER.EU", name="Other")
+        deps = MagicMock()
+        deps.db = db
+        app = FastAPI()
+        app.include_router(router, prefix="/api")
+        app.dependency_overrides[get_common_deps] = lambda: deps
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
+            assert (await client.get("/api/securities/TEST.EU")).json()["cooldown_enabled"] == 1
+            for value in (0, 1, False, True):
+                await db.cache_set("planner:ideal_portfolio", "{}", ttl_seconds=600)
+                response = await client.put("/api/securities/TEST.EU", json={"cooldown_enabled": value})
+                assert response.status_code == 200
+                assert response.json()["cooldown_enabled"] == int(value)
+                assert await db.cache_get("planner:ideal_portfolio") is None
+                assert (await client.get("/api/securities/TEST.EU")).json()["cooldown_enabled"] == int(value)
+                rows = (await client.get("/api/securities")).json()
+                assert next(s for s in rows if s["symbol"] == "TEST.EU")["cooldown_enabled"] == int(value)
+                assert (await db.get_security("OTHER.EU"))["cooldown_enabled"] == 1
+            for invalid in (None, "0", "false", 2, -1, 0.5, [], {}):
+                response = await client.put("/api/securities/TEST.EU", json={"cooldown_enabled": invalid})
+                assert response.status_code == 400
+                assert (await db.get_security("TEST.EU"))["cooldown_enabled"] == 1
+    finally:
+        await db.close()
+        db.remove_from_cache()
+
+
+@pytest.mark.asyncio
 async def test_broker_search_includes_untracked_inactive_and_held_sell_only_symbols():
     from sentinel.api.routers.securities import search_securities
 
@@ -286,7 +325,12 @@ async def test_get_unified_view_can_load_only_expandable_inactive_security_detai
     assert result[0]["active"] == 0
     assert result[0]["can_delete"] is True
     assert result[0]["transaction_count"] == 0
+    assert result[0]["cooldown_enabled"] == 1
     assert "prices" in result[0]
+
+    mock_deps.db.get_all_securities.return_value[0]["cooldown_enabled"] = 0
+    result = await get_unified_view(mock_deps, inactive_only=True)
+    assert result[0]["cooldown_enabled"] == 0
 
 
 @pytest.mark.asyncio

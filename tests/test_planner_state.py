@@ -1,5 +1,6 @@
 """Tests for input-driven planner state."""
 
+from datetime import datetime
 from typing import Any, cast
 from unittest.mock import AsyncMock, MagicMock
 
@@ -120,7 +121,11 @@ class TestPlannerStateInputs:
 
 class TestRebalanceEngineStateInputs:
     @pytest.mark.asyncio
-    async def test_engine_uses_state_for_positions_cash_and_deposit_assumption(self):
+    @pytest.mark.parametrize(
+        "security_cooldown,last_side",
+        [(1, None), (0, "BUY"), (0, "SELL"), (1, "BUY"), (1, "SELL")],
+    )
+    async def test_engine_uses_state_for_positions_cash_and_deposit_assumption(self, security_cooldown, last_side):
         db = MagicMock()
         db.cache_get = AsyncMock(return_value=None)
         db.cache_set = AsyncMock()
@@ -134,6 +139,7 @@ class TestRebalanceEngineStateInputs:
                     "allow_buy": 1,
                     "allow_sell": 1,
                     "ai_research_multiplier": 1.0,
+                    "cooldown_enabled": security_cooldown,
                 }
             ]
         )
@@ -141,7 +147,10 @@ class TestRebalanceEngineStateInputs:
             return_value={"AAA": [{"date": f"2025-01-{i:02d}", "close": 100.0} for i in range(1, 251)]}
         )
         db.get_strategy_states = AsyncMock(return_value={})
-        db.get_latest_trades_for_symbols = AsyncMock(return_value={})
+        latest_trades = (
+            {"AAA": {"side": last_side, "executed_at": datetime(2025, 1, 30).timestamp()}} if last_side else {}
+        )
+        db.get_latest_trades_for_symbols = AsyncMock(return_value=latest_trades)
 
         engine = RebalanceEngine(db=db)
         engine._settings = MagicMock()
@@ -199,6 +208,10 @@ class TestRebalanceEngineStateInputs:
             precomputed_sleeves={"AAA": "core"},
             state=state,
         )
+
+        if security_cooldown and last_side:
+            assert recs == []
+            return
 
         assert recs
         assert recs[0].symbol == "AAA"

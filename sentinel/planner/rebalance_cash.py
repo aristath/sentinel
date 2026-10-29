@@ -502,6 +502,8 @@ async def generate_deficit_sells(
             latest_trades = await _load_latest_trades(engine, [p["symbol"] for p in position_data])
             blocked_symbols: set[str] = set()
             for pos in position_data:
+                if not securities_map[pos["symbol"]].get("cooldown_enabled", 1):
+                    continue
                 is_blocked, _ = await engine._check_cooloff_violation(
                     pos["symbol"],
                     "sell",

@@ -1,4 +1,4 @@
-const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-C9jMCnJM.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
+const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/dist-qUpxMwR-.js","assets/dist-CzEUVXDC.js","assets/dist-CFtxRP70.js","assets/dist-n09HnSQH.js","assets/dist-CtvrPQL3.js","assets/dist-BtjFFX5g.js","assets/dist-Dp7zcg8q.js","assets/dist-CWt5MqEz.js","assets/dist-D8zCp1Lk.js","assets/dist-BPKZFDP4.js","assets/dist-DGm0tJyr.js"])))=>i.map(i=>d[i]);
 //#region \0vite/modulepreload-polyfill.js
 (function polyfill() {
 	const relList = document.createElement("link").relList;
@@ -2982,7 +2982,7 @@ var SentinelCodeEditor = class extends HTMLElement {
 				__vitePreload(() => import("./dist-qUpxMwR-.js"), __vite__mapDeps([0,1,2,3])),
 				__vitePreload(() => import("./dist-CzEUVXDC.js").then((n) => n.x), []),
 				__vitePreload(() => import("./dist-CtvrPQL3.js"), __vite__mapDeps([4,1,2,3,5,6,7,8])),
-				__vitePreload(() => import("./dist-C9jMCnJM.js"), __vite__mapDeps([9,2,1])),
+				__vitePreload(() => import("./dist-BPKZFDP4.js"), __vite__mapDeps([9,2,1])),
 				__vitePreload(() => import("./dist-CFtxRP70.js"), __vite__mapDeps([2,1]))
 			]);
 			if (!this.isConnected || initialization !== this.#initialization) return;
@@ -7462,18 +7462,26 @@ var SentinelSecurities = class extends i {
 		} : security);
 		this.requestUpdate();
 	}
-	async updatePermission(event, security, field) {
+	async updateExecutionControl(event, security, field) {
 		const value = event.currentTarget.checked ? 1 : 0;
 		const previous = security[field];
 		this.errorMessage = "";
 		this.message = "";
+		this.busyAction = `${field}:${security.symbol}`;
 		this.updateLocalSecurity(security.symbol, { [field]: value });
 		try {
 			await putJson(`/api/securities/${encodeURIComponent(security.symbol)}`, { [field]: value });
-			this.message = `${security.symbol} ${field === "allow_buy" ? "buy" : "sell"} permission updated`;
+			const label = {
+				allow_buy: "buy permission",
+				allow_sell: "sell permission",
+				cooldown_enabled: "cool-off periods"
+			}[field];
+			this.message = `${security.symbol} ${label} updated`;
 		} catch (error) {
 			this.updateLocalSecurity(security.symbol, { [field]: previous });
 			this.errorMessage = error.message;
+		} finally {
+			this.busyAction = "";
 		}
 	}
 	async saveAliases(security) {
@@ -7786,12 +7794,12 @@ var SentinelSecurities = class extends i {
                 ${this.inactiveOnly ? "Inactive" : b`<tui-toggle
                           aria-label="Allow buying ${security.symbol}"
                           ?checked=${security.allow_buy === 1}
-                          @change=${(event) => this.updatePermission(event, security, "allow_buy")}
+                          @change=${(event) => this.updateExecutionControl(event, security, "allow_buy")}
                           >B</tui-toggle
                         >&nbsp;<tui-toggle
                           aria-label="Allow selling ${security.symbol}"
                           ?checked=${security.allow_sell === 1}
-                          @change=${(event) => this.updatePermission(event, security, "allow_sell")}
+                          @change=${(event) => this.updateExecutionControl(event, security, "allow_sell")}
                           >S</tui-toggle
                         >`}
               </td>` : ""}
@@ -7854,6 +7862,13 @@ var SentinelSecurities = class extends i {
                 ${this.renderDetailRow("Industry", security.industry || "-")}
                 ${this.renderDetailRow("Lot", security.min_lot ?? "-")}
                 ${this.renderDetailRow("Quantity", security.quantity ?? 0)}
+                ${this.renderDetailRow("Cool-off periods", b`<tui-toggle
+                    aria-label="Cool-off periods for ${security.symbol}"
+                    title="Apply global same-side and opposite-side cool-off periods to this security"
+                    ?checked=${security.cooldown_enabled !== 0}
+                    ?disabled=${this.busyAction === `cooldown_enabled:${security.symbol}`}
+                    @change=${(event) => this.updateExecutionControl(event, security, "cooldown_enabled")}
+                  >Enabled</tui-toggle>`)}
                 ${this.renderDetailRow("Price", formatCurrency(security.current_price, security.currency))}
                 ${this.renderDetailRow("Aliases", b`<tui-input
                       id="aliases-${safeId(security.symbol)}"

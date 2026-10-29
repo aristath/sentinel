@@ -53,6 +53,26 @@ class TestDatabaseConnection:
     """Tests for database connection management."""
 
     @pytest.mark.asyncio
+    async def test_security_cooldown_migration_preserves_preferences(self, temp_db):
+        await temp_db.upsert_security("OLD.EU", name="Existing security", allow_buy=0)
+        await temp_db.conn.execute("ALTER TABLE securities DROP COLUMN cooldown_enabled")
+        await temp_db.conn.commit()
+
+        await temp_db._migrate_schema()
+        security = await temp_db.get_security("OLD.EU")
+        assert security["cooldown_enabled"] == 1
+        assert security["name"] == "Existing security"
+        assert security["allow_buy"] == 0
+
+        await temp_db.upsert_security("OLD.EU", cooldown_enabled=0)
+        await temp_db._migrate_schema()
+        await temp_db.close()
+        await temp_db.connect()
+        assert (await temp_db.get_security("OLD.EU"))["cooldown_enabled"] == 0
+        await temp_db.upsert_security("NEW.EU", name="New security")
+        assert (await temp_db.get_security("NEW.EU"))["cooldown_enabled"] == 1
+
+    @pytest.mark.asyncio
     async def test_connect_creates_file(self):
         """Connecting creates the database file."""
         with tempfile.TemporaryDirectory() as tmpdir:

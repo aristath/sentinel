@@ -89,6 +89,13 @@ only used by `/api/portfolio/structure`, an unstable web-scraping integration.
 | `strategy_max_funding_turnover_pct` | `0.12` | Maximum portfolio turnover from funding sells |
 | `strategy_funding_conviction_bias` | `1.0` | Conviction influence when choosing funding sells |
 
+Each security also has a **Cool-off periods** switch in its expanded details,
+stored as `securities.cooldown_enabled` (default `1`). Turning it off bypasses
+both same-side and opposite-side waits for that security in recommendations
+and funding-rotation sells. The global `cooldown_enabled` master switch still
+disables these waits for every security. This per-security switch does not
+change the separate duplicate-order guard or opportunity rotation time-stop.
+
 ## AI research rating settings
 
 | Key | Default | Purpose |

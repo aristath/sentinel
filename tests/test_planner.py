@@ -353,14 +353,16 @@ class TestDeficitSellsSimulatedCash:
         assert "STALE.EU" in sold
 
     @pytest.mark.asyncio
-    async def test_funding_rotation_respects_disabled_cooldown(self):
-        """Funding-rotation sells ignore recent trades when cooldown is disabled."""
+    @pytest.mark.parametrize("global_enabled,security_enabled", [(False, 1), (True, 0)])
+    @pytest.mark.parametrize("last_side", ["BUY", "SELL"])
+    async def test_funding_rotation_respects_disabled_cooldown(self, global_enabled, security_enabled, last_side):
+        """Both switches can bypass same-side and opposite-side funding waits."""
         import time
 
         two_days_ago = int(time.time()) - 2 * 86400
         engine = self._cooloff_engine(
-            {"FRESH.EU": {"side": "BUY", "executed_at": two_days_ago}},
-            cooldown_enabled=False,
+            {"FRESH.EU": {"side": last_side, "executed_at": two_days_ago}},
+            cooldown_enabled=global_enabled,
         )
 
         securities_map = {
@@ -369,6 +371,7 @@ class TestDeficitSellsSimulatedCash:
                 "currency": "EUR",
                 "min_lot": 1,
                 "allow_sell": 1,
+                "cooldown_enabled": security_enabled,
                 "ai_research_multiplier": 0.3,
             },
         }

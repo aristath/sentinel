@@ -51,6 +51,11 @@ Schema changes must support an existing production database:
 
 Do not require an operator to run raw SQL as the normal upgrade path.
 
+`securities.cooldown_enabled` is a non-null `0`/`1` execution control, defaulting
+to `1` for both new and existing securities. `0` bypasses the planner's same-side
+and opposite-side cool-off windows for that security, including funding sells.
+Migration preserves explicitly disabled values on subsequent startups.
+
 AI ratings have no database default. `ai_research_multiplier` and its source,
 analysis and update timestamp are `NULL` until a rating is explicitly recorded.
 Initialization never fills a missing score or manufactures a rating timestamp.

@@ -10,6 +10,34 @@ await import("../src/sentinel-securities.js");
 const SentinelSecurities = registry.get("sentinel-securities");
 const settingKey = "ui_securities_table_columns";
 
+test("saves per-security cool-off changes and restores the switch after failure", async (context) => {
+  const element = new SentinelSecurities();
+  const security = { symbol: "COOL.EU", cooldown_enabled: 1 };
+  element.securities.value = [security];
+  let reject = false;
+  context.mock.method(globalThis, "fetch", async (path, options) => {
+    assert.equal(path, "/api/securities/COOL.EU");
+    assert.equal(options.method, "PUT");
+    assert.deepEqual(JSON.parse(options.body), { cooldown_enabled: reject ? 1 : 0 });
+    return reject
+      ? Response.json({ detail: "Save failed" }, { status: 500 })
+      : Response.json({ ...security, cooldown_enabled: 0 });
+  });
+
+  await element.updateExecutionControl({ currentTarget: { checked: false } }, security, "cooldown_enabled");
+  assert.equal(element.allSecurities[0].cooldown_enabled, 0);
+  assert.equal(element.message, "COOL.EU cool-off periods updated");
+  assert.equal(element.busyAction, "");
+
+  reject = true;
+  await element.updateExecutionControl(
+    { currentTarget: { checked: true } }, element.allSecurities[0], "cooldown_enabled",
+  );
+  assert.equal(element.allSecurities[0].cooldown_enabled, 0);
+  assert.equal(element.errorMessage, "Save failed");
+  assert.equal(element.busyAction, "");
+});
+
 test("keeps unrated scores separate from zero in both sort directions", () => {
   const element = new SentinelSecurities();
   element.securities.value = [

@@ -1220,6 +1220,10 @@ class Database(TaskDatabaseMixin, BaseDatabase):
         security_columns = {row["name"] for row in await cursor.fetchall()}
 
         migrations = {
+            "cooldown_enabled": (
+                "ALTER TABLE securities ADD COLUMN cooldown_enabled INTEGER NOT NULL DEFAULT 1 "
+                "CHECK(cooldown_enabled IN (0, 1))"
+            ),
             "universe_source": "ALTER TABLE securities ADD COLUMN universe_source TEXT NOT NULL DEFAULT 'migration'",
             "universe_last_seen_at": "ALTER TABLE securities ADD COLUMN universe_last_seen_at TEXT",
             # Tradernet instrument-kind code (1 = stock, 7 = ETF, 10 = depositary
@@ -1280,6 +1284,7 @@ CREATE TABLE IF NOT EXISTS securities (
     active INTEGER DEFAULT 1,
     allow_buy INTEGER DEFAULT 1,
     allow_sell INTEGER DEFAULT 1,
+    cooldown_enabled INTEGER NOT NULL DEFAULT 1 CHECK(cooldown_enabled IN (0, 1)),
     ai_research_multiplier REAL,  -- NULL = unrated; 0 avoid, 0.5 neutral, 1 prefer
     ai_research_multiplier_updated_at TEXT,
     ai_research_multiplier_source TEXT,

@@ -74,6 +74,7 @@ async def _security_payload(symbol: str, deps: CommonDependencies) -> dict[str, 
         "active": sec.get("active", 1),
         "allow_buy": sec.get("allow_buy", 1),
         "allow_sell": sec.get("allow_sell", 1),
+        "cooldown_enabled": sec.get("cooldown_enabled", 1),
         "ai_research_multiplier": pref["ai_research_multiplier"],
         "ai_research_multiplier_age_weeks": pref["ai_research_multiplier_age_weeks"],
         "ai_research_multiplier_updated_at": sec.get("ai_research_multiplier_updated_at"),
@@ -352,8 +353,15 @@ async def update_security(
         "aliases",
         "allow_buy",
         "allow_sell",
+        "cooldown_enabled",
     ]
     updates = {k: v for k, v in data.items() if k in allowed_fields}
+
+    if "cooldown_enabled" in updates:
+        value = updates["cooldown_enabled"]
+        if not isinstance(value, (bool, int)) or value not in (0, 1):
+            raise HTTPException(status_code=400, detail="'cooldown_enabled' must be a boolean or 0/1")
+        updates["cooldown_enabled"] = int(value)
 
     if updates:
         await deps.db.upsert_security(symbol, **updates)
@@ -686,6 +694,7 @@ async def get_unified_view(
                 "active": sec.get("active", 1),
                 "allow_buy": sec.get("allow_buy", 1),
                 "allow_sell": sec.get("allow_sell", 1),
+                "cooldown_enabled": sec.get("cooldown_enabled", 1),
                 "transaction_count": transaction_counts.get(symbol, 0),
                 "can_delete": not bool(sec.get("active", 1))
                 and transaction_counts.get(symbol, 0) == 0

@@ -23,6 +23,7 @@ Returns all securities in the universe (including inactive ones).
     "active": 1,
     "allow_buy": 1,
     "allow_sell": 1,
+    "cooldown_enabled": 1,
     "market_id": "93",
     "ai_research_multiplier": 0.5,
     "ai_research_multiplier_updated_at": "2026-05-17T12:00:00+00:00",
@@ -42,6 +43,7 @@ Returns all securities in the universe (including inactive ones).
 | `geography` | ISO‑2 country‑of‑risk from Tradernet (`attributes.CntryOfRisk`). Auto‑filled by the metadata sync; blank for ETFs and for tickers Tradernet does not classify. Not editable via the API. |
 | `industry` | Refinitiv/LSEG TRBC industry name from Tradernet (`sector_code`). Auto‑filled by the metadata sync; blank for ETFs. Not editable via the API. |
 | `market_id` | Broker market identifier string |
+| `cooldown_enabled` | `1` applies global cool-off windows; `0` bypasses same-side and opposite-side waits for this security, including funding sells. Defaults to `1`. Also returned by the single-security and unified views. |
 | `data` | Raw JSON metadata blob from broker (security details, market info) |
 | `ai_research_multiplier` | Stored AI research rating, 0 avoid, 0.5 neutral, 1 prefer; `null` when unrated |
 | `ai_research_multiplier_updated_at` | Last per-security preference update timestamp |
@@ -243,6 +245,7 @@ Update security metadata and execution controls. Only the following fields are a
 | `aliases` | string | Comma-separated search aliases for companion apps |
 | `allow_buy` | int (0/1) | Whether buys are permitted |
 | `allow_sell` | int (0/1) | Whether sells are permitted |
+| `cooldown_enabled` | bool or int (0/1) | Apply global cool-off windows to this security (default `1`). `0` bypasses both same-side and opposite-side waits. The global master switch still takes precedence. |
 | `ai_research_multiplier` | float or null | Manual override of the stored AI research multiplier. `null` clears the rating and its metadata. Research tasks use `POST /api/securities/preference`. |
 | `ai_research_multiplier_analysis` | string | Optional rationale when setting `ai_research_multiplier` manually |
 | `active` | int (0/1) | Active flag |
@@ -258,6 +261,7 @@ Update security metadata and execution controls. Only the following fields are a
 ```
 
 **Errors**
+- `400` — `cooldown_enabled` is not a boolean or integer `0`/`1`
 - `404` — Security not found
 
 ---

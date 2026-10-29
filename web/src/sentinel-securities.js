@@ -377,22 +377,30 @@ class SentinelSecurities extends LitElement {
     this.requestUpdate();
   }
 
-  async updatePermission(event, security, field) {
+  async updateExecutionControl(event, security, field) {
     const value = event.currentTarget.checked ? 1 : 0;
     const previous = security[field];
 
     this.errorMessage = "";
     this.message = "";
+    this.busyAction = `${field}:${security.symbol}`;
     this.updateLocalSecurity(security.symbol, { [field]: value });
 
     try {
       await putJson(`/api/securities/${encodeURIComponent(security.symbol)}`, {
         [field]: value,
       });
-      this.message = `${security.symbol} ${field === "allow_buy" ? "buy" : "sell"} permission updated`;
+      const label = {
+        allow_buy: "buy permission",
+        allow_sell: "sell permission",
+        cooldown_enabled: "cool-off periods",
+      }[field];
+      this.message = `${security.symbol} ${label} updated`;
     } catch (error) {
       this.updateLocalSecurity(security.symbol, { [field]: previous });
       this.errorMessage = error.message;
+    } finally {
+      this.busyAction = "";
     }
   }
 
@@ -861,7 +869,7 @@ class SentinelSecurities extends LitElement {
                           aria-label="Allow buying ${security.symbol}"
                           ?checked=${security.allow_buy === 1}
                           @change=${(event) =>
-                            this.updatePermission(
+                            this.updateExecutionControl(
                               event,
                               security,
                               "allow_buy",
@@ -871,7 +879,7 @@ class SentinelSecurities extends LitElement {
                           aria-label="Allow selling ${security.symbol}"
                           ?checked=${security.allow_sell === 1}
                           @change=${(event) =>
-                            this.updatePermission(
+                            this.updateExecutionControl(
                               event,
                               security,
                               "allow_sell",
@@ -962,6 +970,17 @@ class SentinelSecurities extends LitElement {
                 ${this.renderDetailRow("Industry", security.industry || "-")}
                 ${this.renderDetailRow("Lot", security.min_lot ?? "-")}
                 ${this.renderDetailRow("Quantity", security.quantity ?? 0)}
+                ${this.renderDetailRow(
+                  "Cool-off periods",
+                  html`<tui-toggle
+                    aria-label="Cool-off periods for ${security.symbol}"
+                    title="Apply global same-side and opposite-side cool-off periods to this security"
+                    ?checked=${security.cooldown_enabled !== 0}
+                    ?disabled=${this.busyAction === `cooldown_enabled:${security.symbol}`}
+                    @change=${(event) =>
+                      this.updateExecutionControl(event, security, "cooldown_enabled")}
+                  >Enabled</tui-toggle>`,
+                )}
                 ${this.renderDetailRow(
                   "Price",
                   formatCurrency(security.current_price, security.currency),

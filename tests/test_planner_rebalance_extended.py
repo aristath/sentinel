@@ -562,7 +562,9 @@ class TestBuildRecommendationPaths:
         assert rec is None
 
     @pytest.mark.asyncio
-    async def test_cooldown_disabled_ignores_recent_trade(self, _make_engine, _settings_ctx):
+    @pytest.mark.parametrize("last_side", ["BUY", "SELL"])
+    @pytest.mark.parametrize("sleeve", ["core", "opportunity"])
+    async def test_cooldown_disabled_ignores_recent_trade(self, _make_engine, _settings_ctx, last_side, sleeve):
         engine = _make_engine()
         recent_buy = datetime.now(timezone.utc).timestamp() - 2 * 86400
         base_kwargs = dict(
@@ -590,15 +592,18 @@ class TestBuildRecommendationPaths:
             contrarian_scores={"COOL": 0.5},
             signal_data={
                 "COOL": {
-                    "sleeve": "core",
+                    "sleeve": sleeve,
                     "opp_score": 0.5,
                     "dip_score": 0.5,
                     "cycle_turn": 0,
+                    "dd252": -0.15,
                 }
             },
             min_trade_value=100.0,
-            latest_trade={"side": "BUY", "executed_at": recent_buy},
+            latest_trade={"side": last_side, "executed_at": recent_buy},
         )
+        # Stay at the same opportunity tranche so same-side waits apply.
+        base_kwargs["security_data"]["COOL"]["state"] = {"tranche_stage": 1}
 
         blocked = await engine._build_recommendation(
             **base_kwargs,
@@ -613,6 +618,17 @@ class TestBuildRecommendationPaths:
         assert allowed is not None
         assert allowed.symbol == "COOL"
         assert allowed.action == "buy"
+
+        base_kwargs["security_data"]["COOL"]["cooldown_enabled"] = 0
+        per_security_allowed = await engine._build_recommendation(
+            **base_kwargs,
+            settings_ctx={**_settings_ctx, "cooldown_enabled": True},
+        )
+        assert per_security_allowed is not None
+        assert per_security_allowed.action == "buy"
+
+        base_kwargs["security_data"]["COOL"]["allow_buy"] = 0
+        assert await engine._build_recommendation(**base_kwargs, settings_ctx=_settings_ctx) is None
 
     @pytest.mark.asyncio
     async def test_quantity_below_lot_size_returns_none(self, _make_engine, _settings_ctx):

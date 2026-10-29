@@ -435,6 +435,7 @@ class RebalanceEngine:
                 "avg_cost": pos.get("avg_cost", 0) if pos else 0,
                 "allow_buy": sec.get("allow_buy", 1) if sec else 1,
                 "allow_sell": sec.get("allow_sell", 1) if sec else 1,
+                "cooldown_enabled": sec.get("cooldown_enabled", 1) if sec else 1,
                 "trade_blocked": trade_blocked,
                 "block_reason": block_reason,
                 "lot_class": lot_profile["lot_class"],
@@ -855,7 +856,7 @@ class RebalanceEngine:
             is_tranche_raising_buy = desired_stage > current_stage
 
         # Check cool-off period
-        if bool(settings_ctx.get("cooldown_enabled", True)):
+        if bool(settings_ctx.get("cooldown_enabled", True)) and sec_data.get("cooldown_enabled", 1):
             if sleeve == "opportunity":
                 cooloff_days = int(settings_ctx["strategy_opportunity_cooloff_days"])
             else:
