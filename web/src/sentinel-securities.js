@@ -852,7 +852,7 @@ class SentinelSecurities extends LitElement {
                       )}`
                     : ""
                 }
-                <div>${this.renderRecommendation(security)}</div>
+                <span>${this.renderRecommendation(security)}</span>
               </td>`
             : ""
         }
