@@ -139,6 +139,12 @@ Manual or scheduled enqueue creates durable queue state in SQLite. The worker:
 6. Replays checkpoints after an interrupted run.
 7. Marks completion, error, cancellation, or interruption durably.
 
+Automatic `analyze-security` work is delayed for 12 hours after the latest
+failure when that symbol's last two completed analyses both failed. Success
+resets the streak; cancellations are ignored. Existing queued retries obey the
+same delay. Explicit manual runs bypass it. Run responses expose `eligibleAt`
+alongside `createdAt` so delayed work can be identified.
+
 Deleting `/api/task-runs/{run_id}` means stop/cancel an active run; it does not
 erase historical records.
 

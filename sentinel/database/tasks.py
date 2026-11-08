@@ -13,12 +13,34 @@ from typing import Any, cast
 import aiosqlite
 
 ACTIVE_WORK_STATUSES = ("queued", "claimed", "running")
+SECURITY_RESEARCH_RETRY_DELAY_MS = 12 * 60 * 60 * 1000
 
 
 class TaskDatabaseMixin:
     """Database methods for scheduled folder tasks."""
 
     conn: aiosqlite.Connection
+
+    async def _security_research_retry_at(self, conn: aiosqlite.Connection, task_id: str, inputs_json: str) -> int:
+        if task_id != "analyze-security":
+            return 0
+        symbol = str(json.loads(inputs_json).get("symbol") or "").strip()
+        if not symbol:
+            return 0
+        rows = list(
+            await (
+                await conn.execute(
+                    """SELECT status, finished_at FROM work_queue
+                   WHERE task_id='analyze-security' AND status IN ('done','error')
+                     AND trim(json_extract(inputs_json, '$.symbol'))=?
+                   ORDER BY finished_at DESC, rowid DESC LIMIT 2""",
+                    (symbol,),
+                )
+            ).fetchall()
+        )
+        if len(rows) == 2 and all(row["status"] == "error" for row in rows):
+            return int(rows[0]["finished_at"]) + SECURITY_RESEARCH_RETRY_DELAY_MS
+        return 0
 
     @asynccontextmanager
     async def _task_transaction(self) -> AsyncIterator[aiosqlite.Connection]:
@@ -159,6 +181,11 @@ class TaskDatabaseMixin:
                     return dict(row)
 
             now = int(time.time() * 1000)
+            if not schedule_id.endswith(":manual"):
+                eligible_at = max(
+                    eligible_at or now,
+                    await self._security_research_retry_at(conn, task_id, json.dumps(inputs)),
+                )
             run_id = str(uuid.uuid4())
             await conn.execute(
                 """INSERT INTO work_queue
@@ -206,15 +233,32 @@ class TaskDatabaseMixin:
     async def claim_next_task_work(self) -> dict[str, Any] | None:
         now = int(time.time() * 1000)
         async with self._task_transaction() as conn:
-            cursor = await conn.execute(
-                """UPDATE work_queue SET status='claimed', claimed_at=?, updated_at=?
-                   WHERE id=(SELECT id FROM work_queue WHERE status='queued' AND eligible_at<=?
-                             ORDER BY priority DESC, created_at ASC LIMIT 1)
-                   RETURNING *""",
-                (now, now, now),
-            )
-            row = await cursor.fetchone()
-            return dict(row) if row else None
+            while True:
+                row = await (
+                    await conn.execute(
+                        """SELECT * FROM work_queue WHERE status='queued' AND eligible_at<=?
+                           ORDER BY priority DESC, created_at ASC LIMIT 1""",
+                        (now,),
+                    )
+                ).fetchone()
+                if row is None:
+                    return None
+                retry_at = 0
+                if not str(row["schedule_id"] or "").endswith(":manual"):
+                    retry_at = await self._security_research_retry_at(conn, row["task_id"], row["inputs_json"])
+                if retry_at > now:
+                    await conn.execute(
+                        "UPDATE work_queue SET eligible_at=?, updated_at=? WHERE id=?", (retry_at, now, row["id"])
+                    )
+                    continue
+                claimed = await (
+                    await conn.execute(
+                        """UPDATE work_queue SET status='claimed', claimed_at=?, updated_at=?
+                           WHERE id=? RETURNING *""",
+                        (now, now, row["id"]),
+                    )
+                ).fetchone()
+                return dict(claimed) if claimed else None
 
     async def get_next_task_work_eligible_at(self) -> int | None:
         """Return the earliest future queue eligibility timestamp, in milliseconds."""

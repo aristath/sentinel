@@ -20,6 +20,41 @@
 
 const STEP_TIMEOUT_SECONDS = 3600;
 
+// Prefer five summaries across at most three search pages, then use raw content.
+async function fetchSources(query, timeRange, env, profile = false) {
+  let searchText = "";
+  let previousCandidateCount = 0;
+  let fetched;
+  async function collect(allowRaw) {
+    const sourceEnv = { ...env, SEARCH_TEXT: searchText, ALLOW_RAW_CONTENT: String(allowRaw) };
+    return JSON.parse(profile
+      ? await run("fetch-profile-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: sourceEnv })
+      : await run("fetch-query-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: sourceEnv }));
+  }
+  for (let pageno = 1; pageno <= 3; pageno++) {
+    try {
+      searchText += "\n\n" + await tool("searxng_web_search", {
+        query, language: "all", pageno, ...(timeRange ? { time_range: timeRange } : {}),
+      }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
+    } catch (error) {
+      console.warn(`Search page ${pageno} failed for ${query}: ${error.message}`);
+      if (!searchText.trim()) throw error;
+      break;
+    }
+    fetched = await collect(false);
+    console.log(`Sources for ${query}: page ${pageno}, ${fetched.candidateCount} candidates, ${fetched.sourceCount} summaries`);
+    if (fetched.sourceCount >= 5 || fetched.candidateCount === previousCandidateCount) break;
+    previousCandidateCount = fetched.candidateCount;
+  }
+  if (fetched?.sourceCount < 5) fetched = await collect(true);
+  for (const failure of fetched.failures) {
+    console.warn(`${failure.stage} failed for ${failure.url}: ${failure.error}`);
+  }
+  console.log(`Sources for ${query}: ${fetched.sourceCount} usable, ${fetched.rawSourceCount} unsummarized`);
+  if (!fetched.sourceCount) throw new Error(`No usable source summaries or raw content for query: ${query} (${fetched.candidateCount} URLs tried)`);
+  return fetched;
+}
+
 // Resolve the security and prepare paths (+ any cached profile).
 const resolved = JSON.parse(await run("resolve-security.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SYMBOL: process.env.symbol || "" } }));
 const item = resolved[0];
@@ -27,12 +62,7 @@ const itemJson = JSON.stringify(item);
 
 // 2. Build the factual profile, but only when one isn't already cached.
 if (!item.profileCacheHit) {
-  const overview = await tool("searxng_web_search", {
-    query: `strategy of ${item.name} for the next 10 years`,
-    language: "all",
-    pageno: 1,
-  }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
-  await run("fetch-profile-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SEARCH_TEXT: overview, ITEM_JSON: itemJson } });
+  await fetchSources(`strategy of ${item.name} for the next 10 years`, null, { ITEM_JSON: itemJson }, true);
   const profileSummaries = await run("load-profile-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.workRoot } });
   const profile = await prompt("generate-profile.md", { timeoutSeconds: STEP_TIMEOUT_SECONDS, context: { name: item.name, profileSummaries } });
   await run("save-generated-profile.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { PROFILE: profile, ITEM_JSON: itemJson } });
@@ -52,13 +82,7 @@ const contextQueries = JSON.parse(await run("validate-context-queries.py", { tim
 
 // 4. Research each query in turn (the original ran the loop at concurrency 1).
 for (const query of queries) {
-  const searchResults = await tool("searxng_web_search", {
-    query,
-    language: "all",
-    time_range: "year",
-    pageno: 1,
-  }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
-  const fetched = JSON.parse(await run("fetch-query-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.workRoot, QUERY: query, SEARCH_TEXT: searchResults } }));
+  const fetched = await fetchSources(query, "year", { WORK_ROOT: item.workRoot, QUERY: query });
   const querySummaries = await run("load-query-source-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SOURCE_SUMMARIES_PATH: fetched.sourceSummariesPath } });
   const findings = await prompt("extract-query-findings.md", { timeoutSeconds: STEP_TIMEOUT_SECONDS, context: { name: item.name, query, querySummaries } });
   await run("save-query-findings.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { FINDINGS: findings, FINDINGS_PATH: fetched.findingsPath } });
@@ -66,13 +90,7 @@ for (const query of queries) {
 
 // 5. Research current external context with the same bounded per-query pipeline.
 for (const query of contextQueries) {
-  const searchResults = await tool("searxng_web_search", {
-    query,
-    language: "all",
-    time_range: "month",
-    pageno: 1,
-  }, { timeoutSeconds: STEP_TIMEOUT_SECONDS });
-  const fetched = JSON.parse(await run("fetch-query-sources.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { WORK_ROOT: item.contextRoot, QUERY: query, SEARCH_TEXT: searchResults } }));
+  const fetched = await fetchSources(query, "month", { WORK_ROOT: item.contextRoot, QUERY: query });
   const querySummaries = await run("load-query-source-summaries.py", { timeoutSeconds: STEP_TIMEOUT_SECONDS, env: { SOURCE_SUMMARIES_PATH: fetched.sourceSummariesPath } });
   const findings = await prompt("extract-context-findings.md", {
     timeoutSeconds: STEP_TIMEOUT_SECONDS,

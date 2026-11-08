@@ -36,6 +36,26 @@ The scheduler tasks choose stale units; the analyze tasks gather and distill
 evidence; rating tasks turn the current evidence set into relative ratings.
 The `rate-portfolio` output is the primary batch update path.
 
+For profiles, security queries, and external-context queries, source collection
+prefers five usable summaries. If fewer are available, it searches up to three
+pages, deduplicating URLs and stopping when a page adds no candidates. The
+security and external-context searches keep their year and month filters.
+If a later search page fails, collection continues with the URLs already found.
+After search recovery, remaining source slots use unsummarized content, first
+from the summarizer response and then from a direct HTML, text, or PDF read.
+HTML reads preserve visible prose and tables without article-length gates;
+PDF reads require `pdftotext`. Raw content is labeled, retains its source URL,
+and is capped at 20,000 characters per source with an explicit truncation marker.
+Direct downloads are limited to 20 MB. Inaccessible pages remain failures.
+Runs log per-URL summary/raw failures and fail explicitly if no source is usable.
+
+After two consecutive failed `analyze-security` runs for the same symbol,
+automatic retries wait until 12 hours after its latest failure. Other symbols
+remain eligible. A successful run resets the streak; cancellations do not count
+as failures or reset it. The queue enforces this both when adding work and before
+claiming existing work, using persisted run history across restarts. Explicit
+manual runs can bypass the automatic retry delay.
+
 ## Research units
 
 The AI API exposes two unit kinds:

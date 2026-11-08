@@ -38,6 +38,12 @@ The canonical `CREATE TABLE` definitions and migrations are in
 Foreign keys protect benchmark and task relationships. Historical transaction
 tables must not be deleted merely because a security becomes inactive.
 
+Security research retry delays use the last two completed `analyze-security`
+outcomes in `work_queue`, filtered by the symbol in `inputs_json`. Two failures
+defer automatic work through `eligible_at` until 12 hours after the latest
+failure. Claiming work rechecks persisted history to cover existing queued
+retries and service restarts. No separate retry-state table is required.
+
 ## Initialization and migrations
 
 `Database.connect()` creates missing tables, applies idempotent column/table

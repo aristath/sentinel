@@ -2,6 +2,10 @@
 
 Base paths: `/api/tasks`, `/api/task-runs`, and `/api/scheduler`
 
+Run objects include `eligibleAt`, an ISO timestamp for queue eligibility.
+Automatic security-analysis retries observe the per-symbol failure delay
+described in [Editable tasks](../tasks.md#runs-queue-and-checkpoints).
+
 Task definitions live in folders and may be overlaid in `SENTINEL_HOME`. Writes
 are rejected while a task has queued or running work. See [Editable tasks](../tasks.md)
 for the file format and execution model.

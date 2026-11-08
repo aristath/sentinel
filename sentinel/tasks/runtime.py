@@ -104,6 +104,7 @@ async def _serialize_run(row: dict[str, Any], *, include_events: bool = False) -
         "dedupeKey": row.get("dedupe_key"),
         "status": status,
         "createdAt": _iso(row.get("created_at")),
+        "eligibleAt": _iso(row.get("eligible_at")),
         "startedAt": _iso(started),
         "finishedAt": _iso(finished),
         "durationMs": duration,

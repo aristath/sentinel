@@ -1,7 +1,7 @@
 """For one research query, fetch + summarise its sources via the url-summarizer,
 writing per-query summaries/index files keyed by a query hash. Emits the paths and
 source count for the findings prompt.
-Environment: WORK_ROOT, QUERY, SEARCH_TEXT."""
+Environment: WORK_ROOT, QUERY, SEARCH_TEXT, ALLOW_RAW_CONTENT (optional)."""
 
 import os
 import hashlib
@@ -40,16 +40,20 @@ def url_summarizer_base_url():
 
 service_base_url = url_summarizer_base_url()
 candidates = parse_candidates(search_text, skip_hosts)
-fetched_sources, attempted_count = collect_usable_sources(candidates, service_base_url)
+fetched_sources, attempted_count, failures = collect_usable_sources(
+    candidates, service_base_url, allow_raw=os.environ.get("ALLOW_RAW_CONTENT") == "true"
+)
 saved = []
 with source_summaries_path.open("a", encoding="utf-8") as handle:
     for fetched in fetched_sources:
         idx = len(saved) + 1
         title = fetched["title"]
         url = fetched["url"]
-        saved.append({"index": idx, "title": title, "url": url})
+        saved.append({"index": idx, "title": title, "url": url, "contentKind": fetched["contentKind"]})
         handle.write(f"\n\n## Source {idx}: {title}\n")
         handle.write(f"URL: {url}\n\n")
+        if fetched["contentKind"] == "raw":
+            handle.write("Unsummarized source content:\n\n")
         handle.write(fetched["summary"])
         handle.write("\n")
 
@@ -66,6 +70,8 @@ print(
             "candidateCount": len(candidates),
             "attemptedCount": attempted_count,
             "sourceCount": len(saved),
+            "rawSourceCount": sum(source["contentKind"] == "raw" for source in saved),
+            "failures": failures,
         },
         ensure_ascii=False,
     )

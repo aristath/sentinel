@@ -1,7 +1,5 @@
-"""Fetch + summarise profile-overview sources via the url-summarizer; write
-profile-summaries.md and profile-index.json. If nothing usable is fetched, bump the
-report mtime (or write a placeholder stub) and abort so the picker rotates on.
-Environment: SEARCH_TEXT, ITEM_JSON."""
+"""Collect profile sources, optionally falling back to unsummarized content.
+Environment: SEARCH_TEXT, ITEM_JSON, ALLOW_RAW_CONTENT (optional)."""
 
 import os
 import json
@@ -34,44 +32,33 @@ def url_summarizer_base_url():
 
 service_base_url = url_summarizer_base_url()
 candidates = parse_candidates(search_text, skip_hosts)
-fetched_sources, _attempted_count = collect_usable_sources(candidates, service_base_url)
+fetched_sources, attempted_count, failures = collect_usable_sources(
+    candidates, service_base_url, allow_raw=os.environ.get("ALLOW_RAW_CONTENT") == "true"
+)
 saved = []
 with summaries_path.open("a", encoding="utf-8") as handle:
     for fetched in fetched_sources:
         idx = len(saved) + 1
         title = fetched["title"]
         url = fetched["url"]
-        saved.append({"index": idx, "title": title, "url": url})
+        saved.append({"index": idx, "title": title, "url": url, "contentKind": fetched["contentKind"]})
         handle.write(f"\n\n## Source {idx}: {title}\n")
         handle.write(f"URL: {url}\n\n")
+        if fetched["contentKind"] == "raw":
+            handle.write("Unsummarized source content:\n\n")
         handle.write(fetched["summary"])
         handle.write("\n")
 
-if not saved:
-    # No usable sources this run. We still need schedule-next-security-analysis
-    # to see a fresh mtime so it rotates to the next symbol instead of
-    # re-picking this one every cycle. But NEVER clobber an existing analysis:
-    # if a real report is already on disk, just bump its mtime and leave the
-    # content intact. Only write a placeholder stub when nothing exists yet.
-    report_path = pathlib.Path(item["reportPath"])
-    report_path.parent.mkdir(parents=True, exist_ok=True)
-    if report_path.exists():
-        report_path.touch()
-    else:
-        import datetime as dt
-
-        today = dt.date.today().isoformat()
-        symbol = item.get("symbol")
-        name = item.get("name")
-        stub = (
-            f"# {symbol} — {name}\n"
-            f"As of: {today}\n\n"
-            "(No usable profile sources fetched yet. None of the returned URLs "
-            "yielded extractable content. Will retry next scheduled cycle.)\n"
-        )
-        tmp = report_path.with_suffix(report_path.suffix + ".tmp")
-        tmp.write_text(stub, encoding="utf-8")
-        tmp.replace(report_path)
-    raise SystemExit("No usable profile sources were fetched")
-
 index_path.write_text(json.dumps(saved, ensure_ascii=False, indent=2), encoding="utf-8")
+print(
+    json.dumps(
+        {
+            "candidateCount": len(candidates),
+            "attemptedCount": attempted_count,
+            "sourceCount": len(saved),
+            "rawSourceCount": sum(source["contentKind"] == "raw" for source in saved),
+            "failures": failures,
+        },
+        ensure_ascii=False,
+    )
+)

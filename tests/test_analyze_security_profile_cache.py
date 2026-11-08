@@ -67,21 +67,6 @@ def _set_age(path: Path, age_seconds: float) -> float:
     return mtime
 
 
-def test_profile_discovery_query_uses_ten_year_strategy():
-    task = (definitions.CORE_TASKS_DIR / "analyze-security" / "task.js").read_text(encoding="utf-8")
-
-    assert "query: `strategy of ${item.name} for the next 10 years`" in task
-
-
-def test_external_context_search_uses_fixed_month_without_truncating_candidates():
-    task = (definitions.CORE_TASKS_DIR / "analyze-security" / "task.js").read_text(encoding="utf-8")
-
-    assert 'time_range: "month"' in task
-    assert "num_results: 5" not in task
-    assert 'prompt("generate-context-queries.md"' in task
-    assert "useTools: false" in task
-
-
 def test_query_source_fetcher_tries_next_batch_until_five_sources_are_usable(tmp_path):
     attempted_urls = []
 

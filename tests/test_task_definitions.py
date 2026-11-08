@@ -436,6 +436,72 @@ async def test_queue_allows_distinct_inputs_for_the_same_task(task_db):
 
 
 @pytest.mark.asyncio
+async def test_security_research_waits_twelve_hours_after_two_failures(task_db, monkeypatch):
+    now = [time.time()]
+    monkeypatch.setattr("sentinel.database.tasks.time.time", lambda: now[0])
+    source = await task_db.ensure_task_queue_source("analyze-security", "queue")
+    first = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    await task_db.finish_task_work(first["id"], "error", "first failure")
+    now[0] += 10
+    second = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    assert (await task_db.claim_next_task_work())["id"] == second["id"]
+    assert await task_db.mark_task_work_running(second["id"])
+    await task_db.finish_task_work(second["id"], "error", "second failure")
+    retry = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    expected = int((now[0] + 12 * 3600) * 1000)
+    assert retry["eligible_at"] == expected
+    other = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "BBB"})
+    assert (await task_db.claim_next_task_work())["id"] == other["id"]
+    await task_db.finish_task_work(other["id"], "done")
+    assert await task_db.claim_next_task_work() is None
+    assert await task_db.get_next_task_work_eligible_at() == expected
+    now[0] += 12 * 3600 - 0.001
+    assert await task_db.claim_next_task_work() is None
+    now[0] += 0.002
+    assert (await task_db.claim_next_task_work())["id"] == retry["id"]
+    await task_db.finish_task_work(retry["id"], "error", "third failure")
+    next_retry = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    assert next_retry["eligible_at"] == int(now[0] * 1000) + 12 * 3600 * 1000
+
+
+@pytest.mark.asyncio
+async def test_security_research_defers_already_queued_work_after_second_failure(task_db):
+    source = await task_db.ensure_task_queue_source("analyze-security", "queue")
+    first = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    await task_db.finish_task_work(first["id"], "error", "first failure")
+    second = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    queued = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    await task_db.finish_task_work(second["id"], "error", "second failure")
+    # This also covers historical failures being enforced after a service restart.
+    assert await task_db.claim_next_task_work() is None
+    finished = await task_db.get_task_work(second["id"])
+    delayed = await task_db.get_task_work(queued["id"])
+    assert delayed["eligible_at"] == finished["finished_at"] + 12 * 3600 * 1000
+
+
+@pytest.mark.asyncio
+async def test_security_research_success_resets_streak_and_manual_runs_bypass_delay(task_db):
+    source = await task_db.ensure_task_queue_source("analyze-security", "queue")
+    manual = await task_db.ensure_task_queue_source("analyze-security", "manual")
+    for _ in range(2):
+        failed = await task_db.enqueue_task_work(manual, "analyze-security", {"symbol": "AAA"})
+        await task_db.finish_task_work(failed["id"], "error", "failed")
+    cancelled = await task_db.enqueue_task_work(manual, "analyze-security", {"symbol": "AAA"})
+    await task_db.cancel_task_work(cancelled["id"])
+    delayed = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    assert delayed["eligible_at"] > int(time.time() * 1000)
+    explicit = await task_db.enqueue_task_work(manual, "analyze-security", {"symbol": "AAA"})
+    assert (await task_db.claim_next_task_work())["id"] == explicit["id"]
+    await task_db.finish_task_work(explicit["id"], "done")
+    fresh = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    assert fresh["eligible_at"] <= int(time.time() * 1000)
+    assert (await task_db.claim_next_task_work())["id"] == fresh["id"]
+    await task_db.finish_task_work(fresh["id"], "error", "first failure after success")
+    retry = await task_db.enqueue_task_work(source, "analyze-security", {"symbol": "AAA"})
+    assert retry["eligible_at"] <= int(time.time() * 1000)
+
+
+@pytest.mark.asyncio
 async def test_schedule_state_stays_running_with_other_work_queued(task_db):
     schedule_id = await task_db.ensure_task_queue_source("analyze-security", "queue")
     older = await task_db.enqueue_task_work(schedule_id, "analyze-security", {"symbol": "AAA"})
