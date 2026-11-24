@@ -636,7 +636,7 @@ def test_every_tool_has_success_and_failure_contract_cases():
 
 
 def test_mcp_is_mounted_before_the_spa_catch_all():
-    paths = [route.path for route in app.routes]
+    paths = [route.path for route in app.routes if hasattr(route, "path")]
     assert "/mcp" in paths
     assert paths.index("/mcp") < paths.index("/{path:path}")
 
