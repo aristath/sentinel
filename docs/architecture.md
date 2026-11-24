@@ -49,7 +49,7 @@ plane or process.
 | `sentinel/forecasting/` | Forecast service/client, series construction, scoring |
 | `sentinel/led/` | Optional LED controller and bridge state |
 | `sentinel/mcp_server.py` | MCP tool definitions and FastAPI-mounted ASGI application |
-| `web/src/` | Lit/Teract browser application |
+| `web/src/` | Lit/Web Awesome browser application |
 | `TUI/` | Independent Go terminal client |
 | `arduino-app/`, `firmware/` | UNO Q application and MCU sketches |
 
@@ -87,8 +87,8 @@ payloads, and APIs. See [Scheduler](scheduler.md) and [Tasks](tasks.md).
 
 During development Vite serves modules and proxies `/api`. In production,
 FastAPI serves `web/dist/` and uses a catch-all route for client navigation.
-The frontend uses light-DOM custom elements so Teract components and application
-components participate in the same inherited terminal theme.
+Sentinel's Lit application elements use light DOM and share Web Awesome's
+global theme and CSS tokens.
 
 ## External systems
 

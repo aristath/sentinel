@@ -106,7 +106,12 @@ Planner-affecting settings such as cash targets, transaction fees, position caps
 
 ## `PUT /api/settings`
 
-Atomically update the strategy-tuning settings shown in the Strategy tab. All keys must be present; partial updates are rejected. Other planner settings, including cash reserve and target cash, are updated individually through `PUT /api/settings/{key}`.
+Atomically update the FIRE assumptions or the strategy tuning settings. For
+FIRE, send both `fire_monthly_expenses_eur` and `fire_expected_inflation_pct`
+in `values`. The same validation applies as for individual saves.
+
+For strategy tuning, send every key listed below in `values`. Other planner
+settings, including cash reserve and target cash, use `PUT /api/settings/{key}`.
 
 **Required keys**
 - `strategy_min_opp_score` — Minimum score to classify a security as opportunity (0–1).

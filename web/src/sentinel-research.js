@@ -95,11 +95,13 @@ class SentinelResearch extends LitElement {
         window.sessionStorage.removeItem(storageKey);
       }
       return Array.isArray(value)
-        ? value.filter(
-            (entry) =>
-              ["user", "assistant"].includes(entry?.role) &&
-              typeof entry?.content === "string",
-          ).map((entry) => ({ ...entry, pending: false }))
+        ? value
+            .filter(
+              (entry) =>
+                ["user", "assistant"].includes(entry?.role) &&
+                typeof entry?.content === "string",
+            )
+            .map((entry) => ({ ...entry, pending: false }))
         : [];
     } catch {
       return [];
@@ -267,10 +269,8 @@ class SentinelResearch extends LitElement {
     await this.scrollChatToEnd();
 
     try {
-      await postEventStream(
-        "/api/ai/chat",
-        { message, history },
-        (event) => this.handleChatEvent(assistantId, event),
+      await postEventStream("/api/ai/chat", { message, history }, (event) =>
+        this.handleChatEvent(assistantId, event),
       );
     } catch (error) {
       this.chatError = error.message;
@@ -281,7 +281,7 @@ class SentinelResearch extends LitElement {
     } finally {
       this.chatBusy = false;
       await this.scrollChatToEnd();
-      this.querySelector('[data-research-chat-input]')?.focus();
+      this.querySelector("[data-research-chat-input]")?.focus();
     }
   }
 
@@ -311,13 +311,14 @@ class SentinelResearch extends LitElement {
     this.units.refresh();
   }
 
-  changeTab(event) {
-    const nextTab = event.currentTarget.value;
+  async changeTab(event) {
+    const control = event.currentTarget;
+    const nextTab = control.value;
 
     if (this.tab === "tasks" && nextTab !== "tasks") {
       const tasks = this.querySelector("sentinel-tasks");
-      if (tasks?.confirmClose && !tasks.confirmClose()) {
-        event.currentTarget.value = "tasks";
+      if (tasks?.dirty && !(await tasks.confirmClose())) {
+        control.value = "tasks";
         return;
       }
     }
@@ -414,138 +415,111 @@ class SentinelResearch extends LitElement {
 
     return html`
       <div>
-        Securities ${security.stale}/${security.total} stale │ Queued
-        ${status.queued?.length ?? 0} │ Memory ${status.memory?.findings ?? "-"}
+        Securities ${security.stale}/${security.total} stale · Queued
+        ${status.queued?.length ?? 0} · Memory ${status.memory?.findings ?? "-"}
         findings
       </div>
       <div aria-hidden="true">&nbsp;</div>
-      <tui-box heading="Current Work" border="single">
-        ${
-          status.running
-            ? html`
-                <div>${status.running.label}</div>
-                <div>${status.running.kind}:${status.running.key}</div>
-                ${
-                  status.running.elapsed_seconds !== undefined
-                    ? html`<div>
-                        ${formatDuration(status.running.elapsed_seconds * 1000)}
-                      </div>`
-                    : ""
-                }
-              `
-            : "Idle"
-        }
-      </tui-box>
+      <wa-card
+        ><span slot="header">Current Work</span>
+        ${status.running
+          ? html`
+              <div>${status.running.label}</div>
+              <div>${status.running.kind}:${status.running.key}</div>
+              ${status.running.elapsed_seconds !== undefined
+                ? html`<div>
+                    ${formatDuration(status.running.elapsed_seconds * 1000)}
+                  </div>`
+                : ""}
+            `
+          : "Idle"}
+      </wa-card>
       <div aria-hidden="true">&nbsp;</div>
-      <tui-flex align="start" wrap>
-        <tui-box
-          heading="Next in Line"
-          border="single"
-          style="flex: 1 1 40ch; min-width: 0"
-        >
-          ${
-            status.queued?.length
-              ? status.queued.map(
-                  (item) => html`
-                    <div>
-                      ${item.unit_label ?? `${item.unit_kind}:${item.unit_key}`}
-                      │ ${item.task_name ?? item.task_id ?? item.kind}
-                    </div>
-                  `,
-                )
-              : "Queue empty"
-          }
-        </tui-box>
-        <tui-box
-          heading="Latest Tick"
-          border="single"
-          style="flex: 1 1 40ch; min-width: 0"
-        >
-          ${
-            status.last_run
-              ? html`
+      <div class="sentinel-layout" data-align="start" data-wrap>
+        <wa-card style="flex: 1 1 40ch; min-width: 0"
+          ><span slot="header">Next in Line</span>
+          ${status.queued?.length
+            ? status.queued.map(
+                (item) => html`
                   <div>
-                    <tui-text
-                      variant=${statusVariant(status.last_run.status) || ""}
-                      >${status.last_run.status}</tui-text
-                    >
-                    │ ${formatRelativeTime(status.last_run.finished_at)}
+                    ${item.unit_label ?? `${item.unit_kind}:${item.unit_key}`} ·
+                    ${item.task_name ?? item.task_id ?? item.kind}
                   </div>
-                  ${
-                    status.last_run.unit_label
-                      ? html`<div>
-                          ${status.last_run.unit_label}
-                          ${
-                            status.last_run.unit_key
-                              ? `(${status.last_run.unit_key})`
-                              : ""
-                          }
-                        </div>`
-                      : ""
-                  }
-                  ${
-                    status.last_run.duration_seconds !== undefined
-                      ? html`<div>
-                          ${formatDuration(
-                            status.last_run.duration_seconds * 1000,
-                          )}
-                        </div>`
-                      : ""
-                  }
-                  ${
-                    status.last_run.error
-                      ? html`<tui-text variant="error"
-                          >${status.last_run.error}</tui-text
-                        >`
-                      : ""
-                  }
-                `
-              : "No runs yet"
-          }
-        </tui-box>
-      </tui-flex>
-      ${
-        status.staleness?.most_stale
-          ? html`<div>
-              Oldest: ${status.staleness.most_stale.label}
-              (${status.staleness.most_stale.kind})
-            </div>`
-          : ""
-      }
-      ${
-        status.memory?.error
-          ? html`<tui-text variant="error"
-              >Memory: ${status.memory.error}</tui-text
-            >`
-          : ""
-      }
+                `,
+              )
+            : "Queue empty"}
+        </wa-card>
+        <wa-card style="flex: 1 1 40ch; min-width: 0"
+          ><span slot="header">Latest Tick</span>
+          ${status.last_run
+            ? html`
+                <div>
+                  <span data-tone=${statusVariant(status.last_run.status) || ""}
+                    >${status.last_run.status}</span
+                  >
+                  · ${formatRelativeTime(status.last_run.finished_at)}
+                </div>
+                ${status.last_run.unit_label
+                  ? html`<div>
+                      ${status.last_run.unit_label}
+                      ${status.last_run.unit_key
+                        ? `(${status.last_run.unit_key})`
+                        : ""}
+                    </div>`
+                  : ""}
+                ${status.last_run.duration_seconds !== undefined
+                  ? html`<div>
+                      ${formatDuration(status.last_run.duration_seconds * 1000)}
+                    </div>`
+                  : ""}
+                ${status.last_run.error
+                  ? html`<span data-tone="error"
+                      >${status.last_run.error}</span
+                    >`
+                  : ""}
+              `
+            : "No runs yet"}
+        </wa-card>
+      </div>
+      ${status.staleness?.most_stale
+        ? html`<div>
+            Oldest: ${status.staleness.most_stale.label}
+            (${status.staleness.most_stale.kind})
+          </div>`
+        : ""}
+      ${status.memory?.error
+        ? html`<span data-tone="error">Memory: ${status.memory.error}</span>`
+        : ""}
       <div aria-hidden="true">&nbsp;</div>
-      <tui-box heading="Manual Rating" border="single">
-        <tui-flex align="baseline" wrap>
+      <wa-card
+        ><span slot="header">Manual Rating</span>
+        <div class="sentinel-layout" data-align="baseline" data-wrap>
           <label
-            >Security&nbsp;<tui-select
-              value=${this.ratingSymbol}
+            >Security&nbsp;<wa-select
+              size="small"
+              .value=${this.ratingSymbol}
               @change=${(event) =>
                 (this.ratingSymbol = event.currentTarget.value)}
             >
-              <option value="">Select a security</option>
+              <wa-option value="">Select a security</wa-option>
               ${securities.map(
                 (unit) =>
-                  html`<option value=${unit.key}>
+                  html`<wa-option value=${unit.key}>
                     ${unit.label} (${unit.key})
-                  </option>`,
+                  </wa-option>`,
               )}
-            </tui-select></label
+            </wa-select></label
           >
           <span aria-hidden="true">&nbsp;</span>
-          <tui-button
+          <wa-button
+            size="small"
             ?disabled=${!this.ratingSymbol || this.busy}
             @click=${() =>
               this.requestResearch("rate", "security", this.ratingSymbol)}
-            >Rate now</tui-button
+            >Rate now</wa-button
           >
-        </tui-flex>
-      </tui-box>
+        </div>
+      </wa-card>
     `;
   }
 
@@ -553,117 +527,111 @@ class SentinelResearch extends LitElement {
     const units = this.units.value?.units ?? [];
 
     return html`
-      <tui-flex align="baseline" wrap>
+      <div class="sentinel-layout" data-align="baseline" data-wrap>
         <label
-          >Kind&nbsp;<tui-select
-            value=${this.kind}
+          >Kind&nbsp;<wa-select
+            size="small"
+            .value=${this.kind}
             @change=${(event) =>
               this.changeUnitsFilter("kind", event.currentTarget.value)}
           >
-            <option value="">All units</option>
-            <option value="security">Securities</option>
-            <option value="portfolio">Portfolio</option>
-          </tui-select></label
+            <wa-option value="">All units</wa-option>
+            <wa-option value="security">Securities</wa-option>
+            <wa-option value="portfolio">Portfolio</wa-option>
+          </wa-select></label
         >
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
-        <tui-toggle
-          ?checked=${this.staleOnly}
+
+        <wa-switch
+          size="small"
+          .checked=${this.staleOnly}
           @change=${(event) =>
             this.changeUnitsFilter("staleOnly", event.currentTarget.checked)}
-          >Stale only</tui-toggle
+          >Stale only</wa-switch
         >
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
-        <tui-button @click=${this.refreshAll}>Refresh</tui-button>
-      </tui-flex>
-      <div aria-hidden="true">&nbsp;</div>
-      ${
-        this.units.loading && !this.units.value
-          ? "Loading units…"
-          : units.length === 0
-            ? "No research units match this view."
-            : html`
-                <div style="overflow: auto; min-width: 0">
-                  <table style="border-collapse: collapse; width: 100%">
-                    <thead>
-                      <tr>
-                        <th style="text-align: left">Unit</th>
-                        <th style="text-align: left">│ Kind</th>
-                        <th style="text-align: left">│ Last analyzed</th>
-                        <th style="text-align: left">│ State</th>
-                        <th style="text-align: left">│ Error</th>
-                        <th style="text-align: left">│ Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${units.map((unit) => {
-                        const state =
-                          unit.status === "running"
-                            ? "running"
-                            : unit.stale
-                              ? "stale"
-                              : "fresh";
 
-                        return html`
-                          <tr>
-                            <td style="text-align: left; vertical-align: top">
-                              ${unit.label}<br />${unit.key}
-                            </td>
-                            <td style="text-align: left; vertical-align: top">
-                              │ ${unit.kind}
-                            </td>
-                            <td style="text-align: left; vertical-align: top">
-                              │
-                              ${
-                                unit.last_analyzed_at
-                                  ? formatRelativeTime(unit.last_analyzed_at)
-                                  : "Never"
-                              }
-                            </td>
-                            <td style="text-align: left; vertical-align: top">
-                              │
-                              <tui-text variant=${statusVariant(state) || ""}
-                                >${state}</tui-text
-                              >
-                            </td>
-                            <td
-                              style="text-align: left; vertical-align: top; max-width: 40ch; overflow-wrap: anywhere"
+        <wa-button size="small" @click=${this.refreshAll}>Refresh</wa-button>
+      </div>
+      <div aria-hidden="true">&nbsp;</div>
+      ${this.units.loading && !this.units.value
+        ? "Loading units…"
+        : units.length === 0
+          ? "No research units match this view."
+          : html`
+              <div style="overflow: auto; min-width: 0">
+                <table style="border-collapse: collapse; width: 100%">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left">Unit</th>
+                      <th style="text-align: left">Kind</th>
+                      <th style="text-align: left">Last analyzed</th>
+                      <th style="text-align: left">State</th>
+                      <th style="text-align: left">Error</th>
+                      <th style="text-align: left">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${units.map((unit) => {
+                      const state =
+                        unit.status === "running"
+                          ? "running"
+                          : unit.stale
+                            ? "stale"
+                            : "fresh";
+
+                      return html`
+                        <tr>
+                          <td style="text-align: left; vertical-align: top">
+                            ${unit.label}<br />${unit.key}
+                          </td>
+                          <td style="text-align: left; vertical-align: top">
+                            ${unit.kind}
+                          </td>
+                          <td style="text-align: left; vertical-align: top">
+                            ${unit.last_analyzed_at
+                              ? formatRelativeTime(unit.last_analyzed_at)
+                              : "Never"}
+                          </td>
+                          <td style="text-align: left; vertical-align: top">
+                            <span data-tone=${statusVariant(state) || ""}
+                              >${state}</span
                             >
-                              │ ${unit.last_error ?? "-"}
-                            </td>
-                            <td
-                              style="text-align: left; vertical-align: top; white-space: nowrap"
+                          </td>
+                          <td
+                            style="text-align: left; vertical-align: top; max-width: 40ch; overflow-wrap: anywhere"
+                          >
+                            ${unit.last_error ?? "-"}
+                          </td>
+                          <td
+                            style="text-align: left; vertical-align: top; white-space: nowrap"
+                          >
+                            ${unit.kind !== "portfolio"
+                              ? html`<wa-button
+                                  size="small"
+                                  ?disabled=${this.busy ||
+                                  unit.status === "running"}
+                                  @click=${() =>
+                                    this.requestResearch(
+                                      "analyze",
+                                      unit.kind,
+                                      unit.key,
+                                    )}
+                                  >Analyze</wa-button
+                                >`
+                              : ""}
+                            <wa-button
+                              size="small"
+                              ?disabled=${!unit.artifacts?.length}
+                              @click=${() => this.openArtifacts(unit)}
+                              >View</wa-button
                             >
-                              │
-                              ${
-                                unit.kind !== "portfolio"
-                                  ? html`<tui-button
-                                      ?disabled=${
-                                        this.busy || unit.status === "running"
-                                      }
-                                      @click=${() =>
-                                        this.requestResearch(
-                                          "analyze",
-                                          unit.kind,
-                                          unit.key,
-                                        )}
-                                      >Analyze</tui-button
-                                    >`
-                                  : ""
-                              }
-                              <tui-button
-                                ?disabled=${!unit.artifacts?.length}
-                                @click=${() => this.openArtifacts(unit)}
-                                >View</tui-button
-                              >
-                            </td>
-                          </tr>
-                        `;
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              `
-      }
+                          </td>
+                        </tr>
+                      `;
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            `}
     `;
   }
 
@@ -684,10 +652,10 @@ class SentinelResearch extends LitElement {
           <thead>
             <tr>
               <th style="text-align: left">Unit</th>
-              <th style="text-align: left">│ Status</th>
-              <th style="text-align: left">│ Duration</th>
-              <th style="text-align: left">│ Finished</th>
-              <th style="text-align: left">│ Error</th>
+              <th style="text-align: left">Status</th>
+              <th style="text-align: left">Duration</th>
+              <th style="text-align: left">Finished</th>
+              <th style="text-align: left">Error</th>
             </tr>
           </thead>
           <tbody>
@@ -695,24 +663,20 @@ class SentinelResearch extends LitElement {
               (entry) => html`
                 <tr>
                   <td style="text-align: left; vertical-align: top">
-                    ${
-                      entry.unit_label ??
-                      entry.unit_key ??
-                      entry.job_id?.replace("ai:tick:", "") ??
-                      "-"
-                    }
+                    ${entry.unit_label ??
+                    entry.unit_key ??
+                    entry.job_id?.replace("ai:tick:", "") ??
+                    "-"}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │
-                    <tui-text variant=${statusVariant(entry.status) || ""}
-                      >${entry.status}</tui-text
+                    <span data-tone=${statusVariant(entry.status) || ""}
+                      >${entry.status}</span
                     >
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${formatDuration(entry.duration_ms)}
+                    ${formatDuration(entry.duration_ms)}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │
                     ${formatRelativeTime(
                       typeof entry.executed_at === "number"
                         ? entry.executed_at * 1000
@@ -722,7 +686,7 @@ class SentinelResearch extends LitElement {
                   <td
                     style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
                   >
-                    │ ${entry.error ?? "-"}
+                    ${entry.error ?? "-"}
                   </td>
                 </tr>
               `,
@@ -741,129 +705,142 @@ class SentinelResearch extends LitElement {
         aria-live="polite"
         style="height: min(52vh, 36rem); overflow-y: auto; padding-right: 1ch"
       >
-        ${
-          this.chatMessages.length
-            ? this.chatMessages.map(
-                (message) => html`
-                  <article style="margin-bottom: 1.25rem">
-                    <div>
-                      <tui-text
-                        >${message.role === "assistant" ? "Sentinel" : "You"}</tui-text
-                      >
-                    </div>
-                    <div
-                      style="white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch"
-                    >${message.content}</div>
-                    ${
-                      message.role === "assistant"
-                        ? html`
-                            ${(message.reasoning ?? []).map(
-                              (item, index) => html`
-                                <details style="margin-top: 0.45rem; max-width: 78ch">
-                                  <summary style="cursor: pointer">
-                                    Reasoning${
-                                      message.reasoning.length > 1
-                                        ? ` ${index + 1}`
-                                        : ""
-                                    }
-                                  </summary>
-                                  <div
-                                    style="white-space: pre-wrap; overflow-wrap: anywhere; padding: 0.4rem 0 0 2ch"
-                                  >${item.content}</div>
-                                </details>
-                              `,
-                            )}
-                            ${(message.tools ?? []).map(
-                              (tool) => html`
-                                <details style="margin-top: 0.45rem; max-width: 78ch">
-                                  <summary style="cursor: pointer; overflow-wrap: anywhere">
-                                    Tool · ${tool.name} · ${
-                                      tool.status === "complete"
-                                        ? "complete"
-                                        : "running"
-                                    }
-                                  </summary>
-                                  <div style="padding: 0.4rem 0 0 2ch">
-                                    <div>Arguments</div>
-                                    <pre
-                                      style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0.75rem"
-                                    >${this.formatToolArguments(tool.arguments)}</pre>
-                                    <div>Result</div>
-                                    <pre
-                                      style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0"
-                                    >${tool.result || "Waiting…"}</pre>
-                                  </div>
-                                </details>
-                              `,
-                            )}
-                            ${
-                              message.context?.dropped_messages > 0
-                                ? html`
-                                    <details style="margin-top: 0.45rem; max-width: 78ch">
-                                      <summary style="cursor: pointer">
-                                        Context · ${message.context.dropped_messages}
-                                        older messages omitted
-                                      </summary>
-                                      <div style="padding: 0.4rem 0 0 2ch">
-                                        The newest ${message.context.retained_messages}
-                                        messages were retained inside the
-                                        ${Math.round(
-                                          message.context.limit_tokens / 1024,
-                                        )}k-token context window.
-                                      </div>
-                                    </details>
-                                  `
-                                : ""
-                            }
-                          `
-                        : ""
-                    }
-                  </article>
-                `,
-              )
-            : html`<div style="max-width: 68ch">
-                Ask about the research pipeline, inspect any generated artifact,
-                search the web, browse with Firefox, or operate Sentinel directly.
-              </div>`
-        }
+        ${this.chatMessages.length
+          ? this.chatMessages.map(
+              (message) => html`
+                <article style="margin-bottom: 1.25rem">
+                  <div>
+                    <span
+                      >${message.role === "assistant"
+                        ? "Sentinel"
+                        : "You"}</span
+                    >
+                  </div>
+                  <div
+                    style="white-space: pre-wrap; overflow-wrap: anywhere; max-width: 78ch"
+                  >
+                    ${message.content}
+                  </div>
+                  ${message.role === "assistant"
+                    ? html`
+                        ${(message.reasoning ?? []).map(
+                          (item, index) => html`
+                            <wa-details
+                              style="margin-top: 0.45rem; max-width: 78ch"
+                            >
+                              <span slot="summary">
+                                Reasoning${message.reasoning.length > 1
+                                  ? ` ${index + 1}`
+                                  : ""}
+                              </span>
+                              <div
+                                style="white-space: pre-wrap; overflow-wrap: anywhere; padding: 0.4rem 0 0 2ch"
+                              >
+                                ${item.content}
+                              </div>
+                            </wa-details>
+                          `,
+                        )}
+                        ${(message.tools ?? []).map(
+                          (tool) => html`
+                            <wa-details
+                              style="margin-top: 0.45rem; max-width: 78ch"
+                            >
+                              <span slot="summary">
+                                Tool · ${tool.name} ·
+                                ${tool.status === "complete"
+                                  ? "complete"
+                                  : "running"}
+                              </span>
+                              <div style="padding: 0.4rem 0 0 2ch">
+                                <div>Arguments</div>
+                                <pre
+                                  style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0.75rem"
+                                >
+${this.formatToolArguments(tool.arguments)}</pre
+                                >
+                                <div>Result</div>
+                                <pre
+                                  style="white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0"
+                                >
+${tool.result || "Waiting…"}</pre
+                                >
+                              </div>
+                            </wa-details>
+                          `,
+                        )}
+                        ${message.context?.dropped_messages > 0
+                          ? html`
+                              <wa-details
+                                style="margin-top: 0.45rem; max-width: 78ch"
+                              >
+                                <span slot="summary">
+                                  Context · ${message.context.dropped_messages}
+                                  older messages omitted
+                                </span>
+                                <div style="padding: 0.4rem 0 0 2ch">
+                                  The newest
+                                  ${message.context.retained_messages} messages
+                                  were retained inside the
+                                  ${Math.round(
+                                    message.context.limit_tokens / 1024,
+                                  )}k-token
+                                  context window.
+                                </div>
+                              </wa-details>
+                            `
+                          : ""}
+                      `
+                    : ""}
+                </article>
+              `,
+            )
+          : html`<div style="max-width: 68ch">
+              Ask about the research pipeline, inspect any generated artifact,
+              search the web, browse with Firefox, or operate Sentinel directly.
+            </div>`}
         ${this.chatBusy ? html`<div>Streaming…</div>` : ""}
       </section>
-      <div aria-hidden="true" style="overflow: hidden; white-space: nowrap">
-        ${"─".repeat(160)}
-      </div>
+      <wa-divider></wa-divider>
       <label for="research-chat-input">Message</label>
-      <tui-textarea
+      <wa-textarea
+        size="small"
         id="research-chat-input"
         data-research-chat-input
         aria-label="Message research chat"
-        block
+        style="inline-size: 100%"
         rows="4"
         placeholder="Ask Sentinel…"
-        value=${this.chatDraft}
+        .value=${this.chatDraft}
         ?disabled=${this.chatBusy}
         @input=${(event) => (this.chatDraft = event.currentTarget.value)}
         @keydown=${this.handleChatKeydown}
-      ></tui-textarea>
-      <tui-flex align="baseline" justify="between" wrap>
-        <span>Enter sends │ Shift+Enter adds a line</span>
+      ></wa-textarea>
+      <div
+        class="sentinel-layout"
+        data-align="baseline"
+        data-justify="between"
+        data-wrap
+      >
+        <span>Enter sends · Shift+Enter adds a line</span>
         <span>
-          <tui-button
+          <wa-button
+            size="small"
             ?disabled=${this.chatMessages.length === 0 || this.chatBusy}
             @click=${this.clearChat}
-            >Clear</tui-button
+            >Clear</wa-button
           >
-          <tui-button
+          <wa-button
+            size="small"
             ?disabled=${!this.chatDraft.trim() || this.chatBusy}
             @click=${this.sendChatMessage}
-            >Send</tui-button
+            >Send</wa-button
           >
         </span>
-      </tui-flex>
-      ${
-        this.chatError
-          ? html`<tui-text variant="error">${this.chatError}</tui-text>`
-          : ""
-      }
+      </div>
+      ${this.chatError
+        ? html`<span data-tone="error">${this.chatError}</span>`
+        : ""}
     `;
   }
 
@@ -872,42 +849,41 @@ class SentinelResearch extends LitElement {
 
     if (!unit) return "";
     return html`
-      <tui-modal
-        heading="${unit.label} / artifacts"
+      <wa-dialog
+        label="${unit.label} / artifacts"
         open
-        @close=${this.closeArtifacts}
+        @wa-after-hide=${(event) => {
+          if (event.target === event.currentTarget) this.closeArtifacts();
+        }}
       >
-        ${
-          unit.artifacts?.length
-            ? html`
-                <label
-                  >Artifact&nbsp;<tui-select
-                    value=${this.activeArtifact}
-                    @change=${(event) =>
-                      this.changeArtifact(event.currentTarget.value)}
-                  >
-                    ${unit.artifacts.map(
-                      (name) => html`<option value=${name}>${name}</option>`,
-                    )}
-                  </tui-select></label
+        ${unit.artifacts?.length
+          ? html`
+              <label
+                >Artifact&nbsp;<wa-select
+                  size="small"
+                  .value=${this.activeArtifact}
+                  @change=${(event) =>
+                    this.changeArtifact(event.currentTarget.value)}
                 >
-                <div aria-hidden="true">&nbsp;</div>
-                ${
-                  this.artifactLoading
-                    ? "Loading artifact…"
-                    : this.artifactError
-                      ? html`<tui-text variant="error"
-                          >${this.artifactError}</tui-text
-                        >`
-                      : html`<pre
-                          style="white-space: pre-wrap; overflow-wrap: anywhere"
-                        >
-${this.artifactContent}</pre>`
-                }
-              `
-            : "No artifacts have been written for this unit."
-        }
-      </tui-modal>
+                  ${unit.artifacts.map(
+                    (name) =>
+                      html`<wa-option value=${name}>${name}</wa-option>`,
+                  )}
+                </wa-select></label
+              >
+              <div aria-hidden="true">&nbsp;</div>
+              ${this.artifactLoading
+                ? "Loading artifact…"
+                : this.artifactError
+                  ? html`<span data-tone="error">${this.artifactError}</span>`
+                  : html`<pre
+                      style="white-space: pre-wrap; overflow-wrap: anywhere"
+                    >
+${this.artifactContent}</pre
+                    >`}
+            `
+          : "No artifacts have been written for this unit."}
+      </wa-dialog>
     `;
   }
 
@@ -923,11 +899,11 @@ ${this.artifactContent}</pre>`
 
     const enabled = this.status.value?.enabled;
     const pipelineState = loading
-      ? html`<tui-text>loading</tui-text>`
+      ? html`<span>loading</span>`
       : error && !this.status.value
-        ? html`<tui-text variant="error">unavailable</tui-text>`
-        : html`<tui-text variant=${enabled ? "success" : ""}
-            >${enabled ? "enabled" : "paused"}</tui-text
+        ? html`<span data-tone="error">unavailable</span>`
+        : html`<span data-tone=${enabled ? "success" : ""}
+            >${enabled ? "enabled" : "paused"}</span
           >`;
 
     let content;
@@ -938,7 +914,7 @@ ${this.artifactContent}</pre>`
     } else if (loading) {
       content = html`<div>Loading research pipeline…</div>`;
     } else if (error && !this.status.value) {
-      content = html`<tui-text variant="error">${error.message}</tui-text>`;
+      content = html`<span data-tone="error">${error.message}</span>`;
     } else if (this.tab === "units") {
       content = this.renderUnits();
     } else if (this.tab === "history") {
@@ -949,29 +925,26 @@ ${this.artifactContent}</pre>`
 
     return html`
       <div>Pipeline ${pipelineState}</div>
-      <tui-radio-buttonset
+      <wa-radio-group
+        size="small"
         aria-label="Research pipeline view"
-        value=${this.tab}
+        .value=${this.tab}
         @change=${this.changeTab}
       >
-        <tui-radio-button value="status">Status</tui-radio-button>
-        <tui-radio-button value="units">Units</tui-radio-button>
-        <tui-radio-button value="history">History</tui-radio-button>
-        <tui-radio-button value="chat">Chat</tui-radio-button>
-        <tui-radio-button value="tasks">Tasks</tui-radio-button>
-      </tui-radio-buttonset>
+        <wa-radio appearance="button" value="status">Status</wa-radio>
+        <wa-radio appearance="button" value="units">Units</wa-radio>
+        <wa-radio appearance="button" value="history">History</wa-radio>
+        <wa-radio appearance="button" value="chat">Chat</wa-radio>
+        <wa-radio appearance="button" value="tasks">Tasks</wa-radio>
+      </wa-radio-group>
       <div aria-hidden="true">&nbsp;</div>
       ${content}
-      ${
-        this.tab !== "tasks" && this.notice
-          ? html`<div aria-live="polite">${this.notice}</div>`
-          : ""
-      }
-      ${
-        this.tab !== "tasks" && this.actionError
-          ? html`<tui-text variant="error">${this.actionError}</tui-text>`
-          : ""
-      }
+      ${this.tab !== "tasks" && this.notice
+        ? html`<div aria-live="polite">${this.notice}</div>`
+        : ""}
+      ${this.tab !== "tasks" && this.actionError
+        ? html`<span data-tone="error">${this.actionError}</span>`
+        : ""}
       ${this.renderArtifactModal()}
     `;
   }

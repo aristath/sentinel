@@ -206,6 +206,31 @@ async def test_set_settings_batch_persists_strategy_values(deps):
 
 
 @pytest.mark.asyncio
+async def test_set_settings_batch_persists_both_fire_assumptions(deps):
+    from sentinel.api.routers.settings import set_settings_batch
+
+    values = {"fire_monthly_expenses_eur": 1234.56, "fire_expected_inflation_pct": 3.25}
+    assert await set_settings_batch({"values": values}, deps) == {"status": "ok"}
+    for key, value in values.items():
+        assert await deps.db.get_setting(key) == value
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("key", "invalid"),
+    [("fire_monthly_expenses_eur", 0), ("fire_expected_inflation_pct", -100)],
+)
+async def test_set_settings_batch_rejects_invalid_fire_assumptions_without_partial_write(deps, key, invalid):
+    from sentinel.api.routers.settings import set_settings_batch
+
+    values = {"fire_monthly_expenses_eur": 1234.56, "fire_expected_inflation_pct": 3.25, key: invalid}
+    with pytest.raises(HTTPException, match="FIRE"):
+        await set_settings_batch({"values": values}, deps)
+    assert await deps.db.get_setting("fire_monthly_expenses_eur") is None
+    assert await deps.db.get_setting("fire_expected_inflation_pct") == 2.11
+
+
+@pytest.mark.asyncio
 async def test_set_settings_batch_rejects_invalid_value_without_partial_write(deps):
     from sentinel.api.routers.settings import set_settings_batch
 

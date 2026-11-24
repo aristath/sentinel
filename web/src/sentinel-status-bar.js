@@ -54,7 +54,7 @@ class SentinelStatusBar extends LitElement {
 
   renderBrokerStatus() {
     if (this.health.error) {
-      return html`<tui-text variant="error">broker: unavailable</tui-text>`;
+      return html`<span data-tone="error">broker: unavailable</span>`;
     }
 
     if (!this.health.value) {
@@ -62,27 +62,30 @@ class SentinelStatusBar extends LitElement {
     }
 
     return this.health.value.broker_connected
-      ? html`<tui-text variant="success">broker: connected</tui-text>`
-      : html`<tui-text variant="error">broker: disconnected</tui-text>`;
+      ? html`<span data-tone="success">broker: connected</span>`
+      : html`<span data-tone="error">broker: disconnected</span>`;
   }
 
   renderMarkets() {
     if (this.markets.error || this.markets.value?.markets?.length === 0) {
-      return html`<tui-text variant="error">markets unavailable</tui-text>`;
+      return html`<span data-tone="error">markets unavailable</span>`;
     }
 
     if (!this.markets.value) {
       return html`<span>markets loading</span>`;
     }
 
-    return this.markets.value.markets.map(
-      (market, index) => html`
-        ${index > 0 ? html`<span aria-hidden="true">&nbsp;</span>` : ""}
-        <tui-text variant=${market.is_open ? "success" : "error"}
-          >${market.name}</tui-text
-        >
-      `,
-    );
+    return html`
+      <div class="sentinel-layout" data-align="center" data-wrap>
+        ${this.markets.value.markets.map(
+          (market) => html`
+            <span data-tone=${market.is_open ? "success" : "error"}
+              >${market.name}</span
+            >
+          `,
+        )}
+      </div>
+    `;
   }
 
   updated() {
@@ -119,27 +122,30 @@ class SentinelStatusBar extends LitElement {
   render() {
     return html`
       <footer>
-        <tui-bar>
-          <tui-flex align="baseline" justify="between" wrap>
-            <span>Sentinel ${this.versionText}</span>
-            <tui-flex align="baseline" wrap>
-              <tui-radio-buttonset
-                aria-label="Trading mode"
-                value=${this.selectedMode ?? this.health.value?.trading_mode ?? "research"}
-                ?disabled=${this.modePending}
-                inverted
-                @change=${this.changeMode}
-              >
-                <tui-radio-button value="research">Research</tui-radio-button>
-                <tui-radio-button value="live">Live</tui-radio-button>
-              </tui-radio-buttonset>
-              <span aria-hidden="true">&nbsp;│&nbsp;</span>
-              ${this.renderBrokerStatus()}
-              <span aria-hidden="true">&nbsp;│&nbsp;</span>
-              ${this.renderMarkets()}
-            </tui-flex>
-          </tui-flex>
-        </tui-bar>
+        <div class="sentinel-toolbar">
+          <div
+            class="sentinel-layout sentinel-status-line"
+            data-align="center"
+            data-wrap
+          >
+            <wa-radio-group
+              size="xs"
+              orientation="horizontal"
+              aria-label="Trading mode"
+              .value=${this.selectedMode ??
+              this.health.value?.trading_mode ??
+              "research"}
+              ?disabled=${this.modePending}
+              @change=${this.changeMode}
+            >
+              <wa-radio appearance="button" value="research">Research</wa-radio>
+              <wa-radio appearance="button" value="live">Live</wa-radio>
+            </wa-radio-group>
+
+            ${this.renderBrokerStatus()} ${this.renderMarkets()}
+            <span class="sentinel-version">Sentinel ${this.versionText}</span>
+          </div>
+        </div>
       </footer>
     `;
   }

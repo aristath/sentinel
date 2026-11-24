@@ -70,6 +70,7 @@ LED_BRIDGE_HEALTH_KEY = "led_bridge_health"
 LED_BRIDGE_STALE_AFTER_SEC = 600
 FIRE_MONTHLY_EXPENSES_KEY = "fire_monthly_expenses_eur"
 FIRE_EXPECTED_INFLATION_KEY = "fire_expected_inflation_pct"
+FIRE_ASSUMPTION_KEYS = {FIRE_MONTHLY_EXPENSES_KEY, FIRE_EXPECTED_INFLATION_KEY}
 
 
 def set_led_controller(controller: LEDController | None) -> None:
@@ -159,6 +160,23 @@ async def get_settings(
     return await deps.settings.all()
 
 
+def _parse_fire_assumption(key: str, value: Any) -> float:
+    monthly_expenses = key == FIRE_MONTHLY_EXPENSES_KEY
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, int | float)
+        or not math.isfinite(value)
+        or value <= (0 if monthly_expenses else -100)
+    ):
+        detail = (
+            "FIRE monthly expenses must be a finite number greater than zero"
+            if monthly_expenses
+            else "FIRE expected inflation must be a finite percentage greater than -100"
+        )
+        raise HTTPException(status_code=400, detail=detail)
+    return float(value)
+
+
 @router.put("/{key}")
 async def set_setting(
     key: str,
@@ -169,18 +187,8 @@ async def set_setting(
     if key in REMOVED_SETTINGS:
         raise HTTPException(status_code=400, detail=f"Setting '{key}' has been removed")
     setting_value = value.get("value")
-    if key == FIRE_MONTHLY_EXPENSES_KEY:
-        if (
-            isinstance(setting_value, bool)
-            or not isinstance(setting_value, int | float)
-            or not math.isfinite(setting_value)
-            or setting_value <= 0
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="FIRE monthly expenses must be a finite number greater than zero",
-            )
-        setting_value = float(setting_value)
+    if key in FIRE_ASSUMPTION_KEYS:
+        setting_value = _parse_fire_assumption(key, setting_value)
     elif key == "simulated_cash_eur":
         if setting_value is not None:
             if (
@@ -193,18 +201,6 @@ async def set_setting(
                     detail="Simulated cash must be a finite number or null",
                 )
             setting_value = float(setting_value)
-    elif key == FIRE_EXPECTED_INFLATION_KEY:
-        if (
-            isinstance(setting_value, bool)
-            or not isinstance(setting_value, int | float)
-            or not math.isfinite(setting_value)
-            or setting_value <= -100
-        ):
-            raise HTTPException(
-                status_code=400,
-                detail="FIRE expected inflation must be a finite percentage greater than -100",
-            )
-        setting_value = float(setting_value)
     elif key == STRATEGY_DEPOSIT_HISTORY_MONTHS_KEY:
         parsed_months = parse_strategy_deposit_history_months(setting_value)
         if parsed_months is None:
@@ -231,20 +227,22 @@ async def set_settings_batch(
     payload: dict,
     deps: Annotated[CommonDependencies, Depends(get_common_deps)],
 ) -> dict[str, str]:
-    """Set multiple settings atomically.
-
-    For this endpoint, payload must contain all strategy tuning keys so validation can
-    enforce domain/range constraints and prevent partial inconsistent updates.
-    """
+    """Save either the FIRE assumptions or the complete strategy tuning settings atomically."""
     values = payload.get("values")
     if not isinstance(values, dict):
         raise HTTPException(status_code=400, detail="Payload must include object field 'values'")
 
     keys = set(values.keys())
+    if keys == FIRE_ASSUMPTION_KEYS:
+        await deps.db.set_settings_batch({key: _parse_fire_assumption(key, value) for key, value in values.items()})
+        return {"status": "ok"}
     if keys != STRATEGY_KEYS:
         raise HTTPException(
             status_code=400,
-            detail=f"Batch update requires exactly these keys: {sorted(STRATEGY_KEYS)}",
+            detail=(
+                f"Batch update requires either the FIRE assumption keys {sorted(FIRE_ASSUMPTION_KEYS)} "
+                f"or all strategy tuning keys {sorted(STRATEGY_KEYS)}"
+            ),
         )
 
     parsed_values: dict[str, float] = {}

@@ -153,122 +153,126 @@ class SentinelBacktest extends LitElement {
       <form @submit=${this.startBacktest}>
         <div>
           <label
-            >Start date&nbsp;<tui-input
+            >Start date&nbsp;<wa-input
+              size="small"
               type="date"
-              value=${this.startDate}
+              .value=${this.startDate}
               max=${this.endDate}
               required
               @change=${(event) => (this.startDate = this.fieldValue(event))}
-            ></tui-input
+            ></wa-input
           ></label>
         </div>
         <div>
           <label
-            >End date&nbsp;<tui-input
+            >End date&nbsp;<wa-input
+              size="small"
               type="date"
-              value=${this.endDate}
+              .value=${this.endDate}
               min=${this.startDate}
               max=${dateInputValue(new Date(Date.now() - 86_400_000))}
               required
               @change=${(event) => (this.endDate = this.fieldValue(event))}
-            ></tui-input
+            ></wa-input
           ></label>
         </div>
         <div>
           <label
-            >Initial capital (EUR)&nbsp;<tui-input
+            >Initial capital (EUR)&nbsp;<wa-input
+              size="small"
               type="number"
-              value=${this.initialCapital}
+              .value=${this.initialCapital}
               min="100"
               max="10000000"
               step="1000"
               required
               @change=${(event) =>
                 (this.initialCapital = Number(this.fieldValue(event)))}
-            ></tui-input
+            ></wa-input
           ></label>
           <div>Starting portfolio value in EUR</div>
         </div>
         <div>
           <label
-            >Monthly deposit (EUR)&nbsp;<tui-input
+            >Monthly deposit (EUR)&nbsp;<wa-input
+              size="small"
               type="number"
-              value=${this.monthlyDeposit}
+              .value=${this.monthlyDeposit}
               min="0"
               max="100000"
               step="100"
               required
               @change=${(event) =>
                 (this.monthlyDeposit = Number(this.fieldValue(event)))}
-            ></tui-input
+            ></wa-input
           ></label>
           <div>Amount to add on the first of each month</div>
         </div>
         <div>
           <label
-            >Rebalance frequency&nbsp;<tui-select
-              value=${this.rebalanceFrequency}
+            >Rebalance frequency&nbsp;<wa-select
+              size="small"
+              .value=${this.rebalanceFrequency}
               @change=${(event) =>
                 (this.rebalanceFrequency = this.fieldValue(event))}
             >
-              <option value="daily">Daily</option>
-              <option value="weekly">Weekly (Recommended)</option>
-              <option value="monthly">Monthly</option>
-            </tui-select></label
+              <wa-option value="daily">Daily</wa-option>
+              <wa-option value="weekly">Weekly (Recommended)</wa-option>
+              <wa-option value="monthly">Monthly</wa-option>
+            </wa-select></label
           >
         </div>
         <div aria-hidden="true">&nbsp;</div>
-        <tui-box heading="Securities Selection" border="single">
+        <wa-card
+          ><span slot="header">Securities Selection</span>
           <div>
-            <tui-toggle
-              ?checked=${this.useExistingUniverse}
+            <wa-switch
+              size="small"
+              .checked=${this.useExistingUniverse}
               @change=${(event) =>
                 (this.useExistingUniverse = event.currentTarget.checked)}
-              >Use existing universe</tui-toggle
+              >Use existing universe</wa-switch
             >
           </div>
           <div>Use all active securities from the current database</div>
-          ${
-            !this.useExistingUniverse
-              ? html`
-                  <div>
-                    <tui-toggle
-                      ?checked=${this.pickRandom}
-                      @change=${(event) =>
-                        (this.pickRandom = event.currentTarget.checked)}
-                      >Pick random securities</tui-toggle
-                    >
-                  </div>
-                  ${
-                    this.pickRandom
-                      ? html`<label
-                          >Number of securities&nbsp;<tui-input
-                            type="number"
-                            value=${this.randomCount}
-                            min="1"
-                            max="100"
-                            @change=${(event) =>
-                              (this.randomCount = Number(
-                                this.fieldValue(event),
-                              ))}
-                          ></tui-input
-                        ></label>`
-                      : html`<label
-                          >Symbols&nbsp;<tui-input
-                            value=${this.symbols}
-                            placeholder="AAPL.US, MSFT.US, GOOGL.US"
-                            size="40"
-                            @input=${(event) =>
-                              (this.symbols = this.fieldValue(event))}
-                          ></tui-input
-                        ></label>`
-                  }
-                `
-              : ""
-          }
-        </tui-box>
+          ${!this.useExistingUniverse
+            ? html`
+                <div>
+                  <wa-switch
+                    size="small"
+                    .checked=${this.pickRandom}
+                    @change=${(event) =>
+                      (this.pickRandom = event.currentTarget.checked)}
+                    >Pick random securities</wa-switch
+                  >
+                </div>
+                ${this.pickRandom
+                  ? html`<label
+                      >Number of securities&nbsp;<wa-input
+                        size="small"
+                        type="number"
+                        .value=${this.randomCount}
+                        min="1"
+                        max="100"
+                        @change=${(event) =>
+                          (this.randomCount = Number(this.fieldValue(event)))}
+                      ></wa-input
+                    ></label>`
+                  : html`<label
+                      >Symbols&nbsp;<wa-input
+                        size="small"
+                        .value=${this.symbols}
+                        placeholder="AAPL.US, MSFT.US, GOOGL.US"
+                        style="inline-size: 40ch; max-inline-size: 100%"
+                        @input=${(event) =>
+                          (this.symbols = this.fieldValue(event))}
+                      ></wa-input
+                    ></label>`}
+              `
+            : ""}
+        </wa-card>
         <div aria-hidden="true">&nbsp;</div>
-        <tui-button type="submit">Run Backtest</tui-button>
+        <wa-button size="small" type="submit">Run Backtest</wa-button>
       </form>
     `;
   }
@@ -277,38 +281,30 @@ class SentinelBacktest extends LitElement {
     return html`
       <div aria-live="polite">
         <div>${phaseLabels[this.phase] ?? "Starting backtest…"}</div>
-        <tui-progress
-          aria-label="Backtest progress"
+        <wa-progress-bar
+          label="Backtest progress"
           value=${this.progress}
-          columns="30"
-        ></tui-progress>
-        ${
-          this.phase === "download_prices" && this.itemsTotal > 0
-            ? html`<div>
-                ${this.currentItem ? `Processing: ${this.currentItem} │ ` : ""}
-                ${this.itemsDone} / ${this.itemsTotal} symbols
-              </div>`
-            : ""
-        }
-        ${
-          this.phase === "simulate"
-            ? html`<div>
-                Simulating: ${this.currentDate} │
-                ${Number(this.progress).toFixed(1)}%
-              </div>`
-            : ""
-        }
-        ${
-          this.portfolioValue > 0 && this.phase === "simulate"
-            ? html`<div>
-                Portfolio value:
-                ${formatCurrency(this.portfolioValue, "EUR", 0)}
-              </div>`
-            : ""
-        }
+        ></wa-progress-bar>
+        ${this.phase === "download_prices" && this.itemsTotal > 0
+          ? html`<div>
+              ${this.currentItem ? `Processing: ${this.currentItem} · ` : ""}
+              ${this.itemsDone} / ${this.itemsTotal} symbols
+            </div>`
+          : ""}
+        ${this.phase === "simulate"
+          ? html`<div>
+              Simulating: ${this.currentDate} ·
+              ${Number(this.progress).toFixed(1)}%
+            </div>`
+          : ""}
+        ${this.portfolioValue > 0 && this.phase === "simulate"
+          ? html`<div>
+              Portfolio value: ${formatCurrency(this.portfolioValue, "EUR", 0)}
+            </div>`
+          : ""}
         <div aria-hidden="true">&nbsp;</div>
-        <tui-button variant="error" @click=${this.cancelBacktest}
-          >Cancel</tui-button
+        <wa-button size="small" variant="danger" @click=${this.cancelBacktest}
+          >Cancel</wa-button
         >
       </div>
     `;
@@ -320,97 +316,90 @@ class SentinelBacktest extends LitElement {
 
     return html`
       <div>
-        Total invested ${formatCurrency(this.result.total_deposits, "EUR", 0)} │
-        Final value ${formatCurrency(this.result.final_value, "EUR", 0)} │
-        <tui-text variant=${this.result.total_return >= 0 ? "success" : "error"}
+        Total invested ${formatCurrency(this.result.total_deposits, "EUR", 0)} ·
+        Final value ${formatCurrency(this.result.final_value, "EUR", 0)} ·
+        <span data-tone=${this.result.total_return >= 0 ? "success" : "error"}
           >Return ${formatCurrency(this.result.total_return, "EUR", 0)}
-          (${formatPercent(this.result.total_return_pct, 2)})</tui-text
+          (${formatPercent(this.result.total_return_pct, 2)})</span
         >
       </div>
       <div>
-        <tui-text variant=${this.result.cagr >= 0 ? "success" : "error"}
-          >CAGR ${formatPercent(this.result.cagr, 2)}</tui-text
+        <span data-tone=${this.result.cagr >= 0 ? "success" : "error"}
+          >CAGR ${formatPercent(this.result.cagr, 2)}</span
         >
-        │
-        <tui-text variant="warning"
-          >Max drawdown -${formatNumber(this.result.max_drawdown, 2)}%</tui-text
+
+        <span data-tone="warning"
+          >Max drawdown -${formatNumber(this.result.max_drawdown, 2)}%</span
         >
-        │ Sharpe ${formatNumber(this.result.sharpe_ratio, 2)}
+        Sharpe ${formatNumber(this.result.sharpe_ratio, 2)}
       </div>
       <div aria-hidden="true">&nbsp;</div>
-      <tui-box heading="Equity Curve" border="single">
-        ${
-          values.length > 1
-            ? html`<tui-chart
-                height="6"
-                aria-label="Backtest equity curve"
-                .values=${values}
-              ></tui-chart>`
-            : "No equity curve data"
-        }
-      </tui-box>
-      ${
-        this.result.security_performance?.length
-          ? html`
-              <div aria-hidden="true">&nbsp;</div>
-              <tui-box heading="Security Performance" border="single">
-                <div style="overflow: auto; min-width: 0">
-                  <table style="border-collapse: collapse; width: 100%">
-                    <thead>
-                      <tr>
-                        <th style="text-align: left">Symbol</th>
-                        <th style="text-align: left">│ Invested</th>
-                        <th style="text-align: left">│ Final value</th>
-                        <th style="text-align: left">│ Return</th>
-                        <th style="text-align: left">│ Trades</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      ${this.result.security_performance.map(
-                        (security) => html`
-                          <tr>
-                            <td style="text-align: left; vertical-align: top">
-                              ${security.symbol}<br />${security.name ?? ""}
-                            </td>
-                            <td style="text-align: left; vertical-align: top">
-                              │
-                              ${formatCurrency(security.total_invested, "EUR", 0)}
-                            </td>
-                            <td style="text-align: left; vertical-align: top">
-                              │
-                              ${formatCurrency(security.final_value, "EUR", 0)}
-                            </td>
-                            <td style="text-align: left; vertical-align: top">
-                              │
-                              <tui-text
-                                variant=${
-                                  security.total_return >= 0
-                                    ? "success"
-                                    : "error"
-                                }
-                                >${formatPercent(
-                                  security.return_pct,
-                                  2,
-                                )}</tui-text
-                              >
-                            </td>
-                            <td style="text-align: left; vertical-align: top">
-                              │ ${security.num_buys} buys, ${security.num_sells}
-                              sells
-                            </td>
-                          </tr>
-                        `,
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </tui-box>
-            `
-          : ""
-      }
+      <wa-card
+        ><span slot="header">Equity Curve</span>
+        ${values.length > 1
+          ? html`<sentinel-chart
+              role="img"
+              height="6"
+              aria-label="Backtest equity curve"
+              .values=${values}
+            ></sentinel-chart>`
+          : "No equity curve data"}
+      </wa-card>
+      ${this.result.security_performance?.length
+        ? html`
+            <div aria-hidden="true">&nbsp;</div>
+            <wa-card
+              ><span slot="header">Security Performance</span>
+              <div style="overflow: auto; min-width: 0">
+                <table style="border-collapse: collapse; width: 100%">
+                  <thead>
+                    <tr>
+                      <th style="text-align: left">Symbol</th>
+                      <th style="text-align: left">Invested</th>
+                      <th style="text-align: left">Final value</th>
+                      <th style="text-align: left">Return</th>
+                      <th style="text-align: left">Trades</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${this.result.security_performance.map(
+                      (security) => html`
+                        <tr>
+                          <td style="text-align: left; vertical-align: top">
+                            ${security.symbol}<br />${security.name ?? ""}
+                          </td>
+                          <td style="text-align: left; vertical-align: top">
+                            ${formatCurrency(security.total_invested, "EUR", 0)}
+                          </td>
+                          <td style="text-align: left; vertical-align: top">
+                            ${formatCurrency(security.final_value, "EUR", 0)}
+                          </td>
+                          <td style="text-align: left; vertical-align: top">
+                            <span
+                              data-tone=${security.total_return >= 0
+                                ? "success"
+                                : "error"}
+                              >${formatPercent(security.return_pct, 2)}</span
+                            >
+                          </td>
+                          <td style="text-align: left; vertical-align: top">
+                            ${security.num_buys} buys, ${security.num_sells}
+                            sells
+                          </td>
+                        </tr>
+                      `,
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </wa-card>
+          `
+        : ""}
       <div>
-        Total trades: ${this.result.trades?.length ?? 0} │
-        <tui-button @click=${this.reset}>Run Another Backtest</tui-button>
+        Total trades: ${this.result.trades?.length ?? 0} ·
+        <wa-button size="small" @click=${this.reset}
+          >Run Another Backtest</wa-button
+        >
       </div>
     `;
   }
@@ -422,10 +411,10 @@ class SentinelBacktest extends LitElement {
 
     if (this.status === "error") {
       return html`
-        <tui-text variant="error"
-          >Backtest failed: ${this.errorMessage}</tui-text
-        >
-        <div><tui-button @click=${this.reset}>Try Again</tui-button></div>
+        <span data-tone="error">Backtest failed: ${this.errorMessage}</span>
+        <div>
+          <wa-button size="small" @click=${this.reset}>Try Again</wa-button>
+        </div>
       `;
     }
 

@@ -1,16 +1,8 @@
 import { LitElement, html } from "lit";
 import { deleteJson, getJson, postJson, putJson } from "./api.js";
-import { formatDateTime, statusVariant } from "./modal-utils.js";
+import { formatDateTime, requestDialog, statusVariant } from "./modal-utils.js";
 import "./sentinel-code-editor.js";
 
-const editorColorSchemeKey = "sentinel.codeEditorColorScheme";
-const editorColorSchemes = new Set([
-  "monochrome",
-  "latte",
-  "frappe",
-  "macchiato",
-  "mocha",
-]);
 const defaultCron = "0 9 * * *";
 const defaultIntervalSeconds = 12 * 60 * 60;
 const cronFields = [
@@ -134,7 +126,6 @@ class SentinelTasks extends LitElement {
     busyAction: { state: true },
     notice: { state: true },
     actionError: { state: true },
-    editorColorScheme: { state: true },
   };
 
   constructor() {
@@ -157,12 +148,6 @@ class SentinelTasks extends LitElement {
     this.busyAction = "";
     this.notice = "";
     this.actionError = "";
-    const storedEditorColorScheme = globalThis.localStorage?.getItem(
-      editorColorSchemeKey,
-    );
-    this.editorColorScheme = editorColorSchemes.has(storedEditorColorScheme)
-      ? storedEditorColorScheme
-      : "monochrome";
   }
 
   createRenderRoot() {
@@ -207,9 +192,12 @@ class SentinelTasks extends LitElement {
 
   confirmClose() {
     if (!this.dirty) return true;
-    return window.confirm(
-      `Discard unsaved changes to "${this.task?.name || this.selectedId}"?`,
-    );
+    return requestDialog({
+      label: "Discard changes",
+      message: `Discard unsaved changes to "${this.task?.name || this.selectedId}"?`,
+      submitLabel: "Discard",
+      danger: true,
+    });
   }
 
   async loadTasks(background = false) {
@@ -234,7 +222,7 @@ class SentinelTasks extends LitElement {
 
   async selectTask(id, { force = false } = {}) {
     if (id === this.selectedId && this.task) return;
-    if (!force && !this.confirmClose()) return;
+    if (!force && !(await this.confirmClose())) return;
 
     this.selectedId = id;
     this.task = undefined;
@@ -350,14 +338,22 @@ class SentinelTasks extends LitElement {
   }
 
   async deleteTask() {
-    if (!this.task || !window.confirm(`Delete task "${this.task.name}"?`)) {
+    const task = this.task;
+    if (
+      !task ||
+      !(await requestDialog({
+        label: "Delete task",
+        message: `Delete task "${task.name}"?`,
+        submitLabel: "Delete",
+        danger: true,
+      }))
+    )
       return;
-    }
 
     this.busyAction = "delete-task";
 
     try {
-      await deleteJson(`/api/tasks/${encodeURIComponent(this.task.id)}`);
+      await deleteJson(`/api/tasks/${encodeURIComponent(task.id)}`);
       this.selectedId = undefined;
       this.task = undefined;
       this.notice = "Deleted";
@@ -458,20 +454,12 @@ class SentinelTasks extends LitElement {
     }
   }
 
-  setEditorColorScheme(value) {
-    this.editorColorScheme = editorColorSchemes.has(value)
-      ? value
-      : "monochrome";
-    globalThis.localStorage?.setItem(
-      editorColorSchemeKey,
-      this.editorColorScheme,
-    );
-  }
-
   async createFile() {
-    const name = window
-      .prompt("New file name (e.g. step.sh, prompt.md)")
-      ?.trim();
+    const name = await requestDialog({
+      label: "New file",
+      placeholder: "prompt.md",
+      submitLabel: "Create",
+    });
     if (!name) return;
 
     try {
@@ -495,7 +483,14 @@ class SentinelTasks extends LitElement {
   }
 
   async deleteFile(file) {
-    if (!window.confirm(`Delete "${file.name}"? This cannot be undone.`))
+    if (
+      !(await requestDialog({
+        label: "Delete file",
+        message: `Permanently delete "${file.name}"?`,
+        submitLabel: "Delete",
+        danger: true,
+      }))
+    )
       return;
 
     try {
@@ -664,7 +659,8 @@ class SentinelTasks extends LitElement {
     ].filter(([, tasks]) => tasks.length > 0);
 
     return html`
-      <tui-box heading="Tasks" border="single">
+      <wa-card
+        ><span slot="header">Tasks</span>
         ${groups.map(
           ([label, tasks], index) => html`
             ${index > 0 ? html`<div aria-hidden="true">&nbsp;</div>` : ""}
@@ -674,14 +670,22 @@ class SentinelTasks extends LitElement {
                 <div>
                   <span aria-hidden="true"
                     >${task.id === this.selectedId ? "▶" : " "}&nbsp;</span
-                  ><tui-button @click=${() => this.selectTask(task.id)}
-                    >${task.name}</tui-button
+                  ><wa-button
+                    size="small"
+                    @click=${() => this.selectTask(task.id)}
+                    >${task.name}</wa-button
                   >
-                  <tui-text
-                    variant=${
-                      task.invalid ? "error" : task.enabled ? "success" : ""
-                    }
-                    >${task.invalid ? "invalid" : task.enabled ? "on" : "off"}</tui-text
+                  <span
+                    data-tone=${task.invalid
+                      ? "error"
+                      : task.enabled
+                        ? "success"
+                        : ""}
+                    >${task.invalid
+                      ? "invalid"
+                      : task.enabled
+                        ? "on"
+                        : "off"}</span
                   >
                   <div>${task.id}</div>
                 </div>
@@ -689,49 +693,56 @@ class SentinelTasks extends LitElement {
             )}
           `,
         )}
-      </tui-box>
+      </wa-card>
     `;
   }
 
   renderToolbar() {
     return html`
-      <tui-flex align="baseline" justify="between" wrap>
+      <div
+        class="sentinel-layout"
+        data-align="baseline"
+        data-justify="between"
+        data-wrap
+      >
         <span>
           ${this.task.name}
-          ${this.dirty ? html`<tui-text variant="warning">unsaved</tui-text>` : ""}
-          │ ${this.task.source} │ ${this.task.id}
+          ${this.dirty ? html`<span data-tone="warning">unsaved</span>` : ""} ·
+          ${this.task.source} · ${this.task.id}
         </span>
         <span>
-          <tui-button
+          <wa-button
+            size="small"
             ?disabled=${this.dirty || this.running || this.busyAction !== ""}
             @click=${this.validateTask}
-            >Check</tui-button
+            >Check</wa-button
           >
-          ${
-            this.running
-              ? html`<tui-button variant="error" @click=${this.stopRun}
-                  >Stop</tui-button
-                >`
-              : html`<tui-button
-                  ?disabled=${
-                    this.dirty || this.task.invalid || this.busyAction !== ""
-                  }
-                  @click=${this.startRun}
-                  >Run</tui-button
-                >`
-          }
-          <tui-button
-            variant="error"
-            ?disabled=${
-              this.running ||
-              this.task.source === "core" ||
-              this.busyAction !== ""
-            }
+          ${this.running
+            ? html`<wa-button
+                size="small"
+                variant="danger"
+                @click=${this.stopRun}
+                >Stop</wa-button
+              >`
+            : html`<wa-button
+                size="small"
+                ?disabled=${this.dirty ||
+                this.task.invalid ||
+                this.busyAction !== ""}
+                @click=${this.startRun}
+                >Run</wa-button
+              >`}
+          <wa-button
+            size="small"
+            variant="danger"
+            ?disabled=${this.running ||
+            this.task.source === "core" ||
+            this.busyAction !== ""}
             @click=${this.deleteTask}
-            >Delete</tui-button
+            >Delete</wa-button
           >
         </span>
-      </tui-flex>
+      </div>
     `;
   }
 
@@ -744,65 +755,52 @@ class SentinelTasks extends LitElement {
       draft !== this.baselines[this.activeFile];
 
     return html`
-      <tui-flex align="start" wrap>
-        <tui-box
-          heading="Files"
-          border="single"
-          style="flex: 1 1 20ch; min-width: 0"
-        >
-          <div><tui-button @click=${this.createFile}>New File</tui-button></div>
+      <div class="sentinel-layout" data-align="start" data-wrap>
+        <wa-card style="flex: 1 1 20ch; min-width: 0"
+          ><span slot="header">Files</span>
+          <div>
+            <wa-button size="small" @click=${this.createFile}
+              >New File</wa-button
+            >
+          </div>
           ${this.files.map(
             (file) => html`
               <div>
                 <span aria-hidden="true"
                   >${file.name === this.activeFile ? "▶" : " "}&nbsp;</span
-                ><tui-button @click=${() => this.selectFile(file.name)}
-                  >${file.name}</tui-button
+                ><wa-button
+                  size="small"
+                  @click=${() => this.selectFile(file.name)}
+                  >${file.name}</wa-button
                 >
-                ${
-                  this.drafts[file.name] !== this.baselines[file.name] &&
-                  file.name in this.baselines
-                    ? html`<tui-text variant="warning">unsaved</tui-text>`
-                    : ""
-                }
+                ${this.drafts[file.name] !== this.baselines[file.name] &&
+                file.name in this.baselines
+                  ? html`<span data-tone="warning">unsaved</span>`
+                  : ""}
                 ${file.protected ? "protected" : ""}
-                ${
-                  !file.protected
-                    ? html`<tui-button
-                        variant="error"
-                        ?disabled=${this.running}
-                        @click=${() => this.deleteFile(file)}
-                        >Delete</tui-button
-                      >`
-                    : ""
-                }
+                ${!file.protected
+                  ? html`<wa-button
+                      size="small"
+                      variant="danger"
+                      ?disabled=${this.running}
+                      @click=${() => this.deleteFile(file)}
+                      >Delete</wa-button
+                    >`
+                  : ""}
               </div>
             `,
           )}
-        </tui-box>
+        </wa-card>
         <section style="flex: 4 1 60ch; min-width: 0">
           <div>
             ${this.activeFile ?? "No file selected"}
-            ${active?.protected ? "│ protected" : ""}
-            ${dirty ? html`│ <tui-text variant="warning">unsaved</tui-text>` : ""}
-            <label
-              >Scheme&nbsp;<tui-select
-                aria-label="Code editor color scheme"
-                value=${this.editorColorScheme}
-                @change=${(event) =>
-                  this.setEditorColorScheme(event.currentTarget.value)}
-              >
-                <option value="monochrome">Monochrome</option>
-                <option value="latte">Latte</option>
-                <option value="frappe">Frappé</option>
-                <option value="macchiato">Macchiato</option>
-                <option value="mocha">Mocha</option>
-              </tui-select></label
-            >
-            <tui-button
+            ${active?.protected ? "· protected" : ""}
+            ${dirty ? html`· <span data-tone="warning">unsaved</span>` : ""}
+            <wa-button
+              size="small"
               ?disabled=${!dirty || this.running || this.busyAction !== ""}
               @click=${this.saveFile}
-              >Save</tui-button
+              >Save</wa-button
             >
           </div>
           <sentinel-code-editor
@@ -810,13 +808,12 @@ class SentinelTasks extends LitElement {
             document-id="${this.selectedId ?? ""}/${this.activeFile ?? ""}"
             filename=${this.activeFile ?? "file.txt"}
             language=${active?.language ?? "plaintext"}
-            color-scheme=${this.editorColorScheme}
             .value=${draft}
             ?disabled=${!this.activeFile || this.running}
             @input=${(event) => this.updateDraft(event.currentTarget.value)}
           ></sentinel-code-editor>
         </section>
-      </tui-flex>
+      </div>
     `;
   }
 
@@ -825,124 +822,128 @@ class SentinelTasks extends LitElement {
 
     return html`
       <div>Schedule</div>
-      <tui-radio-buttonset
+      <wa-radio-group
+        size="small"
         aria-label="Task schedule mode"
-        value=${this.scheduleMode}
+        .value=${this.scheduleMode}
         ?disabled=${this.running}
         @change=${(event) => this.setScheduleMode(event.currentTarget.value)}
       >
-        <tui-radio-button value="off">Off</tui-radio-button>
-        <tui-radio-button value="cron">Cron</tui-radio-button>
-        <tui-radio-button value="interval">Interval</tui-radio-button>
-      </tui-radio-buttonset>
-      ${
-        this.scheduleMode === "cron"
-          ? html`
-              <div>
-                <label
-                  >Cron&nbsp;<tui-input
-                    value=${this.metadata.schedule ?? defaultCron}
-                    size="24"
-                    ?disabled=${this.running}
-                    @input=${(event) =>
-                      this.patchMetadata({
-                        schedule: event.currentTarget.value || defaultCron,
-                      })}
-                  ></tui-input
-                ></label>
-              </div>
-              ${cronFields.map((field) => {
-                const selected = this.cronValues(field.index);
+        <wa-radio appearance="button" value="off">Off</wa-radio>
+        <wa-radio appearance="button" value="cron">Cron</wa-radio>
+        <wa-radio appearance="button" value="interval">Interval</wa-radio>
+      </wa-radio-group>
+      ${this.scheduleMode === "cron"
+        ? html`
+            <div>
+              <label
+                >Cron&nbsp;<wa-input
+                  size="small"
+                  .value=${this.metadata.schedule ?? defaultCron}
+                  style="inline-size: 24ch; max-inline-size: 100%"
+                  ?disabled=${this.running}
+                  @input=${(event) =>
+                    this.patchMetadata({
+                      schedule: event.currentTarget.value || defaultCron,
+                    })}
+                ></wa-input
+              ></label>
+            </div>
+            ${cronFields.map((field) => {
+              const selected = this.cronValues(field.index);
 
-                return html`
-                  <div>${field.label}</div>
-                  <tui-flex align="baseline" wrap>
-                    ${field.options.map(
-                      ([value, label]) => html`
-                        <tui-toggle
-                          ?checked=${selected.has(value)}
-                          ?disabled=${this.running}
-                          @change=${(event) =>
-                            this.toggleCronValue(
-                              field.index,
-                              value,
-                              event.currentTarget.checked,
-                            )}
-                          >${value} ${label}</tui-toggle
-                        ><span aria-hidden="true">&nbsp;</span>
-                      `,
-                    )}
-                  </tui-flex>
-                `;
-              })}
-            `
-          : ""
-      }
-      ${
-        this.scheduleMode === "interval"
-          ? html`
-              <tui-flex align="baseline" wrap>
-                <label
-                  >Days&nbsp;<tui-input
-                    type="number"
-                    min="0"
-                    value=${parts.days}
-                    @change=${(event) =>
-                      this.patchInterval("days", event.currentTarget.value)}
-                  ></tui-input
-                ></label>
-                <span aria-hidden="true">&nbsp;│&nbsp;</span>
-                <label
-                  >Hours&nbsp;<tui-input
-                    type="number"
-                    min="0"
-                    max="23"
-                    value=${parts.hours}
-                    @change=${(event) =>
-                      this.patchInterval("hours", event.currentTarget.value)}
-                  ></tui-input
-                ></label>
-                <span aria-hidden="true">&nbsp;│&nbsp;</span>
-                <label
-                  >Minutes&nbsp;<tui-input
-                    type="number"
-                    min="0"
-                    max="59"
-                    value=${parts.minutes}
-                    @change=${(event) =>
-                      this.patchInterval("minutes", event.currentTarget.value)}
-                  ></tui-input
-                ></label>
-                <span aria-hidden="true">&nbsp;│&nbsp;</span>
-                <label
-                  >Run when&nbsp;<tui-select
-                    value=${this.metadata.schedulePolicy?.runWhen ?? "idle"}
-                    @change=${(event) =>
-                      this.patchSchedulePolicy({
-                        runWhen: event.currentTarget.value,
-                      })}
-                  >
-                    <option value="idle">Idle</option>
-                    <option value="immediate">Immediate</option>
-                  </tui-select></label
+              return html`
+                <div>${field.label}</div>
+                <div class="sentinel-layout" data-align="baseline" data-wrap>
+                  ${field.options.map(
+                    ([value, label]) => html`
+                      <wa-switch
+                        size="small"
+                        .checked=${selected.has(value)}
+                        ?disabled=${this.running}
+                        @change=${(event) =>
+                          this.toggleCronValue(
+                            field.index,
+                            value,
+                            event.currentTarget.checked,
+                          )}
+                        >${value} ${label}</wa-switch
+                      ><span aria-hidden="true">&nbsp;</span>
+                    `,
+                  )}
+                </div>
+              `;
+            })}
+          `
+        : ""}
+      ${this.scheduleMode === "interval"
+        ? html`
+            <div class="sentinel-layout" data-align="baseline" data-wrap>
+              <label
+                >Days&nbsp;<wa-input
+                  size="small"
+                  type="number"
+                  min="0"
+                  .value=${parts.days}
+                  @change=${(event) =>
+                    this.patchInterval("days", event.currentTarget.value)}
+                ></wa-input
+              ></label>
+
+              <label
+                >Hours&nbsp;<wa-input
+                  size="small"
+                  type="number"
+                  min="0"
+                  max="23"
+                  .value=${parts.hours}
+                  @change=${(event) =>
+                    this.patchInterval("hours", event.currentTarget.value)}
+                ></wa-input
+              ></label>
+
+              <label
+                >Minutes&nbsp;<wa-input
+                  size="small"
+                  type="number"
+                  min="0"
+                  max="59"
+                  .value=${parts.minutes}
+                  @change=${(event) =>
+                    this.patchInterval("minutes", event.currentTarget.value)}
+                ></wa-input
+              ></label>
+
+              <label
+                >Run when&nbsp;<wa-select
+                  size="small"
+                  .value=${this.metadata.schedulePolicy?.runWhen ?? "idle"}
+                  @change=${(event) =>
+                    this.patchSchedulePolicy({
+                      runWhen: event.currentTarget.value,
+                    })}
                 >
-                <span aria-hidden="true">&nbsp;│&nbsp;</span>
-                <label
-                  >Priority&nbsp;<tui-input
-                    type="number"
-                    min="-1000"
-                    max="1000"
-                    value=${this.metadata.schedulePolicy?.priority ?? 0}
-                    @change=${(event) =>
-                      this.patchSchedulePolicy({
-                        priority: Number(event.currentTarget.value),
-                      })}
-                  ></tui-input
-                ></label>
-              </tui-flex>
-            `
-          : ""
-      }
+                  <wa-option value="idle">Idle</wa-option>
+                  <wa-option value="immediate">Immediate</wa-option>
+                </wa-select></label
+              >
+
+              <label
+                >Priority&nbsp;<wa-input
+                  size="small"
+                  type="number"
+                  min="-1000"
+                  max="1000"
+                  .value=${this.metadata.schedulePolicy?.priority ?? 0}
+                  @change=${(event) =>
+                    this.patchSchedulePolicy({
+                      priority: Number(event.currentTarget.value),
+                    })}
+                ></wa-input
+              ></label>
+            </div>
+          `
+        : ""}
     `;
   }
 
@@ -950,52 +951,62 @@ class SentinelTasks extends LitElement {
     if (!this.metadata) return html`<div>Loading metadata…</div>`;
 
     return html`
-      <tui-flex align="baseline" justify="between" wrap>
+      <div
+        class="sentinel-layout"
+        data-align="baseline"
+        data-justify="between"
+        data-wrap
+      >
         <span>Metadata</span>
-        <tui-button
-          ?disabled=${
-            !this.metadataDirty || this.running || this.busyAction !== ""
-          }
+        <wa-button
+          size="small"
+          ?disabled=${!this.metadataDirty ||
+          this.running ||
+          this.busyAction !== ""}
           @click=${this.saveMetadata}
-          >Save</tui-button
+          >Save</wa-button
         >
-      </tui-flex>
+      </div>
       <div>
         <label
           ><span>Name</span>
-          <tui-input
-            block
-            value=${this.metadata.name}
+          <wa-input
+            size="small"
+            style="inline-size: 100%"
+            .value=${this.metadata.name}
             @input=${(event) =>
               this.patchMetadata({ name: event.currentTarget.value })}
-          ></tui-input
+          ></wa-input
         ></label>
-        <tui-toggle
-          ?checked=${this.metadata.enabled}
+        <wa-switch
+          size="small"
+          .checked=${this.metadata.enabled}
           ?disabled=${this.running}
           @change=${(event) =>
             this.patchMetadata({ enabled: event.currentTarget.checked })}
-          >Enabled</tui-toggle
+          >Enabled</wa-switch
         >
       </div>
       <div>
         <label>Description</label>
-        <tui-textarea
+        <wa-textarea
+          size="small"
           aria-label="Task description"
-          block
+          style="inline-size: 100%"
           rows="4"
-          value=${this.metadata.description}
+          .value=${this.metadata.description}
           ?disabled=${this.running}
           @input=${(event) =>
             this.patchMetadata({ description: event.currentTarget.value })}
-        ></tui-textarea>
+        ></wa-textarea>
       </div>
       <div>
         <label
           ><span>Tags</span>
-          <tui-input
-            block
-            value=${this.metadata.tags.join(", ")}
+          <wa-input
+            size="small"
+            style="inline-size: 100%"
+            .value=${this.metadata.tags.join(", ")}
             ?disabled=${this.running}
             @input=${(event) =>
               this.patchMetadata({
@@ -1004,35 +1015,37 @@ class SentinelTasks extends LitElement {
                   .map((tag) => tag.trim())
                   .filter(Boolean),
               })}
-          ></tui-input
+          ></wa-input
         ></label>
       </div>
       <div>
         <label
-          >Timeout (seconds)&nbsp;<tui-input
+          >Timeout (seconds)&nbsp;<wa-input
+            size="small"
             type="number"
             min="0"
             step="60"
-            value=${this.metadata.timeout}
+            .value=${this.metadata.timeout}
             ?disabled=${this.running}
             @change=${(event) =>
               this.patchMetadata({
                 timeout: Number(event.currentTarget.value),
               })}
-          ></tui-input
+          ></wa-input
         ></label>
       </div>
       <div>
         <label
           ><span>Working directory</span>
-          <tui-input
-            block
-            value=${this.metadata.cwd}
+          <wa-input
+            size="small"
+            style="inline-size: 100%"
+            .value=${this.metadata.cwd}
             placeholder="@/tasks/artifacts/{{task-id}}"
             ?disabled=${this.running}
             @input=${(event) =>
               this.patchMetadata({ cwd: event.currentTarget.value })}
-          ></tui-input
+          ></wa-input
         ></label>
       </div>
       <div aria-hidden="true">&nbsp;</div>
@@ -1042,53 +1055,52 @@ class SentinelTasks extends LitElement {
 
   renderRun() {
     return html`
-      <tui-box heading="Run" border="single">
+      <wa-card
+        ><span slot="header">Run</span>
         <div>
           Status
-          <tui-text variant=${statusVariant(this.run?.status) || ""}
-            >${this.run?.status ?? "idle"}</tui-text
+          <span data-tone=${statusVariant(this.run?.status) || ""}
+            >${this.run?.status ?? "idle"}</span
           >
         </div>
         <div>History</div>
-        ${
-          this.runs.length
-            ? this.runs.map(
-                (run) => html`
-                  <div>
-                    <span aria-hidden="true"
-                      >${run.id === this.runId ? "▶" : " "}&nbsp;</span
-                    ><tui-button @click=${() => this.loadRun(run.id)}
-                      >${run.status} -
-                      ${
-                        run.createdAt ? formatDateTime(run.createdAt) : run.id
-                      }</tui-button
-                    >
-                  </div>
-                `,
-              )
-            : "No runs"
-        }
+        ${this.runs.length
+          ? this.runs.map(
+              (run) => html`
+                <div>
+                  <span aria-hidden="true"
+                    >${run.id === this.runId ? "▶" : " "}&nbsp;</span
+                  ><wa-button size="small" @click=${() => this.loadRun(run.id)}
+                    >${run.status} -
+                    ${run.createdAt
+                      ? formatDateTime(run.createdAt)
+                      : run.id}</wa-button
+                  >
+                </div>
+              `,
+            )
+          : "No runs"}
         <div>Inputs (JSON)</div>
-        <tui-textarea
+        <wa-textarea
+          size="small"
           aria-label="Task run inputs"
-          block
+          style="inline-size: 100%"
           rows="4"
-          value=${this.runInputs}
+          .value=${this.runInputs}
           ?disabled=${this.running}
           @input=${(event) => (this.runInputs = event.currentTarget.value)}
-        ></tui-textarea>
+        ></wa-textarea>
         <div>Log</div>
         ${(this.run?.log ?? []).map(
           (line) => html`<div><code>${line}</code></div>`,
         )}
-        ${
-          this.run?.error
-            ? html`<tui-text variant="error">${this.run.error}</tui-text>`
-            : ""
-        }
+        ${this.run?.error
+          ? html`<span data-tone="error">${this.run.error}</span>`
+          : ""}
         <pre style="white-space: pre-wrap; overflow-wrap: anywhere">
-${this.run?.liveOutput ?? " "}</pre>
-      </tui-box>
+${this.run?.liveOutput ?? " "}</pre
+        >
+      </wa-card>
     `;
   }
 
@@ -1099,59 +1111,64 @@ ${this.run?.liveOutput ?? " "}</pre>
     return html`
       ${this.renderToolbar()}
       ${this.notice ? html`<div aria-live="polite">${this.notice}</div>` : ""}
-      ${
-        this.actionError
-          ? html`<tui-text variant="error">${this.actionError}</tui-text>`
-          : ""
-      }
+      ${this.actionError
+        ? html`<span data-tone="error">${this.actionError}</span>`
+        : ""}
       <div aria-hidden="true">&nbsp;</div>
-      <tui-flex align="start" wrap>
+      <div class="sentinel-layout" data-align="start" data-wrap>
         <section style="flex: 3 1 60ch; min-width: 0">
-          <tui-radio-buttonset
+          <wa-radio-group
+            size="small"
             aria-label="Task editor view"
-            value=${this.tab}
+            .value=${this.tab}
             @change=${(event) => (this.tab = event.currentTarget.value)}
           >
-            <tui-radio-button value="files">Files</tui-radio-button>
-            <tui-radio-button value="metadata">Metadata</tui-radio-button>
-          </tui-radio-buttonset>
-          ${
-            this.tab === "metadata" ? this.renderMetadata() : this.renderFiles()
-          }
+            <wa-radio appearance="button" value="files">Files</wa-radio>
+            <wa-radio appearance="button" value="metadata">Metadata</wa-radio>
+          </wa-radio-group>
+          ${this.tab === "metadata"
+            ? this.renderMetadata()
+            : this.renderFiles()}
         </section>
         <aside style="flex: 1 1 32ch; min-width: 0">${this.renderRun()}</aside>
-      </tui-flex>
+      </div>
     `;
   }
 
   render() {
     return html`
-      <tui-flex align="baseline" justify="between" wrap>
+      <div
+        class="sentinel-layout"
+        data-align="baseline"
+        data-justify="between"
+        data-wrap
+      >
         <span>${this.tasks.length} core and user task definitions</span>
         <span>
-          <tui-button
+          <wa-button
+            size="small"
             ?disabled=${this.busyAction !== ""}
             @click=${this.createTask}
-            >New</tui-button
+            >New</wa-button
           >
-          <tui-button @click=${() => this.loadTasks()}>Refresh</tui-button>
+          <wa-button size="small" @click=${() => this.loadTasks()}
+            >Refresh</wa-button
+          >
         </span>
-      </tui-flex>
+      </div>
       <div aria-hidden="true">&nbsp;</div>
-      ${
-        this.loading && this.tasks.length === 0
-          ? html`<div>Loading tasks…</div>`
-          : html`
-              <tui-flex align="start" wrap>
-                <aside style="flex: 1 1 24ch; min-width: 0">
-                  ${this.renderTaskList()}
-                </aside>
-                <section style="flex: 4 1 70ch; min-width: 0">
-                  ${this.renderWorkbench()}
-                </section>
-              </tui-flex>
-            `
-      }
+      ${this.loading && this.tasks.length === 0
+        ? html`<div>Loading tasks…</div>`
+        : html`
+            <div class="sentinel-layout" data-align="start" data-wrap>
+              <aside style="flex: 1 1 24ch; min-width: 0">
+                ${this.renderTaskList()}
+              </aside>
+              <section style="flex: 4 1 70ch; min-width: 0">
+                ${this.renderWorkbench()}
+              </section>
+            </div>
+          `}
     `;
   }
 }

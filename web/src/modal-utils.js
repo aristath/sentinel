@@ -100,3 +100,74 @@ export function dateInputValue(date) {
   const offset = date.getTimezoneOffset() * 60_000;
   return new Date(date.getTime() - offset).toISOString().slice(0, 10);
 }
+import { html, render } from "lit";
+
+export function requestDialog({
+  label,
+  message,
+  submitLabel,
+  placeholder,
+  danger = false,
+}) {
+  return new Promise((resolve) => {
+    const container = document.body.appendChild(document.createElement("div"));
+    let result;
+    render(
+      html`
+        <wa-dialog
+          class="sentinel-compact-dialog"
+          label=${label}
+          open
+          @wa-after-hide=${(event) => {
+            if (event.target !== event.currentTarget) return;
+            container.remove();
+            resolve(result);
+          }}
+        >
+          <form
+            class="wa-stack"
+            @submit=${(event) => {
+              event.preventDefault();
+              const input = container.querySelector("wa-input");
+              const value = input?.value?.trim();
+              if (input && !value) return;
+              result = input ? value : true;
+              container.querySelector("wa-dialog").open = false;
+            }}
+          >
+            ${message ? html`<div>${message}</div>` : ""}
+            ${placeholder
+              ? html`
+                  <wa-input
+                    size="small"
+                    label="File name"
+                    placeholder=${placeholder}
+                    required
+                    autofocus
+                  ></wa-input>
+                `
+              : ""}
+            <div class="sentinel-layout">
+              <wa-button
+                size="small"
+                type="button"
+                ?autofocus=${!placeholder}
+                @click=${() => {
+                  container.querySelector("wa-dialog").open = false;
+                }}
+                >Cancel</wa-button
+              >
+              <wa-button
+                size="small"
+                type="submit"
+                variant=${danger ? "danger" : "brand"}
+                >${submitLabel}</wa-button
+              >
+            </div>
+          </form>
+        </wa-dialog>
+      `,
+      container,
+    );
+  });
+}

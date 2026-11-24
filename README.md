@@ -6,7 +6,7 @@ deterministic contrarian allocation plan, and can execute the next eligible
 transaction when trading mode is `live`.
 
 The application consists of a Python/FastAPI service, a native-custom-element
-web interface built with Lit and Teract, an editable AI research task runtime,
+web interface built with Lit and Web Awesome, an editable AI research task runtime,
 an optional time-series forecasting service, and optional Arduino UNO Q output.
 
 ## Quick start
@@ -16,8 +16,6 @@ Requirements:
 - Python 3.13 or newer
 - `uv`
 - Node.js and npm
-- the `sentinel` and `teract` repositories checked out as siblings; Sentinel's
-  frontend dependency resolves Teract from `../../teract` relative to `web/`
 
 ```bash
 uv sync --locked --extra dev
@@ -55,7 +53,7 @@ dependencies are not part of the main lock file. See
 - [API reference](docs/api/README.md)
 - [Deployment and recovery](docs/deployment.md)
 - [AI pipeline](docs/ai-pipeline.md)
-- [Frontend and Teract](docs/frontend.md)
+- [Frontend and Web Awesome](docs/frontend.md)
 
 Contributor and automation instructions are in [AGENTS.md](AGENTS.md).
 

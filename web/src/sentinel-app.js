@@ -7,7 +7,11 @@ class SentinelApp extends LitElement {
 
   render() {
     return html`
-      <tui-flex direction="column" style="height: 100dvh; overflow: hidden">
+      <div
+        class="sentinel-layout"
+        data-direction="column"
+        style="height: 100dvh; overflow: hidden"
+      >
         <sentinel-header
           style="display: block; flex: 0 0 auto"
         ></sentinel-header>
@@ -15,7 +19,6 @@ class SentinelApp extends LitElement {
           <sentinel-portfolio-status
             style="display: block"
           ></sentinel-portfolio-status>
-          <div aria-hidden="true">&nbsp;</div>
           <sentinel-planner-status
             style="display: block"
           ></sentinel-planner-status>
@@ -37,7 +40,7 @@ class SentinelApp extends LitElement {
         <sentinel-status-bar
           style="display: block; flex: 0 0 auto"
         ></sentinel-status-bar>
-      </tui-flex>
+      </div>
     `;
   }
 }

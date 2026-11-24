@@ -1,8 +1,8 @@
-# Frontend and Teract
+# Frontend and Web Awesome
 
 Sentinel's browser interface is a small Lit application made from custom
-elements. Teract supplies dependency-free TUI primitives and the global theme;
-Sentinel owns application behavior, data loading, and domain-specific elements.
+elements. Web Awesome supplies interface components and the shared theme.
+Sentinel owns application behavior, data loading, and financial views.
 
 ## Runtime stack
 
@@ -10,32 +10,14 @@ Sentinel owns application behavior, data loading, and domain-specific elements.
 |---|---|
 | Browser platform | Custom elements, fetch, events, and accessibility semantics |
 | Lit | Reactive rendering for Sentinel application elements |
-| Teract | Native custom elements, Unicode TUI controls, charts, layout, and theme |
+| Web Awesome | Controls, dialogs, cards, native element styles, and theme tokens |
 | CodeMirror 6 | Task prompt/code editing inside the Research modal |
 | Vite | Development server and production bundling |
 
-Teract itself must remain native and dependency-free. Lit and CodeMirror are
-Sentinel dependencies; they must not be moved into Teract.
-
-The package reference is local:
-
-```json
-{
-  "teract": "file:../../teract"
-}
-```
-
-The expected checkout layout is therefore:
-
-```text
-~/sentinel/
-~/teract/
-```
-
 ## Element tree
 
-`web/src/main.js` imports Teract, its global stylesheet, and the Sentinel
-elements. `<sentinel-app>` builds the page:
+`web/src/main.js` imports Web Awesome's styles and components along with the
+Sentinel elements. `<sentinel-app>` builds the page:
 
 ```text
 sentinel-app
@@ -118,33 +100,26 @@ createRenderRoot() {
 }
 ```
 
-This lets the Teract theme inherit through the application and keeps the result
-close to real terminal markup. It also means DOM ownership must remain clear:
+This lets the global theme inherit through the application. Lit owns the
+rendered children.
 
 - Render reactive content through Lit templates.
 - Do not assign `innerHTML` or `textContent` to an element containing Lit parts.
-- Do not recreate a Teract control merely to update its value.
-- Preserve authored children such as `<option>` nodes.
+- Update Web Awesome controls through their public properties and events.
+- Preserve authored children such as `<wa-option>` nodes.
 
 Violating these rules can eject Lit marker nodes and produce
 `ChildPart has no parentNode` errors.
 
 ## Visual rules
 
-- Component-specific CSS is self-contained in the element as inline `style`
-  attributes.
-- Only global page/theme behavior belongs in Teract's global CSS.
-- Use real Unicode borders, separators, sparklines, and Braille chart cells.
-- Status uses foreground color. Do not turn status text into colored badges.
-- Keep table content left-aligned so `|` separators remain visually stable.
-- Long content wraps. Components must not cause horizontal page growth.
-- Expanded security details may be boxed; the expanded row heading, not the
-  detail box, receives reverse colors.
-- Light mode uses a white page and dark text; dark mode uses a black page and
-  light text.
-
-Teract additions should be generic primitives that are useful outside Sentinel.
-Domain-specific composition stays in `web/src/`.
+- Use Web Awesome's Default theme, which follows the browser's color
+  preference. Use its tokens for custom surfaces, text, and data visualizations.
+- Use native table markup for securities and transaction history. Keep controls
+  compact and contain horizontal scrolling within wide tables.
+- Keep component-specific styling with the component and shared layout in
+  `web/src/sentinel.css`.
+- Sentinel's line charts and CodeMirror editor use Web Awesome theme tokens.
 
 ## Production build
 

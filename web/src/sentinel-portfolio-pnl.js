@@ -79,26 +79,31 @@ class SentinelPortfolioPnl extends LitElement {
     const variant = valueVariant(value);
 
     return variant
-      ? html`<tui-text variant=${variant}>${formatted}</tui-text>`
+      ? html`<span data-tone=${variant}>${formatted}</span>`
       : html`<span>${formatted}</span>`;
   }
 
   renderSummary(summary, sinceInceptionMoneyWeightedReturn) {
     return html`
-      <tui-flex align="baseline" justify="between" wrap>
-        <span
-          title="Annual investor-return target"
-          style="white-space: nowrap"
-          >Target p.a.&nbsp;${this.renderValue(
+      <div
+        class="sentinel-layout"
+        data-align="baseline"
+        data-justify="between"
+        data-wrap
+      >
+        <span title="Annual investor-return target" style="white-space: nowrap"
+          >Target
+          p.a.&nbsp;${this.renderValue(
             summary.target_ann_return,
             formatPercent(summary.target_ann_return, 1),
           )}</span
         >
-        <tui-flex align="baseline" wrap>
+        <div class="sentinel-layout" data-align="baseline" data-wrap>
           <span
             title="Money-weighted annual return using the date and amount of every deposit and withdrawal"
             style="white-space: nowrap"
-            >Overall yearly return&nbsp;${this.renderValue(
+            >Overall yearly
+            return&nbsp;${this.renderValue(
               sinceInceptionMoneyWeightedReturn,
               formatPercent(sinceInceptionMoneyWeightedReturn, 1),
             )}</span
@@ -106,16 +111,14 @@ class SentinelPortfolioPnl extends LitElement {
           <span
             title="Money-weighted annual return over the last 365 days, using the opening value and every deposit and withdrawal"
             style="white-space: nowrap"
-            >&nbsp;│&nbsp;Last 365 days&nbsp;${this.renderValue(
+            >&nbsp;·&nbsp;Last 365
+            days&nbsp;${this.renderValue(
               summary.trailing_365d_money_weighted_return_pct,
-              formatPercent(
-                summary.trailing_365d_money_weighted_return_pct,
-                1,
-              ),
+              formatPercent(summary.trailing_365d_money_weighted_return_pct, 1),
             )}</span
           >
-        </tui-flex>
-      </tui-flex>
+        </div>
+      </div>
     `;
   }
 
@@ -142,10 +145,16 @@ class SentinelPortfolioPnl extends LitElement {
                   ${period}&nbsp;&nbsp;
                 </th>
                 <td style="text-align: right">
-                  ${this.renderValue(row.portfolio_eur, formatPnl(row.portfolio_eur))}&nbsp;&nbsp;
+                  ${this.renderValue(
+                    row.portfolio_eur,
+                    formatPnl(row.portfolio_eur),
+                  )}&nbsp;&nbsp;
                 </td>
                 <td style="text-align: right">
-                  ${this.renderValue(row.portfolio_pct, formatPercent(row.portfolio_pct, 1))}
+                  ${this.renderValue(
+                    row.portfolio_pct,
+                    formatPercent(row.portfolio_pct, 1),
+                  )}
                 </td>
               </tr>
             `;
@@ -162,19 +171,21 @@ class SentinelPortfolioPnl extends LitElement {
 
   renderControls() {
     return html`
-      <tui-flex align="baseline" wrap>
+      <div class="sentinel-layout" data-align="center" data-wrap>
         <span>Range&nbsp;</span>
-        <tui-radio-buttonset
+        <wa-radio-group
+          size="xs"
+          orientation="horizontal"
           aria-label="P/L chart period"
-          value=${this.pnlPeriod}
+          .value=${this.pnlPeriod}
           @change=${this.changePeriod}
         >
-          <tui-radio-button value="3M">3M</tui-radio-button>
-          <tui-radio-button value="6M">6M</tui-radio-button>
-          <tui-radio-button value="1Y">1Y</tui-radio-button>
-          <tui-radio-button value="ALL">ALL</tui-radio-button>
-        </tui-radio-buttonset>
-      </tui-flex>
+          <wa-radio appearance="button" value="3M">3M</wa-radio>
+          <wa-radio appearance="button" value="6M">6M</wa-radio>
+          <wa-radio appearance="button" value="1Y">1Y</wa-radio>
+          <wa-radio appearance="button" value="ALL">ALL</wa-radio>
+        </wa-radio-group>
+      </div>
     `;
   }
 
@@ -183,32 +194,29 @@ class SentinelPortfolioPnl extends LitElement {
       Number.isFinite(latest) && Number.isFinite(threshold)
         ? latest - threshold
         : undefined;
-    const graph = html`<tui-chart
+    const graph = html`<sentinel-chart
+      role="img"
       aria-label="${label} annualized return trend"
       height="4"
       min=${minimum}
       max=${maximum}
       threshold=${threshold ?? ""}
-      above-variant="success"
-      below-variant="error"
       .values=${values}
-    ></tui-chart>`;
+    ></sentinel-chart>`;
 
     return html`
-      <tui-flex align="start">
+      <div class="sentinel-layout" data-align="start">
         <span
           data-chart-space
           style="display: block; flex: 1 1 0; min-width: 0; white-space: nowrap"
           >${graph}</span
         >
         <span style="white-space: nowrap"
-          >&nbsp;${
-            Number.isFinite(comparison)
-              ? this.renderValue(comparison, formatPercent(latest, 1))
-              : formatPercent(latest, 1)
-          }</span
+          >&nbsp;${Number.isFinite(comparison)
+            ? this.renderValue(comparison, formatPercent(latest, 1))
+            : formatPercent(latest, 1)}</span
         >
-      </tui-flex>
+      </div>
     `;
   }
 
@@ -248,8 +256,8 @@ class SentinelPortfolioPnl extends LitElement {
     if (this.performance.loading && !this.performance.value) {
       content = html`<span>Loading performance…</span>`;
     } else if (this.performance.error) {
-      content = html`<tui-text variant="error"
-        >Portfolio P&amp;L unavailable</tui-text
+      content = html`<span data-tone="error"
+        >Portfolio P&amp;L unavailable</span
       >`;
     } else if (
       !this.performance.value?.periodStats ||
@@ -271,8 +279,8 @@ class SentinelPortfolioPnl extends LitElement {
       `;
     }
 
-    return html`<tui-box heading="Portfolio P&amp;L" border="single"
-      >${content}</tui-box
+    return html`<wa-card
+      ><span slot="header">Portfolio P&amp;L</span>${content}</wa-card
     >`;
   }
 }

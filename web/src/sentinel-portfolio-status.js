@@ -76,7 +76,10 @@ class SentinelPortfolioStatus extends LitElement {
 
     return html`&nbsp;(${balances.map(
       ([currency, amount], index) =>
-        html`${index > 0 ? ", " : ""}${currency}&nbsp;${formatCurrency(amount, currency)}`,
+        html`${index > 0 ? ", " : ""}${currency}&nbsp;${formatCurrency(
+          amount,
+          currency,
+        )}`,
     )})`;
   }
 
@@ -106,7 +109,7 @@ class SentinelPortfolioStatus extends LitElement {
     this.editingCash = true;
     this.updateComplete.then(() =>
       this.querySelector(
-        'tui-input[aria-label="Simulated cash in EUR"]',
+        'wa-input[aria-label="Simulated cash in EUR"]',
       )?.select(),
     );
   }
@@ -157,69 +160,81 @@ class SentinelPortfolioStatus extends LitElement {
   renderCash(portfolio) {
     if (this.editingCash && this.isResearchMode) {
       return html`
-        <form @submit=${this.saveCash} style="display: inline">
-          <tui-flex align="baseline" wrap>
-            <label
-              >Cash&nbsp;<tui-input
-                aria-label="Simulated cash in EUR"
-                type="number"
-                step="any"
-                size="12"
-                value=${this.cashDraft}
-                ?disabled=${this.cashPending}
-                @input=${(event) => (this.cashDraft = event.currentTarget.value)}
-                @keydown=${(event) => {
-                  if (event.key === "Escape") this.cancelCashEdit();
-                }}
-              ></tui-input
-            ></label>
-            <tui-button type="submit" ?disabled=${this.cashPending}
-              >${this.cashPending ? "Saving…" : "Apply"}</tui-button
-            >
-            <tui-button
-              type="button"
+        <form
+          class="sentinel-layout"
+          data-align="center"
+          data-wrap
+          @submit=${this.saveCash}
+        >
+          <label class="sentinel-layout" data-align="center">
+            <span>Cash</span>
+            <wa-input
+              size="small"
+              aria-label="Simulated cash in EUR"
+              type="number"
+              step="any"
+              style="inline-size: 12ch; max-inline-size: 100%"
+              .value=${this.cashDraft}
               ?disabled=${this.cashPending}
-              @click=${this.cancelCashEdit}
-              >Cancel</tui-button
-            >
-          </tui-flex>
+              @input=${(event) => (this.cashDraft = event.currentTarget.value)}
+              @keydown=${(event) => {
+                if (event.key === "Escape") this.cancelCashEdit();
+              }}
+            ></wa-input>
+          </label>
+          <wa-button size="small" type="submit" ?disabled=${this.cashPending}
+            >${this.cashPending ? "Saving…" : "Apply"}</wa-button
+          >
+          <wa-button
+            size="small"
+            type="button"
+            ?disabled=${this.cashPending}
+            @click=${this.cancelCashEdit}
+            >Cancel</wa-button
+          >
         </form>
       `;
     }
 
     return html`
-      <tui-flex align="baseline" wrap>
+      <div class="sentinel-layout" data-align="baseline" data-wrap>
         <span
-          >Cash&nbsp;<strong>${formatCurrency(portfolio.total_cash_eur)}</strong>${this.cashIsSimulated
+          >Cash&nbsp;<strong>${formatCurrency(
+            portfolio.total_cash_eur,
+          )}</strong>${this.cashIsSimulated
             ? ""
             : this.renderCashBreakdown(portfolio.cash)}</span
         >
         ${this.cashIsSimulated
-          ? html`<tui-text variant="warning">[simulated]</tui-text>`
+          ? html`<span data-tone="warning">[simulated]</span>`
           : ""}
         ${this.isResearchMode
           ? html`
-              <tui-button
+              <wa-button
+                size="xs"
+                appearance="plain"
                 aria-label="Edit simulated cash"
                 title="Change the cash used by research-mode planning"
                 ?disabled=${this.cashPending}
                 @click=${this.startCashEdit}
-                >Edit</tui-button
+                >Edit</wa-button
               >
               ${this.cashIsSimulated
-                ? html`<tui-button
+                ? html`<wa-button
+                    size="xs"
+                    appearance="plain"
                     aria-label="Use real cash"
                     title="Clear the simulated cash override"
                     ?disabled=${this.cashPending}
                     @click=${() => this.setCashOverride(null)}
-                    >Use real</tui-button
+                    >Use real</wa-button
                   >`
                 : ""}
             `
           : ""}
-      </tui-flex>
+      </div>
       ${this.cashError
-        ? html`<tui-text variant="error">${this.cashError}</tui-text>`
+        ? html`<span data-tone="error">${this.cashError}</span>`
         : ""}
     `;
   }
@@ -231,15 +246,17 @@ class SentinelPortfolioStatus extends LitElement {
       totalProfit > 0 ? "success" : totalProfit < 0 ? "error" : undefined;
 
     return html`
-      <tui-flex wrap>
+      <div class="sentinel-layout" data-align="baseline" data-wrap>
         <span
-          >Value&nbsp;<strong><tui-text variant=${valueVariant}
-              >${formatCurrency(portfolio.total_value_eur)}</tui-text
-            ></strong></span
+          >Value&nbsp;<strong
+            ><span data-tone=${valueVariant}
+              >${formatCurrency(portfolio.total_value_eur)}</span
+            ></strong
+          ></span
         >
-        <span aria-hidden="true">&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+
         ${this.renderCash(portfolio)}
-      </tui-flex>
+      </div>
     `;
   }
 
@@ -252,31 +269,35 @@ class SentinelPortfolioStatus extends LitElement {
 
     const totalFees = cashFlows.fees + cashFlows.taxes;
     return html`
-      <tui-flex wrap>
+      <div class="sentinel-layout" data-align="baseline" data-wrap>
         <span
-          >Deposits&nbsp;<strong>${formatCurrency(cashFlows.deposits)}</strong></span
+          >Deposits&nbsp;<strong
+            >${formatCurrency(cashFlows.deposits)}</strong
+          ></span
         >
-        <span aria-hidden="true">&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+
         <span
-          >Withdrawals&nbsp;<strong>${formatCurrency(
-            cashFlows.withdrawals,
-          )}</strong></span
+          >Withdrawals&nbsp;<strong
+            >${formatCurrency(cashFlows.withdrawals)}</strong
+          ></span
         >
-        <span aria-hidden="true">&nbsp;&nbsp;│&nbsp;&nbsp;</span>
+
         <span
-          >Dividends&nbsp;<strong>${formatCurrency(cashFlows.dividends)}</strong></span
+          >Dividends&nbsp;<strong
+            >${formatCurrency(cashFlows.dividends)}</strong
+          ></span
         >
-        <span aria-hidden="true">&nbsp;&nbsp;│&nbsp;&nbsp;</span>
-        <span
-          >Fees&nbsp;<strong>${formatCurrency(totalFees)}</strong></span
-        >
+
+        <span>Fees&nbsp;<strong>${formatCurrency(totalFees)}</strong></span>
         <span aria-hidden="true">&nbsp;&nbsp;—&nbsp;&nbsp;</span>
         <span
-          >Total Profit&nbsp;<strong><tui-text variant="warning"
-              >${formatCurrency(cashFlows.total_profit)}</tui-text
-            ></strong></span
+          >Total Profit&nbsp;<strong
+            ><span data-tone="warning"
+              >${formatCurrency(cashFlows.total_profit)}</span
+            ></strong
+          ></span
         >
-      </tui-flex>
+      </div>
     `;
   }
 
@@ -286,9 +307,7 @@ class SentinelPortfolioStatus extends LitElement {
     if (this.portfolio.loading && !this.portfolio.value) {
       content = html`<span>Loading portfolio…</span>`;
     } else if (this.portfolio.error) {
-      content = html`<tui-text variant="error"
-        >Portfolio unavailable</tui-text
-      >`;
+      content = html`<span data-tone="error">Portfolio unavailable</span>`;
     } else {
       content = this.renderPortfolio();
     }

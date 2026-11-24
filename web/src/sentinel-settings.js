@@ -739,28 +739,44 @@ class SentinelSettings extends LitElement {
     let control;
 
     if (field.type === "toggle") {
-      control = html`<tui-toggle
-        ?checked=${Boolean(value)}
+      control = html`<wa-switch
+        size="small"
+        .checked=${Boolean(value)}
         ?disabled=${disabled}
         @change=${(event) =>
           this.updateSetting(field, event.currentTarget.checked)}
-        >${field.label}</tui-toggle
+        >${field.label}</wa-switch
       >`;
     } else if (field.type === "select") {
       control = html`<label
-        >${field.label}&nbsp;<tui-select
-          value=${value}
+        >${field.label}&nbsp;<wa-select
+          size="small"
+          .value=${value}
           ?disabled=${disabled}
           @change=${(event) =>
             this.updateSetting(field, event.currentTarget.value)}
         >
           ${field.options.map(
             ([optionValue, label]) => html`
-              <option value=${optionValue}>${label}</option>
+              <wa-option value=${optionValue}>${label}</wa-option>
             `,
           )}
-        </tui-select></label
+        </wa-select></label
       >`;
+    } else if (field.type === "model") {
+      control = html`
+        <label>
+          <span>${field.label}</span>
+          <input
+            .value=${value ?? ""}
+            list="sentinel-ai-models"
+            style="inline-size: 100%"
+            ?disabled=${disabled}
+            @change=${(event) =>
+              this.updateSetting(field, event.currentTarget.value)}
+          />
+        </label>
+      `;
     } else {
       const type =
         field.type === "password"
@@ -770,20 +786,20 @@ class SentinelSettings extends LitElement {
             : "text";
       control = html`<label
         ><span>${field.label}</span>
-        <tui-input
-          block
+        <wa-input
+          size="small"
+          style="inline-size: 100%"
           type=${type}
-          value=${value ?? ""}
+          .value=${value ?? ""}
           min=${field.min ?? ""}
           max=${field.max ?? ""}
           step=${field.step ?? (field.type === "number" ? 1 : "")}
-          list=${field.type === "model" ? "sentinel-ai-models" : ""}
           ?disabled=${disabled}
           @change=${(event) =>
             strategy
               ? this.changeStrategy(field, event.currentTarget.value)
               : this.updateSetting(field, event.currentTarget.value)}
-        ></tui-input
+        ></wa-input
       ></label>`;
     }
 
@@ -814,8 +830,9 @@ class SentinelSettings extends LitElement {
       ${researchGroups.map(
         ([heading, fields], index) => html`
           ${index > 0 ? html`<div aria-hidden="true">&nbsp;</div>` : ""}
-          <tui-box heading=${heading} border="single">
-            <tui-flex align="start" wrap>
+          <wa-card
+            ><span slot="header">${heading}</span>
+            <div class="sentinel-layout" data-align="start" data-wrap>
               ${fields.map(
                 (field) => html`
                   <div style="flex: 1 1 38ch; min-width: 0">
@@ -823,24 +840,20 @@ class SentinelSettings extends LitElement {
                   </div>
                 `,
               )}
-            </tui-flex>
-            ${
-              heading === "Model and research tools"
-                ? html`<div>
-                    <tui-button @click=${() => this.models.refresh()}
-                      >Refresh available models</tui-button
-                    >
-                    ${
-                      this.models.error
-                        ? html`<tui-text variant="error"
-                            >${this.models.error.message}</tui-text
-                          >`
-                        : ""
-                    }
-                  </div>`
-                : ""
-            }
-          </tui-box>
+            </div>
+            ${heading === "Model and research tools"
+              ? html`<div>
+                  <wa-button size="small" @click=${() => this.models.refresh()}
+                    >Refresh available models</wa-button
+                  >
+                  ${this.models.error
+                    ? html`<span data-tone="error"
+                        >${this.models.error.message}</span
+                      >`
+                    : ""}
+                </div>`
+              : ""}
+          </wa-card>
         `,
       )}
     `;
@@ -852,15 +865,17 @@ class SentinelSettings extends LitElement {
         return this.renderFields(feeFields);
       case "strategy":
         return html`
-          <tui-box heading="Strategy Tuning" border="single">
+          <wa-card
+            ><span slot="header">Strategy Tuning</span>
             ${this.renderFields(strategyDraftFields, this.strategyDraft, true)}
             <div aria-hidden="true">&nbsp;</div>
-            <tui-button
+            <wa-button
+              size="small"
               ?disabled=${this.busyKey !== ""}
               @click=${this.applyStrategy}
-              >Apply Strategy Tuning</tui-button
+              >Apply Strategy Tuning</wa-button
             >
-          </tui-box>
+          </wa-card>
           <div aria-hidden="true">&nbsp;</div>
           ${this.renderFields(strategyFields)}
         `;
@@ -872,13 +887,14 @@ class SentinelSettings extends LitElement {
         return html`
           ${this.renderFields(apiFields.slice(0, 2))}
           <div aria-hidden="true">&nbsp;</div>
-          <tui-box heading="Freedom24 web login" border="single">
+          <wa-card
+            ><span slot="header">Freedom24 web login</span>
             <div>
               Used only to fetch PRAAMS portfolio-structure data not exposed by
               the public API.
             </div>
             ${this.renderFields(apiFields.slice(2))}
-          </tui-box>
+          </wa-card>
         `;
       case "backup":
         return html`
@@ -900,38 +916,35 @@ class SentinelSettings extends LitElement {
     }
 
     if (this.settings.error) {
-      return html`<tui-text variant="error"
-        >Error loading settings: ${this.settings.error.message}</tui-text
+      return html`<span data-tone="error"
+        >Error loading settings: ${this.settings.error.message}</span
       >`;
     }
 
     return html`
-      <tui-radio-buttonset
+      <wa-radio-group
+        size="small"
         aria-label="Settings section"
-        value=${this.tab}
+        .value=${this.tab}
         @change=${(event) => (this.tab = event.currentTarget.value)}
       >
-        <tui-radio-button value="trading">Trading</tui-radio-button>
-        <tui-radio-button value="fees">Fees</tui-radio-button>
-        <tui-radio-button value="strategy">Strategy</tui-radio-button>
-        <tui-radio-button value="forecasting">Forecasts</tui-radio-button>
-        <tui-radio-button value="research">Research</tui-radio-button>
-        <tui-radio-button value="api">API</tui-radio-button>
-        <tui-radio-button value="backup">Backup</tui-radio-button>
-      </tui-radio-buttonset>
+        <wa-radio appearance="button" value="trading">Trading</wa-radio>
+        <wa-radio appearance="button" value="fees">Fees</wa-radio>
+        <wa-radio appearance="button" value="strategy">Strategy</wa-radio>
+        <wa-radio appearance="button" value="forecasting">Forecasts</wa-radio>
+        <wa-radio appearance="button" value="research">Research</wa-radio>
+        <wa-radio appearance="button" value="api">API</wa-radio>
+        <wa-radio appearance="button" value="backup">Backup</wa-radio>
+      </wa-radio-group>
       <div aria-hidden="true">&nbsp;</div>
       ${this.renderPanel()}
-      ${
-        this.busyKey
-          ? html`<div aria-live="polite">Saving ${this.busyKey}…</div>`
-          : ""
-      }
+      ${this.busyKey
+        ? html`<div aria-live="polite">Saving ${this.busyKey}…</div>`
+        : ""}
       ${this.notice ? html`<div aria-live="polite">${this.notice}</div>` : ""}
-      ${
-        this.actionError
-          ? html`<tui-text variant="error">${this.actionError}</tui-text>`
-          : ""
-      }
+      ${this.actionError
+        ? html`<span data-tone="error">${this.actionError}</span>`
+        : ""}
     `;
   }
 }

@@ -88,23 +88,22 @@ export class SentinelInactiveSecurities extends LitElement {
     }
 
     return html`
-      <details
+      <wa-details
         ?open=${!widgetCollapsed("inactive-securities")}
-        @toggle=${this.toggleDetails}
+        @wa-after-show=${this.toggleDetails}
+        @wa-after-hide=${this.toggleDetails}
       >
-        <summary style="cursor: pointer; font-weight: 600">
-          Inactive Securities (${count})
-        </summary>
+        <span slot="summary"> Inactive Securities (${count}) </span>
         ${this.detailsRequested
-          ? html`<tui-box border="single">
+          ? html`<wa-card>
               <sentinel-securities
                 inactive-only
                 bare
                 .period=${this.period}
               ></sentinel-securities>
-            </tui-box>`
+            </wa-card>`
           : ""}
-      </details>
+      </wa-details>
     `;
   }
 }

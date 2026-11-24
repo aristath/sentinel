@@ -195,7 +195,8 @@ class SentinelSecurities extends LitElement {
           break;
         case "deviation":
           result =
-            left.current_allocation - left.ideal_allocation -
+            left.current_allocation -
+            left.ideal_allocation -
             (right.current_allocation - right.ideal_allocation);
           break;
         case "ai_score":
@@ -284,15 +285,7 @@ class SentinelSecurities extends LitElement {
       return "";
     }
 
-    return [
-      "background:light-dark(black,white)",
-      "color:light-dark(white,black)",
-      "--tui-color:light-dark(white,black)",
-      "--tui-background:light-dark(black,white)",
-      "--tui-success-color:light-dark(white,black)",
-      "--tui-warning-color:light-dark(white,black)",
-      "--tui-error-color:light-dark(white,black)",
-    ].join(";");
+    return "background: var(--wa-color-surface-lowered)";
   }
 
   get stats() {
@@ -312,7 +305,7 @@ class SentinelSecurities extends LitElement {
   renderColored(value, formatted) {
     const variant = variantFor(value);
     return variant
-      ? html`<tui-text variant=${variant}>${formatted}</tui-text>`
+      ? html`<span data-tone=${variant}>${formatted}</span>`
       : formatted;
   }
 
@@ -430,16 +423,16 @@ class SentinelSecurities extends LitElement {
 
   openAddDialog() {
     this.addError = "";
-    this.querySelector("#add-security-dialog")?.showModal();
+    this.querySelector("#add-security-dialog").open = true;
   }
 
   openColumnsDialog() {
     this.errorMessage = "";
-    this.querySelector("#columns-dialog")?.showModal();
+    this.querySelector("#columns-dialog").open = true;
   }
 
   closeColumnsDialog() {
-    this.querySelector("#columns-dialog")?.close();
+    this.querySelector("#columns-dialog").open = false;
   }
 
   async toggleColumn(event, column) {
@@ -453,7 +446,7 @@ class SentinelSecurities extends LitElement {
     }
 
     if (next.size === 0) {
-      event.currentTarget.setAttribute("checked", "");
+      event.currentTarget.checked = true;
       this.errorMessage = "At least one table column must remain visible";
       return;
     }
@@ -466,7 +459,9 @@ class SentinelSecurities extends LitElement {
     this.errorMessage = "";
 
     try {
-      await putJson(`/api/settings/${COLUMN_SETTING_KEY}`, { value: selection });
+      await putJson(`/api/settings/${COLUMN_SETTING_KEY}`, {
+        value: selection,
+      });
       this.columnSettings.value = {
         ...this.columnSettings.value,
         [COLUMN_SETTING_KEY]: selection,
@@ -482,7 +477,7 @@ class SentinelSecurities extends LitElement {
   }
 
   closeAddDialog() {
-    this.querySelector("#add-security-dialog")?.close();
+    this.querySelector("#add-security-dialog").open = false;
   }
 
   async addSecurity(event) {
@@ -515,11 +510,11 @@ class SentinelSecurities extends LitElement {
     this.deleteCandidate = security;
     this.errorMessage = "";
     await this.updateComplete;
-    this.querySelector("#delete-security-dialog")?.showModal();
+    this.querySelector("#delete-security-dialog").open = true;
   }
 
   closeDeleteDialog() {
-    this.querySelector("#delete-security-dialog")?.close();
+    this.querySelector("#delete-security-dialog").open = false;
   }
 
   async deleteSecurity() {
@@ -593,33 +588,58 @@ class SentinelSecurities extends LitElement {
     }
 
     return html`
-      <tui-flex align="baseline" wrap>
-        <span>Period&nbsp;</span>
-        <tui-radio-buttonset
-          aria-label="Security price period"
-          value=${this.period}
-          @change=${this.changePeriod}
+      <div
+        class="sentinel-layout securities-toolbar"
+        data-align="center"
+        data-justify="between"
+        data-wrap
+      >
+        <div
+          class="sentinel-layout securities-filters"
+          data-align="center"
+          data-wrap
         >
-          <tui-radio-button value="1M">1M</tui-radio-button>
-          <tui-radio-button value="1Y">1Y</tui-radio-button>
-          <tui-radio-button value="5Y">5Y</tui-radio-button>
-          <tui-radio-button value="10Y">10Y</tui-radio-button>
-        </tui-radio-buttonset>
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
-        <label>
-          Search&nbsp;<tui-input
+          <div class="sentinel-layout" data-align="center">
+            <span class="securities-period-label" aria-hidden="true"
+              >Period</span
+            >
+            <wa-radio-group
+              size="xs"
+              orientation="horizontal"
+              aria-label="Security price period"
+              .value=${this.period}
+              @change=${this.changePeriod}
+            >
+              <wa-radio appearance="button" value="1M">1M</wa-radio>
+              <wa-radio appearance="button" value="1Y">1Y</wa-radio>
+              <wa-radio appearance="button" value="5Y">5Y</wa-radio>
+              <wa-radio appearance="button" value="10Y">10Y</wa-radio>
+            </wa-radio-group>
+          </div>
+          <wa-input
+            class="securities-search"
+            size="xs"
             type="search"
             aria-label="Search securities"
-            placeholder="symbol or name"
-            size="14"
+            placeholder="Search securities"
             @input=${this.changeSearch}
-          ></tui-input>
-        </label>
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
-        <tui-button @click=${this.openColumnsDialog}>Columns</tui-button>
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
-        <tui-button @click=${this.openAddDialog}>Add Security</tui-button>
-      </tui-flex>
+          ></wa-input>
+        </div>
+        <div class="sentinel-layout" data-align="center">
+          <wa-button
+            size="xs"
+            appearance="plain"
+            @click=${this.openColumnsDialog}
+            >Columns</wa-button
+          >
+          <wa-button
+            size="xs"
+            appearance="outlined"
+            @click=${this.openAddDialog}
+            >Add Security</wa-button
+          >
+        </div>
+      </div>
     `;
   }
 
@@ -631,13 +651,12 @@ class SentinelSecurities extends LitElement {
     const stats = this.stats;
 
     return html`
-      <div>
-        ${stats.total} securities&nbsp;│&nbsp;${stats.positions}
-        positions&nbsp;│&nbsp;
-        <tui-text variant="success">${stats.buys} buy signals</tui-text
-        >&nbsp;│&nbsp;
-        <tui-text variant="error">${stats.sells} sell signals</tui-text
-        >&nbsp;│&nbsp; ${this.visibleSecurities.length} shown
+      <div class="securities-stats">
+        ${stats.total} securities&nbsp;·&nbsp;${stats.positions}
+        positions&nbsp;·&nbsp;
+        <span data-tone="success">${stats.buys} buy signals</span>&nbsp;·&nbsp;
+        <span data-tone="error">${stats.sells} sell signals</span>&nbsp;·&nbsp;
+        ${this.visibleSecurities.length} shown
       </div>
     `;
   }
@@ -654,12 +673,17 @@ class SentinelSecurities extends LitElement {
       <th
         scope="col"
         aria-sort=${ariaSort}
-        style="text-align: left; vertical-align: top"
+        style="text-align: left; vertical-align: middle"
       >
-        <span aria-hidden="true">│&nbsp;</span
-        ><tui-button @click=${() => this.changeSort(column)}
-          >${label}</tui-button
-        ><span aria-hidden="true">${this.sortMarker(column)}</span>
+        <wa-button
+          class="security-sort"
+          size="xs"
+          appearance="plain"
+          @click=${() => this.changeSort(column)}
+          >${label}<span aria-hidden="true" class="security-sort-marker"
+            >${this.sortMarker(column)}</span
+          ></wa-button
+        >
       </th>
     `;
   }
@@ -672,9 +696,9 @@ class SentinelSecurities extends LitElement {
     }
 
     const variant = recommendation.action === "buy" ? "success" : "error";
-    return html`<tui-text variant=${variant}
+    return html`<span data-tone=${variant}
       >${recommendation.action.toUpperCase()}
-      ${formatCurrency(Math.abs(recommendation.value_delta_eur), "EUR")}</tui-text
+      ${formatCurrency(Math.abs(recommendation.value_delta_eur), "EUR")}</span
     >`;
   }
 
@@ -696,16 +720,15 @@ class SentinelSecurities extends LitElement {
       ? `${security.symbol} price history; green above and red below average purchase price`
       : `${security.symbol} price history; no position`;
 
-    return html`<tui-sparkline
+    return html`<sentinel-chart
+      role="img"
+      compact
       aria-label=${label}
-      columns="8"
       min=${minimum}
       max=${maximum}
       threshold=${hasAverageCost ? averageCost : ""}
-      above-variant=${hasAverageCost ? "success" : ""}
-      below-variant=${hasAverageCost ? "error" : ""}
       .values=${values}
-    ></tui-sparkline>`;
+    ></sentinel-chart>`;
   }
 
   renderSecurityRow(security) {
@@ -725,191 +748,158 @@ class SentinelSecurities extends LitElement {
         @focusin=${() => this.activateRow(security.symbol)}
         @focusout=${(event) => this.rowFocusOut(event, security.symbol)}
       >
-        <td style="vertical-align: top">
-          ${
-            expanded
-              ? html`<tui-button
-                  aria-label="Collapse ${security.symbol}"
-                  aria-expanded="true"
-                  aria-controls=${detailsId}
-                  @click=${() => this.toggleExpanded(security.symbol)}
-                  >−</tui-button
-                >`
-              : html`<tui-button
-                  aria-label="Expand ${security.symbol}"
-                  aria-expanded="false"
-                  aria-controls=${detailsId}
-                  @click=${() => this.toggleExpanded(security.symbol)}
-                  >+</tui-button
-                >`
-          }
+        <td style="vertical-align: middle">
+          ${expanded
+            ? html`<wa-button
+                class="security-expand"
+                size="xs"
+                appearance="plain"
+                aria-label="Collapse ${security.symbol}"
+                aria-expanded="true"
+                aria-controls=${detailsId}
+                @click=${() => this.toggleExpanded(security.symbol)}
+                >−</wa-button
+              >`
+            : html`<wa-button
+                class="security-expand"
+                size="xs"
+                appearance="plain"
+                aria-label="Expand ${security.symbol}"
+                aria-expanded="false"
+                aria-controls=${detailsId}
+                @click=${() => this.toggleExpanded(security.symbol)}
+                >+</wa-button
+              >`}
         </td>
-        ${
-          this.columnVisible("price")
-            ? html`<td style="vertical-align: top; white-space: nowrap">
-                <span aria-hidden="true">│&nbsp;</span>
-                ${this.renderPriceSparkline(security)}
-              </td>`
-            : ""
-        }
+        ${this.columnVisible("price")
+          ? html`<td style="vertical-align: middle; white-space: nowrap">
+              ${this.renderPriceSparkline(security)}
+            </td>`
+          : ""}
         <th
           scope="row"
-          style="font: inherit; text-align: left; vertical-align: top; overflow-wrap: anywhere"
+          style="font: inherit; text-align: left; vertical-align: middle; overflow-wrap: anywhere"
         >
-          <span aria-hidden="true">│&nbsp;</span>
-          ${security.price_warning ? html`<tui-text variant="warning">!&nbsp;</tui-text>` : ""}<span
-            style="white-space: nowrap"
+          ${security.price_warning
+            ? html`<span data-tone="warning">!&nbsp;</span>`
+            : ""}<span class="security-symbol" style="white-space: nowrap"
             >${security.symbol}</span
           >
         </th>
-        ${
-          this.columnVisible("value")
-            ? html`<td
-                style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
-              >
-                <span aria-hidden="true">│&nbsp;</span>
-                ${security.has_position ? formatCurrency(security.value_eur, "EUR", 0) : "-"}
-              </td>`
-            : ""
-        }
-        ${
-          this.columnVisible("pnl")
-            ? html`<td
-                style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
-              >
-                <span aria-hidden="true">│&nbsp;</span>
-                ${
-                  security.has_position
-                    ? html`${this.renderColored(
-                        security.profit_pct,
-                        formatPercent(security.profit_pct, 1),
-                      )}&nbsp;${this.renderColored(
-                        security.profit_value_eur,
-                        formatCurrency(security.profit_value_eur, "EUR", 0),
-                      )}`
-                    : "-"
-                }
-              </td>`
-            : ""
-        }
-        ${
-          this.columnVisible("ideal")
-            ? html`<td style="text-align: left; vertical-align: top">
-                <span aria-hidden="true">│&nbsp;</span>
-                ${this.renderColored(
-                  idealDifference,
-                  plainPercent(security.ideal_allocation),
-                )}
-              </td>`
-            : ""
-        }
-        ${
-          this.columnVisible("deviation")
-            ? html`<td
-                title="Current allocation minus ideal allocation; negative means underweight and positive means overweight"
-                style="text-align: left; vertical-align: top; white-space: nowrap"
-              >
-                <span aria-hidden="true">│&nbsp;</span>
-                ${formatPercent(-idealDifference, 1).replace("%", " pp")}
-              </td>`
-            : ""
-        }
-        ${
-          this.columnVisible("ai_score")
-            ? html`<td
-                title="AI research rating: 0% avoid, 50% neutral, 100% prefer"
-                style="text-align: left; vertical-align: top; white-space: nowrap"
-              >
-                <span aria-hidden="true">│&nbsp;</span>
-                ${scorePercent(security.ai_research_multiplier, 1)}
-              </td>`
-            : ""
-        }
-        ${
-          this.columnVisible("opportunity_score")
-            ? html`<td
-                title="Effective opportunity score after recent-dip memory and optional forecast adjustment"
-                style="text-align: left; vertical-align: top; white-space: nowrap"
-              >
-                <span aria-hidden="true">│&nbsp;</span>
-                ${scorePercent(security.opp_score, 1)}
-              </td>`
-            : ""
-        }
-        ${
-          this.columnVisible("plan")
-            ? html`<td
-                style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
-              >
-                <span aria-hidden="true">│&nbsp;</span>
-                ${plainPercent(security.current_allocation)}
-                ${
-                  allocationChange
-                    ? html`&nbsp;→&nbsp;${this.renderColored(
-                        security.post_plan_allocation -
-                          security.current_allocation,
-                        plainPercent(security.post_plan_allocation),
-                      )}`
-                    : ""
-                }
-                <span>${this.renderRecommendation(security)}</span>
-              </td>`
-            : ""
-        }
-        ${
-          this.columnVisible("trade")
-            ? html`<td
-                style="text-align: left; vertical-align: top; white-space: nowrap"
-              >
-                <span aria-hidden="true">│&nbsp;</span>
-                ${
-                  this.inactiveOnly
-                    ? "Inactive"
-                    : html`<tui-toggle
-                          aria-label="Allow buying ${security.symbol}"
-                          ?checked=${security.allow_buy === 1}
-                          @change=${(event) =>
-                            this.updateExecutionControl(
-                              event,
-                              security,
-                              "allow_buy",
-                            )}
-                          >B</tui-toggle
-                        >&nbsp;<tui-toggle
-                          aria-label="Allow selling ${security.symbol}"
-                          ?checked=${security.allow_sell === 1}
-                          @change=${(event) =>
-                            this.updateExecutionControl(
-                              event,
-                              security,
-                              "allow_sell",
-                            )}
-                          >S</tui-toggle
-                        >`
-                }
-              </td>`
-            : ""
-        }
+        ${this.columnVisible("value")
+          ? html`<td
+              style="text-align: left; vertical-align: middle; overflow-wrap: anywhere"
+            >
+              ${security.has_position
+                ? formatCurrency(security.value_eur, "EUR", 0)
+                : "-"}
+            </td>`
+          : ""}
+        ${this.columnVisible("pnl")
+          ? html`<td
+              style="text-align: left; vertical-align: middle; overflow-wrap: anywhere"
+            >
+              ${security.has_position
+                ? html`${this.renderColored(
+                    security.profit_pct,
+                    formatPercent(security.profit_pct, 1),
+                  )}&nbsp;${this.renderColored(
+                    security.profit_value_eur,
+                    formatCurrency(security.profit_value_eur, "EUR", 0),
+                  )}`
+                : "-"}
+            </td>`
+          : ""}
+        ${this.columnVisible("ideal")
+          ? html`<td style="text-align: left; vertical-align: middle">
+              ${this.renderColored(
+                idealDifference,
+                plainPercent(security.ideal_allocation),
+              )}
+            </td>`
+          : ""}
+        ${this.columnVisible("deviation")
+          ? html`<td
+              title="Current allocation minus ideal allocation; negative means underweight and positive means overweight"
+              style="text-align: left; vertical-align: middle; white-space: nowrap"
+            >
+              ${formatPercent(-idealDifference, 1).replace("%", " pp")}
+            </td>`
+          : ""}
+        ${this.columnVisible("ai_score")
+          ? html`<td
+              title="AI research rating: 0% avoid, 50% neutral, 100% prefer"
+              style="text-align: left; vertical-align: middle; white-space: nowrap"
+            >
+              ${scorePercent(security.ai_research_multiplier, 1)}
+            </td>`
+          : ""}
+        ${this.columnVisible("opportunity_score")
+          ? html`<td
+              title="Effective opportunity score after recent-dip memory and optional forecast adjustment"
+              style="text-align: left; vertical-align: middle; white-space: nowrap"
+            >
+              ${scorePercent(security.opp_score, 1)}
+            </td>`
+          : ""}
+        ${this.columnVisible("plan")
+          ? html`<td
+              style="text-align: left; vertical-align: middle; overflow-wrap: anywhere"
+            >
+              ${plainPercent(security.current_allocation)}
+              ${allocationChange
+                ? html`&nbsp;→&nbsp;${this.renderColored(
+                    security.post_plan_allocation - security.current_allocation,
+                    plainPercent(security.post_plan_allocation),
+                  )}`
+                : ""}
+              <span>${this.renderRecommendation(security)}</span>
+            </td>`
+          : ""}
+        ${this.columnVisible("trade")
+          ? html`<td
+              style="text-align: left; vertical-align: middle; white-space: nowrap"
+            >
+              ${this.inactiveOnly
+                ? "Inactive"
+                : html`<span class="trade-permissions"
+                    ><wa-switch
+                      size="xs"
+                      aria-label="Allow buying ${security.symbol}"
+                      .checked=${security.allow_buy === 1}
+                      @change=${(event) =>
+                        this.updateExecutionControl(
+                          event,
+                          security,
+                          "allow_buy",
+                        )}
+                      >B</wa-switch
+                    ><wa-switch
+                      size="xs"
+                      aria-label="Allow selling ${security.symbol}"
+                      .checked=${security.allow_sell === 1}
+                      @change=${(event) =>
+                        this.updateExecutionControl(
+                          event,
+                          security,
+                          "allow_sell",
+                        )}
+                      >S</wa-switch
+                    ></span
+                  >`}
+            </td>`
+          : ""}
       </tr>
       ${expanded ? this.renderExpandedRow(security, detailsId) : ""}
     `;
   }
 
-  renderDetailRow(label, value) {
+  renderDetail(label, value) {
     return html`
-      <tr>
-        <th
-          scope="row"
-          style="font: inherit; text-align: left; vertical-align: top; white-space: nowrap; padding-right: 1ch"
-        >
-          ${label}
-        </th>
-        <td
-          style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
-        >
-          <span aria-hidden="true">│&nbsp;</span>${value}
-        </td>
-      </tr>
+      <div class="security-detail-field">
+        <dt>${label}</dt>
+        <dd>${value}</dd>
+      </div>
     `;
   }
 
@@ -926,16 +916,15 @@ class SentinelSecurities extends LitElement {
     const hasAverageCost = Boolean(security.has_position) && averageCost > 0;
     const scaleValues = hasAverageCost ? [...values, averageCost] : values;
 
-    return html`<tui-chart
+    return html`<sentinel-chart
+      role="img"
       aria-label="${security.symbol} price history"
       height="6"
       min=${Math.min(...scaleValues)}
       max=${Math.max(...scaleValues)}
       threshold=${hasAverageCost ? averageCost : ""}
-      above-variant=${hasAverageCost ? "success" : ""}
-      below-variant=${hasAverageCost ? "error" : ""}
       .values=${values}
-    ></tui-chart>`;
+    ></sentinel-chart>`;
   }
 
   renderExpandedRow(security, detailsId) {
@@ -947,161 +936,162 @@ class SentinelSecurities extends LitElement {
 
     return html`
       <tr id=${detailsId}>
-        <td
-          colspan=${this.selectedColumns.size + 1}
-          style="overflow-wrap: anywhere"
-        >
-          <tui-box border="single" aria-label="${security.symbol} details">
+        <td colspan=${this.selectedColumns.size + 1}>
+          <wa-card
+            class="security-details-panel"
+            role="region"
+            aria-label="${security.symbol} details"
+          >
             ${this.renderPriceChart(security)}
-            <table style="width: 100%; border-spacing: 0">
-              <tbody>
-                ${
-                  security.price_warning
-                    ? this.renderDetailRow(
-                        "Warning",
-                        html`<tui-text variant="warning"
-                          >${security.price_warning}</tui-text
-                        >`,
-                      )
-                    : ""
-                }
-                ${this.renderDetailRow("Name", security.name || "-")}
-                ${this.renderDetailRow("Geography", security.geography || "-")}
-                ${this.renderDetailRow("Industry", security.industry || "-")}
-                ${this.renderDetailRow("Lot", security.min_lot ?? "-")}
-                ${this.renderDetailRow("Quantity", security.quantity ?? 0)}
-                ${this.renderDetailRow(
-                  "Cool-off periods",
-                  html`<tui-toggle
-                    aria-label="Cool-off periods for ${security.symbol}"
-                    title="Apply global same-side and opposite-side cool-off periods to this security"
-                    ?checked=${security.cooldown_enabled !== 0}
-                    ?disabled=${this.busyAction === `cooldown_enabled:${security.symbol}`}
-                    @change=${(event) =>
-                      this.updateExecutionControl(event, security, "cooldown_enabled")}
-                  >Enabled</tui-toggle>`,
-                )}
-                ${this.renderDetailRow(
-                  "Price",
-                  formatCurrency(security.current_price, security.currency),
-                )}
-                ${this.renderDetailRow(
-                  "Aliases",
-                  html`<tui-input
-                      id="aliases-${safeId(security.symbol)}"
-                      aria-label="Aliases for ${security.symbol}"
-                      value=${security.aliases ?? ""}
-                      size="28"
-                    ></tui-input
-                    >&nbsp;<tui-button
-                      ?disabled=${aliasBusy}
-                      @click=${() => this.saveAliases(security)}
-                      >Save aliases</tui-button
+            <dl class="security-detail-list">
+              ${security.price_warning
+                ? this.renderDetail(
+                    "Warning",
+                    html`<span data-tone="warning"
+                      >${security.price_warning}</span
                     >`,
-                )}
-                ${this.renderDetailRow(
-                  "Forecast 4w",
-                  this.renderColored(
-                    security.forecast_return_4w,
-                    scorePercent(security.forecast_return_4w, 1),
-                  ),
-                )}
-                ${this.renderDetailRow(
-                  "Timing",
-                  scorePercent(security.forecast_score),
-                )}
-                ${this.renderDetailRow(
-                  "AI research",
-                  Number.isFinite(multiplier) ? multiplier.toFixed(2) : "-",
-                )}
-                ${
-                  security.ai_research_multiplier_source
-                    ? this.renderDetailRow(
-                        "Source",
-                        security.ai_research_multiplier_source,
-                      )
-                    : ""
-                }
-                ${
-                  security.ai_research_multiplier_updated_at
-                    ? this.renderDetailRow(
-                        "Updated",
-                        new Date(
-                          security.ai_research_multiplier_updated_at,
-                        ).toLocaleString(),
-                      )
-                    : ""
-                }
-                ${
-                  security.ai_research_multiplier_analysis
-                    ? this.renderDetailRow(
-                        "Analysis",
-                        security.ai_research_multiplier_analysis,
-                      )
-                    : ""
-                }
-                ${this.renderDetailRow(
-                  "Opportunity",
-                  scorePercent(security.opp_score, 1),
-                )}
-                ${this.renderDetailRow(
-                  "Dip",
-                  scorePercent(security.dip_score, 1),
-                )}
-                ${this.renderDetailRow(
-                  "Capitulation",
-                  scorePercent(security.capitulation_score, 1),
-                )}
-                ${this.renderDetailRow(
-                  "Cycle turn",
-                  security.cycle_turn ? "yes" : "no",
-                )}
-                ${this.renderDetailRow(
-                  "Freefall blocked",
-                  security.freefall_block ? "yes" : "no",
-                )}
-                ${
-                  security.recommendation?.reason
-                    ? this.renderDetailRow(
-                        "Plan",
-                        security.recommendation.reason,
-                      )
-                    : ""
-                }
-                ${this.renderDetailRow(
-                  "Actions",
-                  this.inactiveOnly
-                    ? html`<tui-button
-                          ?disabled=${this.busyAction ===
-                          `activate:${security.symbol}`}
-                          @click=${() => this.activateSecurity(security)}
-                          >Activate</tui-button
-                        >&nbsp;<tui-button
-                          variant="error"
-                          title=${security.can_delete
-                            ? "Permanently delete unused security"
-                            : `Cannot delete: ${security.transaction_count || 0} historical transaction(s)`}
-                          ?disabled=${!security.can_delete}
-                          @click=${() => this.openDeleteDialog(security)}
-                          >Delete Permanently</tui-button
-                        >`
-                    : html`<tui-button
-                        variant="error"
+                  )
+                : ""}
+              ${this.renderDetail("Name", security.name || "-")}
+              ${this.renderDetail("Geography", security.geography || "-")}
+              ${this.renderDetail("Industry", security.industry || "-")}
+              ${this.renderDetail("Lot", security.min_lot ?? "-")}
+              ${this.renderDetail("Quantity", security.quantity ?? 0)}
+              ${this.renderDetail(
+                "Cool-off periods",
+                html`<wa-switch
+                  size="small"
+                  aria-label="Cool-off periods for ${security.symbol}"
+                  title="Apply global same-side and opposite-side cool-off periods to this security"
+                  .checked=${security.cooldown_enabled !== 0}
+                  ?disabled=${this.busyAction ===
+                  `cooldown_enabled:${security.symbol}`}
+                  @change=${(event) =>
+                    this.updateExecutionControl(
+                      event,
+                      security,
+                      "cooldown_enabled",
+                    )}
+                  >Enabled</wa-switch
+                >`,
+              )}
+              ${this.renderDetail(
+                "Price",
+                formatCurrency(security.current_price, security.currency),
+              )}
+              ${this.renderDetail(
+                "Aliases",
+                html`<div class="sentinel-layout" data-align="center" data-wrap>
+                  <wa-input
+                    size="small"
+                    id="aliases-${safeId(security.symbol)}"
+                    aria-label="Aliases for ${security.symbol}"
+                    .value=${security.aliases ?? ""}
+                    style="inline-size: 28ch; max-inline-size: 100%"
+                  ></wa-input>
+                  <wa-button
+                    size="small"
+                    ?disabled=${aliasBusy}
+                    @click=${() => this.saveAliases(security)}
+                    >Save aliases</wa-button
+                  >
+                </div>`,
+              )}
+              ${this.renderDetail(
+                "Forecast 4w",
+                this.renderColored(
+                  security.forecast_return_4w,
+                  scorePercent(security.forecast_return_4w, 1),
+                ),
+              )}
+              ${this.renderDetail(
+                "Timing",
+                scorePercent(security.forecast_score),
+              )}
+              ${this.renderDetail(
+                "AI research",
+                Number.isFinite(multiplier) ? multiplier.toFixed(2) : "-",
+              )}
+              ${security.ai_research_multiplier_source
+                ? this.renderDetail(
+                    "Source",
+                    security.ai_research_multiplier_source,
+                  )
+                : ""}
+              ${security.ai_research_multiplier_updated_at
+                ? this.renderDetail(
+                    "Updated",
+                    new Date(
+                      security.ai_research_multiplier_updated_at,
+                    ).toLocaleString(),
+                  )
+                : ""}
+              ${security.ai_research_multiplier_analysis
+                ? this.renderDetail(
+                    "Analysis",
+                    security.ai_research_multiplier_analysis,
+                  )
+                : ""}
+              ${this.renderDetail(
+                "Opportunity",
+                scorePercent(security.opp_score, 1),
+              )}
+              ${this.renderDetail("Dip", scorePercent(security.dip_score, 1))}
+              ${this.renderDetail(
+                "Capitulation",
+                scorePercent(security.capitulation_score, 1),
+              )}
+              ${this.renderDetail(
+                "Cycle turn",
+                security.cycle_turn ? "yes" : "no",
+              )}
+              ${this.renderDetail(
+                "Freefall blocked",
+                security.freefall_block ? "yes" : "no",
+              )}
+              ${security.recommendation?.reason
+                ? this.renderDetail("Plan", security.recommendation.reason)
+                : ""}
+              ${this.renderDetail(
+                "Actions",
+                this.inactiveOnly
+                  ? html`<div
+                      class="sentinel-layout"
+                      data-align="center"
+                      data-wrap
+                    >
+                      <wa-button
+                        size="small"
+                        ?disabled=${this.busyAction ===
+                        `activate:${security.symbol}`}
+                        @click=${() => this.activateSecurity(security)}
+                        >Activate</wa-button
+                      ><wa-button
+                        size="small"
+                        variant="danger"
+                        title=${security.can_delete
+                          ? "Permanently delete unused security"
+                          : `Cannot delete: ${security.transaction_count || 0} historical transaction(s)`}
+                        ?disabled=${!security.can_delete}
                         @click=${() => this.openDeleteDialog(security)}
-                        >Remove</tui-button
-                      >`,
-                )}
-                ${
-                  this.inactiveOnly && !security.can_delete
-                    ? this.renderDetailRow(
-                        "Deletion",
-                        `Permanent deletion is unavailable because this security has ${security.transaction_count || 0} historical transaction(s).`,
-                      )
-                    : ""
-                }
-              </tbody>
-            </table>
-          </tui-box>
+                        >Delete Permanently</wa-button
+                      >
+                    </div>`
+                  : html`<wa-button
+                      size="small"
+                      variant="danger"
+                      @click=${() => this.openDeleteDialog(security)}
+                      >Remove</wa-button
+                    >`,
+              )}
+              ${this.inactiveOnly && !security.can_delete
+                ? this.renderDetail(
+                    "Deletion",
+                    `Permanent deletion is unavailable because this security has ${security.transaction_count || 0} historical transaction(s).`,
+                  )
+                : ""}
+            </dl>
+          </wa-card>
         </td>
       </tr>
     `;
@@ -1118,57 +1108,76 @@ class SentinelSecurities extends LitElement {
     }
 
     return html`
-      <div style="width: 100%; min-width: 0; overflow-x: auto">
+      <div class="securities-table-scroll">
         <table
+          class="securities-table"
           aria-label=${this.inactiveOnly ? "Inactive Securities" : "Securities"}
           style="width: 100%; min-width: max-content; border-spacing: 0"
         >
           <thead>
             <tr>
-            <th scope="col" style="text-align: left; vertical-align: top">
-              ${
-                allExpanded
-                  ? html`<tui-button
+              <th scope="col" style="text-align: left; vertical-align: middle">
+                ${allExpanded
+                  ? html`<wa-button
+                      class="security-expand"
+                      size="xs"
+                      appearance="plain"
                       aria-label="Collapse all securities"
                       @click=${this.toggleAll}
-                      >−</tui-button
+                      >−</wa-button
                     >`
-                  : html`<tui-button
+                  : html`<wa-button
+                      class="security-expand"
+                      size="xs"
+                      appearance="plain"
                       aria-label="Expand all securities"
                       @click=${this.toggleAll}
-                      >+</tui-button
-                    >`
-              }
-            </th>
-            ${
-              this.columnVisible("price")
+                      >+</wa-button
+                    >`}
+              </th>
+              ${this.columnVisible("price")
                 ? html`<th
                     scope="col"
-                    style="text-align: left; vertical-align: top"
+                    style="text-align: left; vertical-align: middle"
                   >
-                    <span aria-hidden="true">│&nbsp;</span>Price
+                    Price
                   </th>`
-                : ""
-            }
-            ${this.renderSortableHeader("Security", "symbol")}
-            ${this.columnVisible("value") ? this.renderSortableHeader("Value", "value") : ""}
-            ${this.columnVisible("pnl") ? this.renderSortableHeader("P/L", "pnl") : ""}
-            ${this.columnVisible("ideal") ? this.renderSortableHeader("Ideal", "ideal") : ""}
-            ${this.columnVisible("deviation") ? this.renderSortableHeader("Deviation from ideal", "deviation") : ""}
-            ${this.columnVisible("ai_score") ? this.renderSortableHeader("AI score", "ai_score") : ""}
-            ${this.columnVisible("opportunity_score") ? this.renderSortableHeader("Opportunity score", "opportunity_score") : ""}
-            ${this.columnVisible("plan") ? this.renderSortableHeader("Plan", "recommendation") : ""}
-            ${
-              this.columnVisible("trade")
+                : ""}
+              ${this.renderSortableHeader("Security", "symbol")}
+              ${this.columnVisible("value")
+                ? this.renderSortableHeader("Value", "value")
+                : ""}
+              ${this.columnVisible("pnl")
+                ? this.renderSortableHeader("P/L", "pnl")
+                : ""}
+              ${this.columnVisible("ideal")
+                ? this.renderSortableHeader("Ideal", "ideal")
+                : ""}
+              ${this.columnVisible("deviation")
+                ? this.renderSortableHeader("Deviation from ideal", "deviation")
+                : ""}
+              ${this.columnVisible("ai_score")
+                ? this.renderSortableHeader("AI score", "ai_score")
+                : ""}
+              ${this.columnVisible("opportunity_score")
+                ? this.renderSortableHeader(
+                    "Opportunity score",
+                    "opportunity_score",
+                  )
+                : ""}
+              ${this.columnVisible("plan")
+                ? this.renderSortableHeader("Plan", "recommendation")
+                : ""}
+              ${this.columnVisible("trade")
                 ? html`<th
                     scope="col"
-                    style="text-align: left; vertical-align: top"
+                    style="text-align: left; vertical-align: middle"
                   >
-                    <span aria-hidden="true">│&nbsp;</span
-                    >${this.inactiveOnly ? "Status" : "Trade"}
+                    <span aria-hidden="true"></span>${this.inactiveOnly
+                      ? "Status"
+                      : "Trade"}
                   </th>`
-                : ""
-            }
+                : ""}
             </tr>
           </thead>
           <tbody>
@@ -1181,143 +1190,156 @@ class SentinelSecurities extends LitElement {
 
   renderColumnsDialog() {
     return html`
-      <dialog
+      <wa-dialog
+        class="sentinel-compact-dialog"
         id="columns-dialog"
-        aria-label="Choose table columns"
-        style="color: var(--tui-color); background: var(--tui-background); border: 0; padding: 0; max-width: calc(100% - 2ch)"
+        label="Columns"
       >
-        <tui-box heading="Columns" border="single">
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("price")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "price")}
-              >Price</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              checked
-              disabled
-              aria-label="Security column is always visible"
-              >Security</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("value")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "value")}
-              >Value</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("pnl")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "pnl")}
-              >P/L</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("ideal")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "ideal")}
-              >Ideal</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("deviation")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "deviation")}
-              >Deviation from ideal</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("ai_score")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "ai_score")}
-              >AI score</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("opportunity_score")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "opportunity_score")}
-              >Opportunity score</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("plan")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "plan")}
-              >Plan</tui-toggle
-            >
-          </div>
-          <div>
-            <tui-toggle
-              ?checked=${this.columnVisible("trade")}
-              ?disabled=${this.columnsBusy}
-              @change=${(event) => this.toggleColumn(event, "trade")}
-              >Trade</tui-toggle
-            >
-          </div>
-          ${
-            this.errorMessage
-              ? html`<div>
-                  <tui-text variant="error">${this.errorMessage}</tui-text>
-                </div>`
-              : ""
-          }
-          <div>
-            <tui-button @click=${this.closeColumnsDialog}>Done</tui-button>
-          </div>
-        </tui-box>
-      </dialog>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("price")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "price")}
+            >Price</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            checked
+            disabled
+            aria-label="Security column is always visible"
+            >Security</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("value")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "value")}
+            >Value</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("pnl")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "pnl")}
+            >P/L</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("ideal")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "ideal")}
+            >Ideal</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("deviation")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "deviation")}
+            >Deviation from ideal</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("ai_score")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "ai_score")}
+            >AI score</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("opportunity_score")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "opportunity_score")}
+            >Opportunity score</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("plan")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "plan")}
+            >Plan</wa-switch
+          >
+        </div>
+        <div>
+          <wa-switch
+            size="small"
+            .checked=${this.columnVisible("trade")}
+            ?disabled=${this.columnsBusy}
+            @change=${(event) => this.toggleColumn(event, "trade")}
+            >Trade</wa-switch
+          >
+        </div>
+        ${this.errorMessage
+          ? html`<div>
+              <span data-tone="error">${this.errorMessage}</span>
+            </div>`
+          : ""}
+        <div>
+          <wa-button size="small" @click=${this.closeColumnsDialog}
+            >Done</wa-button
+          >
+        </div>
+      </wa-dialog>
     `;
   }
 
   renderAddDialog() {
     return html`
-      <dialog
+      <wa-dialog
+        class="sentinel-compact-dialog"
         id="add-security-dialog"
-        aria-label="Add Security"
-        style="color: var(--tui-color); background: var(--tui-background); border: 0; padding: 0; max-width: calc(100% - 2ch)"
+        label="Add Security"
       >
-        <tui-box heading="Add Security" border="single">
-          <form @submit=${this.addSecurity}>
-            <label>
-              Symbol&nbsp;<tui-input
-                id="add-security-symbol"
-                aria-label="TraderNet security symbol"
-                placeholder="AAPL.US"
-                required
-                ?disabled=${this.busyAction === "add"}
-              ></tui-input>
-            </label>
-            <div>
-              Geography and industry will be filled by the next metadata sync.
-            </div>
-            ${this.addError ? html`<div><tui-text variant="error">${this.addError}</tui-text></div>` : ""}
-            <div>
-              <tui-button type="submit" ?disabled=${this.busyAction === "add"}
-                >Add Security</tui-button
-              >&nbsp;
-              <tui-button
-                type="button"
-                ?disabled=${this.busyAction === "add"}
-                @click=${this.closeAddDialog}
-                >Cancel</tui-button
-              >
-            </div>
-          </form>
-        </tui-box>
-      </dialog>
+        <form @submit=${this.addSecurity}>
+          <label>
+            Symbol&nbsp;<wa-input
+              size="small"
+              id="add-security-symbol"
+              aria-label="TraderNet security symbol"
+              placeholder="AAPL.US"
+              required
+              ?disabled=${this.busyAction === "add"}
+            ></wa-input>
+          </label>
+          <div>
+            Geography and industry will be filled by the next metadata sync.
+          </div>
+          ${this.addError
+            ? html`<div><span data-tone="error">${this.addError}</span></div>`
+            : ""}
+          <div>
+            <wa-button
+              size="small"
+              type="submit"
+              ?disabled=${this.busyAction === "add"}
+              >Add Security</wa-button
+            >&nbsp;
+            <wa-button
+              size="small"
+              type="button"
+              ?disabled=${this.busyAction === "add"}
+              @click=${this.closeAddDialog}
+              >Cancel</wa-button
+            >
+          </div>
+        </form>
+      </wa-dialog>
     `;
   }
 
@@ -1325,68 +1347,54 @@ class SentinelSecurities extends LitElement {
     const security = this.deleteCandidate;
 
     return html`
-      <dialog
+      <wa-dialog
+        class="sentinel-compact-dialog"
         id="delete-security-dialog"
-        aria-label=${this.inactiveOnly
+        label=${this.inactiveOnly
           ? "Delete Security Permanently"
           : "Remove Security"}
-        style="color: var(--tui-color); background: var(--tui-background); border: 0; padding: 0; max-width: calc(100% - 2ch)"
       >
-        <tui-box
-          heading=${this.inactiveOnly
-            ? "Delete Security Permanently"
-            : "Remove Security"}
-          border="single"
-        >
-          ${
-            security
-              ? html`
-                  <div>
-                    ${this.inactiveOnly
-                      ? `Permanently delete ${security.symbol}?`
-                      : `Remove ${security.symbol} from the active universe?`}
-                  </div>
-                  ${
-                    security.has_position
-                      ? html`<div>
-                          <tui-text variant="warning"
-                            >Position: ${security.quantity} shares
-                            (${formatCurrency(security.value_eur, "EUR")}). It
-                            will remain managed, but new buys will be
-                            disabled.</tui-text
-                          >
-                        </div>`
-                      : ""
-                  }
-                  ${
-                    this.errorMessage
-                      ? html`<div>
-                          <tui-text variant="error"
-                            >${this.errorMessage}</tui-text
-                          >
-                        </div>`
-                      : ""
-                  }
-                  <div>
-                    <tui-button
-                      variant="error"
-                      ?disabled=${this.busyAction === `delete:${security.symbol}`}
-                      @click=${this.deleteSecurity}
-                      >${this.inactiveOnly
-                        ? "Delete Permanently"
-                        : "Remove"}</tui-button
-                    >&nbsp;
-                    <tui-button
-                      ?disabled=${this.busyAction === `delete:${security.symbol}`}
-                      @click=${this.closeDeleteDialog}
-                      >Cancel</tui-button
+        ${security
+          ? html`
+              <div>
+                ${this.inactiveOnly
+                  ? `Permanently delete ${security.symbol}?`
+                  : `Remove ${security.symbol} from the active universe?`}
+              </div>
+              ${security.has_position
+                ? html`<div>
+                    <span data-tone="warning"
+                      >Position: ${security.quantity} shares
+                      (${formatCurrency(security.value_eur, "EUR")}). It will
+                      remain managed, but new buys will be disabled.</span
                     >
-                  </div>
-                `
-              : ""
-          }
-        </tui-box>
-      </dialog>
+                  </div>`
+                : ""}
+              ${this.errorMessage
+                ? html`<div>
+                    <span data-tone="error">${this.errorMessage}</span>
+                  </div>`
+                : ""}
+              <div>
+                <wa-button
+                  size="small"
+                  variant="danger"
+                  ?disabled=${this.busyAction === `delete:${security.symbol}`}
+                  @click=${this.deleteSecurity}
+                  >${this.inactiveOnly
+                    ? "Delete Permanently"
+                    : "Remove"}</wa-button
+                >&nbsp;
+                <wa-button
+                  size="small"
+                  ?disabled=${this.busyAction === `delete:${security.symbol}`}
+                  @click=${this.closeDeleteDialog}
+                  >Cancel</wa-button
+                >
+              </div>
+            `
+          : ""}
+      </wa-dialog>
     `;
   }
 
@@ -1396,14 +1404,18 @@ class SentinelSecurities extends LitElement {
     if (this.securities.loading && !this.securities.value) {
       content = html`<span>Loading securities…</span>`;
     } else if (this.securities.error) {
-      content = html`<tui-text variant="error"
-        >Securities unavailable: ${this.securities.error.message}</tui-text
+      content = html`<span data-tone="error"
+        >Securities unavailable: ${this.securities.error.message}</span
       >`;
     } else {
       content = html`
         ${this.renderControls()} ${this.renderStats()}
-        ${this.message ? html`<div><tui-text variant="success">${this.message}</tui-text></div>` : ""}
-        ${this.errorMessage ? html`<div><tui-text variant="error">${this.errorMessage}</tui-text></div>` : ""}
+        ${this.message
+          ? html`<div><span data-tone="success">${this.message}</span></div>`
+          : ""}
+        ${this.errorMessage
+          ? html`<div><span data-tone="error">${this.errorMessage}</span></div>`
+          : ""}
         ${this.renderTable()}
       `;
     }
@@ -1411,12 +1423,10 @@ class SentinelSecurities extends LitElement {
     return html`
       ${this.bare
         ? content
-        : html`<tui-box
-            heading=${this.inactiveOnly
-              ? "Inactive Securities"
-              : "Securities"}
-            border="single"
-            >${content}</tui-box
+        : html`<wa-card
+            ><span slot="header"
+              >${this.inactiveOnly ? "Inactive Securities" : "Securities"}</span
+            >${content}</wa-card
           >`}
       ${this.inactiveOnly
         ? ""

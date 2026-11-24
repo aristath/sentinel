@@ -9,15 +9,15 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@catppuccin/codemirror": "^1.0.3",
+    "@awesome.me/webawesome": "^3.15.0",
     "@codemirror/lang-markdown": "^6.5.2",
     "@codemirror/language": "^6.12.4",
     "@codemirror/language-data": "^6.5.2",
     "@codemirror/state": "^6.7.2",
     "@codemirror/view": "^6.43.11",
+    "@lezer/highlight": "^1.2.5",
     "codemirror": "^6.0.2",
-    "lit": "^3.3.0",
-    "teract": "file:../../teract"
+    "lit": "^3.3.0"
   },
   "devDependencies": {
     "vite": "^8.0.0"

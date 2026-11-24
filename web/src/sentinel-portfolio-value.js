@@ -62,26 +62,22 @@ class SentinelPortfolioValue extends LitElement {
   static properties = {
     editingNetDeposit: { state: true },
     expectedInflationDraft: { state: true },
-    expectedInflationError: { state: true },
+    fireAssumptionsError: { state: true },
     monthlyExpensesDraft: { state: true },
-    monthlyExpensesError: { state: true },
     netDepositDraft: { state: true },
     netDepositOverride: { state: true },
-    savingExpectedInflation: { state: true },
-    savingMonthlyExpenses: { state: true },
+    savingFireAssumptions: { state: true },
   };
 
   constructor() {
     super();
     this.editingNetDeposit = false;
     this.expectedInflationDraft = null;
-    this.expectedInflationError = "";
+    this.fireAssumptionsError = "";
     this.monthlyExpensesDraft = null;
-    this.monthlyExpensesError = "";
     this.netDepositDraft = "";
     this.netDepositOverride = null;
-    this.savingExpectedInflation = false;
-    this.savingMonthlyExpenses = false;
+    this.savingFireAssumptions = false;
   }
 
   projection = new LiveResource(
@@ -163,7 +159,7 @@ class SentinelPortfolioValue extends LitElement {
     this.editingNetDeposit = true;
     this.updateComplete.then(() =>
       this.querySelector(
-        'tui-input[aria-label="Monthly net deposit assumption"]',
+        'wa-input[aria-label="Monthly net deposit assumption"]',
       )?.select(),
     );
   }
@@ -192,55 +188,53 @@ class SentinelPortfolioValue extends LitElement {
     this.projection.refresh();
   }
 
-  async applyMonthlyExpenses(event, data) {
+  async saveFireAssumptions(event) {
     event.preventDefault();
-    const value = Number(
-      this.monthlyExpensesDraft ?? data.monthlyExpensesEur,
-    );
+    if (this.savingFireAssumptions) return;
 
-    if (!Number.isFinite(value) || value <= 0) {
-      this.monthlyExpensesError =
-        "Monthly retirement expenses must be greater than zero.";
-      return;
+    const values = {};
+    if (this.monthlyExpensesDraft !== null) {
+      const expenses = Number(this.monthlyExpensesDraft);
+      if (!Number.isFinite(expenses) || expenses <= 0) {
+        this.fireAssumptionsError =
+          "Monthly retirement expenses must be greater than zero.";
+        return;
+      }
+      values.fire_monthly_expenses_eur = expenses;
+    }
+    if (this.expectedInflationDraft !== null) {
+      const inflation = Number(this.expectedInflationDraft);
+      if (
+        this.expectedInflationDraft === "" ||
+        !Number.isFinite(inflation) ||
+        inflation <= -100
+      ) {
+        this.fireAssumptionsError =
+          "Expected annual inflation must be greater than -100%.";
+        return;
+      }
+      values.fire_expected_inflation_pct = inflation;
     }
 
-    this.savingMonthlyExpenses = true;
-    this.monthlyExpensesError = "";
+    const entries = Object.entries(values);
+    if (entries.length === 0) return;
+    this.savingFireAssumptions = true;
+    this.fireAssumptionsError = "";
 
     try {
-      await putJson("/api/settings/fire_monthly_expenses_eur", { value });
+      if (entries.length === 1) {
+        const [[key, value]] = entries;
+        await putJson(`/api/settings/${key}`, { value });
+      } else {
+        await putJson("/api/settings", { values });
+      }
       this.monthlyExpensesDraft = null;
-      await this.projection.refresh();
-    } catch (error) {
-      this.monthlyExpensesError = error.message;
-    } finally {
-      this.savingMonthlyExpenses = false;
-    }
-  }
-
-  async applyExpectedInflation(event, data) {
-    event.preventDefault();
-    const value = Number(
-      this.expectedInflationDraft ?? data.expectedInflationPct,
-    );
-
-    if (!Number.isFinite(value) || value <= -100) {
-      this.expectedInflationError =
-        "Expected annual inflation must be greater than -100%.";
-      return;
-    }
-
-    this.savingExpectedInflation = true;
-    this.expectedInflationError = "";
-
-    try {
-      await putJson("/api/settings/fire_expected_inflation_pct", { value });
       this.expectedInflationDraft = null;
       await this.projection.refresh();
     } catch (error) {
-      this.expectedInflationError = error.message;
+      this.fireAssumptionsError = error.message;
     } finally {
-      this.savingExpectedInflation = false;
+      this.savingFireAssumptions = false;
     }
   }
 
@@ -251,113 +245,46 @@ class SentinelPortfolioValue extends LitElement {
       data.projection,
       data.summary,
     );
-    const fieldValue =
-      this.monthlyExpensesDraft ?? data.monthlyExpensesEur ?? "";
 
     return html`
-      <form @submit=${(event) => this.applyMonthlyExpenses(event, data)}>
-        <tui-flex align="baseline" wrap>
-          <label
-            >Monthly retirement expenses in today's prices&nbsp;<tui-input
-              aria-label="Estimated monthly expenses on retirement in EUR"
-              type="number"
-              min="0.01"
-              step="0.01"
-              size="8"
-              value=${fieldValue}
-              ?disabled=${this.savingMonthlyExpenses}
-              @input=${(event) =>
-                (this.monthlyExpensesDraft = event.currentTarget.value)}
-            ></tui-input
-          ></label>
-          <span>&nbsp;</span><tui-button
-            type="submit"
-            ?disabled=${this.savingMonthlyExpenses}
-            >${this.savingMonthlyExpenses ? "Saving…" : "Save & calculate"}</tui-button
-          >
-        </tui-flex>
-      </form>
-      ${this.monthlyExpensesError
-        ? html`<tui-text variant="error"
-            >${this.monthlyExpensesError}</tui-text
-          >`
-        : ""}
-      <form @submit=${(event) => this.applyExpectedInflation(event, data)}>
-        <tui-flex align="baseline" wrap>
-          <label
-            >Expected annual inflation&nbsp;<tui-input
-              aria-label="Expected annual inflation percentage"
-              type="number"
-              min="-99.99"
-              step="0.01"
-              size="6"
-              value=${this.expectedInflationDraft ??
-              data.expectedInflationPct}
-              ?disabled=${this.savingExpectedInflation}
-              @input=${(event) =>
-                (this.expectedInflationDraft = event.currentTarget.value)}
-            ></tui-input
-            >%</label
-          >
-          <span>&nbsp;</span><tui-button
-            type="submit"
-            ?disabled=${this.savingExpectedInflation}
-            >${this.savingExpectedInflation ? "Saving…" : "Save inflation"}</tui-button
-          >
-        </tui-flex>
-        <div style="color: var(--tui-disabled-color); font-size: 0.75em">
-          Default: 2.11%, mean Greece all-items HICP inflation for 2016–2025
-          (Eurostat).
-        </div>
-      </form>
-      ${this.expectedInflationError
-        ? html`<tui-text variant="error"
-            >${this.expectedInflationError}</tui-text
-          >`
-        : ""}
       ${fire
         ? html`
-            <div aria-hidden="true">&nbsp;</div>
-            <tui-flex wrap>
-              <span style="white-space: nowrap"
-                >F.U. Money today&nbsp;<tui-text variant="success"
-                  >${formatCurrency(fire.currentTargetEur, "EUR", 0)}</tui-text
-                ></span
-              >
-              <span style="white-space: nowrap"
-                >&nbsp;&nbsp;Projected FIRE&nbsp;<tui-text variant="success"
-                  >${formatFireProjection(fire)}</tui-text
-                ></span
-              >
-            </tui-flex>
+            <dl class="fire-outcomes">
+              <div>
+                <dt>Projected FIRE</dt>
+                <dd data-tone=${fire.achievement ? "success" : undefined}>
+                  ${formatFireProjection(fire)}
+                </dd>
+              </div>
+              <div>
+                <dt>F.U. Money today</dt>
+                <dd>${formatCurrency(fire.currentTargetEur, "EUR", 0)}</dd>
+              </div>
+            </dl>
+          `
+        : html`<p>Enter monthly household expenses to calculate FIRE.</p>`}
+      ${fire
+        ? html`
             ${fire.achievement
               ? html`
                   <div>
                     At ${fire.expectedInflationPct.toFixed(2)}% expected annual
-                    inflation, ${formatCurrency(
-                      fire.monthlyExpensesEur,
-                      "EUR",
-                      0,
-                    )}/month today is estimated to cost
+                    inflation,
+                    ${formatCurrency(fire.monthlyExpensesEur, "EUR", 0)}/month
+                    today is estimated to cost
                     ${formatCurrency(
                       fire.retirementMonthlyExpensesEur,
                       "EUR",
                       0,
-                    )}/month in
-                    ${String(fire.achievement.date).slice(0, 4)}.
+                    )}/month
+                    in ${String(fire.achievement.date).slice(0, 4)}.
                   </div>
                   <div>
                     F.U. Money required then:
-                    ${formatCurrency(
-                      fire.retirementTargetEur,
-                      "EUR",
-                      0,
-                    )}. Its initial 4% annual withdrawal is
-                    ${formatCurrency(
-                      fire.annualWithdrawalEur,
-                      "EUR",
-                      0,
-                    )}/year, or
+                    ${formatCurrency(fire.retirementTargetEur, "EUR", 0)}. Its
+                    initial 4% annual withdrawal is
+                    ${formatCurrency(fire.annualWithdrawalEur, "EUR", 0)}/year,
+                    or
                     ${formatCurrency(
                       fire.monthlyWithdrawalEur,
                       "EUR",
@@ -366,8 +293,8 @@ class SentinelPortfolioValue extends LitElement {
                   </div>
                 `
               : html`<div>
-                  The portfolio does not catch the inflation-adjusted F.U.
-                  Money target under the current assumptions.
+                  The portfolio does not catch the inflation-adjusted F.U. Money
+                  target under the current assumptions.
                 </div>`}
             <div>
               The estimate assumes the portfolio's actual Historical MWR,
@@ -376,24 +303,73 @@ class SentinelPortfolioValue extends LitElement {
               purchasing power.
             </div>
           `
-        : html`<div>Enter monthly household expenses to calculate FIRE.</div>`}
+        : ""}
+    `;
+  }
+
+  renderFireAssumptions(data) {
+    return html`
+      <form class="fire-assumptions" @submit=${this.saveFireAssumptions}>
+        <label
+          class="fire-assumption-field"
+          title="Monthly retirement expenses in today's prices"
+        >
+          <span>Monthly expenses</span>
+          <wa-input
+            id="fire-monthly-expenses"
+            size="xs"
+            aria-label="Monthly retirement expenses in today's prices in EUR"
+            type="number"
+            min="0.01"
+            step="0.01"
+            .value=${this.monthlyExpensesDraft ?? data.monthlyExpensesEur ?? ""}
+            ?disabled=${this.savingFireAssumptions}
+            @input=${(event) =>
+              (this.monthlyExpensesDraft = event.currentTarget.value)}
+            ><span slot="start" aria-hidden="true">€</span></wa-input
+          >
+        </label>
+        <label class="fire-assumption-field">
+          <span>Annual inflation</span>
+          <wa-input
+            id="fire-inflation"
+            size="xs"
+            aria-label="Expected annual inflation percentage"
+            type="number"
+            min="-99.99"
+            step="0.01"
+            .value=${this.expectedInflationDraft ?? data.expectedInflationPct}
+            ?disabled=${this.savingFireAssumptions}
+            @input=${(event) =>
+              (this.expectedInflationDraft = event.currentTarget.value)}
+            ><span slot="end" aria-hidden="true">%</span></wa-input
+          >
+        </label>
+        <wa-button
+          size="xs"
+          appearance="outlined"
+          type="submit"
+          ?disabled=${this.savingFireAssumptions ||
+          (this.monthlyExpensesDraft === null &&
+            this.expectedInflationDraft === null)}
+          >${this.savingFireAssumptions ? "Saving…" : "Save"}</wa-button
+        >
+      </form>
     `;
   }
 
   renderNetDeposit(summary) {
     if (this.editingNetDeposit) {
       return html`
-        <form
-          style="display: inline"
-          @submit=${this.applyNetDepositOverride}
-        >
-          <span style="white-space: nowrap"
-            >&nbsp;&nbsp;Net/mo&nbsp;<tui-input
+        <form style="display: inline" @submit=${this.applyNetDepositOverride}>
+          <span>
+            Net/mo&nbsp;<wa-input
+              size="small"
               aria-label="Monthly net deposit assumption"
               type="number"
               step="0.01"
-              size="8"
-              value=${this.netDepositDraft}
+              style="inline-size: 7rem"
+              .value=${this.netDepositDraft}
               @input=${(event) =>
                 (this.netDepositDraft = event.currentTarget.value)}
               @keydown=${(event) => {
@@ -401,10 +377,10 @@ class SentinelPortfolioValue extends LitElement {
                   this.cancelNetDepositEdit();
                 }
               }}
-            ></tui-input
-            >&nbsp;<tui-button type="submit">Apply</tui-button
-            >&nbsp;<tui-button @click=${this.cancelNetDepositEdit}
-              >Cancel</tui-button
+            ></wa-input
+            >&nbsp;<wa-button size="small" type="submit">Apply</wa-button
+            >&nbsp;<wa-button size="small" @click=${this.cancelNetDepositEdit}
+              >Cancel</wa-button
             ></span
           >
         </form>
@@ -414,24 +390,28 @@ class SentinelPortfolioValue extends LitElement {
     const overridden = this.netDepositOverride !== null;
 
     return html`
-      <span style="white-space: nowrap"
-        >&nbsp;&nbsp;${summary.deposit_window_months}M net/mo&nbsp;<tui-button
+      <span>
+        ${summary.deposit_window_months}M net/mo&nbsp;<wa-button
+          size="xs"
+          appearance="plain"
           aria-label="Edit monthly net deposit assumption"
           @click=${() => this.startNetDepositEdit(summary)}
           >${formatCurrency(
             summary.avg_monthly_net_deposit_eur,
             "EUR",
             0,
-          )}</tui-button
+          )}</wa-button
         >${overridden
           ? html`&nbsp;actual&nbsp;${formatCurrency(
                 summary.actual_avg_monthly_net_deposit_eur,
                 "EUR",
                 0,
-              )}&nbsp;<tui-button
+              )}&nbsp;<wa-button
+                size="xs"
+                appearance="plain"
                 aria-label="Reset monthly net deposit assumption to actual"
                 @click=${this.resetNetDepositOverride}
-                >Reset</tui-button
+                >Reset</wa-button
               >`
           : ""}</span
       >
@@ -440,33 +420,36 @@ class SentinelPortfolioValue extends LitElement {
 
   renderMetrics(summary, startYear, endYear) {
     const pnlVariant = summary.total_pnl_pct >= 0 ? "success" : "error";
-    const runRateVariant =
-      Number.isFinite(summary.annualized_total_pnl_pct)
-        ? summary.annualized_total_pnl_pct >= 0
-          ? "success"
-          : "error"
-        : undefined;
+    const runRateVariant = Number.isFinite(summary.annualized_total_pnl_pct)
+      ? summary.annualized_total_pnl_pct >= 0
+        ? "success"
+        : "error"
+      : undefined;
 
     return html`
-      <tui-flex wrap>
-        <span style="white-space: nowrap">${startYear} to ${endYear}</span>
+      <div
+        class="sentinel-layout fire-financial-context"
+        data-align="center"
+        data-wrap
+      >
+        <span>${startYear} to ${endYear}</span>
         <span
           title="Cumulative profit: current portfolio value minus net funding; the percentage is relative to deposits minus withdrawals"
-          style="white-space: nowrap"
-          >&nbsp;&nbsp;Total P/L&nbsp;<tui-text variant=${pnlVariant}
+        >
+          Total P/L&nbsp;<span data-tone=${pnlVariant}
             >${formatSignedCurrency(summary.total_pnl_eur)}
-            (${formatPercent(summary.total_pnl_pct, 1)} of net funding)</tui-text
+            (${formatPercent(summary.total_pnl_pct, 1)} of net funding)</span
           ></span
         >
         ${this.renderNetDeposit(summary)}
         <span
           title="Since-inception money-weighted annual return used as the projection growth assumption"
-          style="white-space: nowrap"
-          >&nbsp;&nbsp;Historical MWR p.a.&nbsp;<tui-text variant=${runRateVariant}
-            >${formatPercent(summary.annualized_total_pnl_pct, 1)}</tui-text
+        >
+          Historical MWR p.a.&nbsp;<span data-tone=${runRateVariant}
+            >${formatPercent(summary.annualized_total_pnl_pct, 1)}</span
           ></span
         >
-      </tui-flex>
+      </div>
     `;
   }
 
@@ -476,28 +459,34 @@ class SentinelPortfolioValue extends LitElement {
     }
 
     return html`
-      <div style="max-width: 100%; overflow-x: auto">
+      <div
+        class="fire-projection-scroll"
+        role="region"
+        aria-label="Year-by-year FIRE projections"
+        tabindex="0"
+      >
         <table
+          class="fire-projection-table"
           aria-label="Portfolio value projections"
           style="border-spacing: 0; white-space: nowrap"
         >
           <thead>
             <tr>
-              <th scope="col" style="text-align: left">Year&nbsp;&nbsp;</th>
-              <th scope="col" style="text-align: right">Value&nbsp;&nbsp;</th>
+              <th scope="col" style="text-align: left">Year</th>
+              <th scope="col" style="text-align: right">Value</th>
               <th
                 scope="col"
                 aria-label="Projected net deposits"
                 style="text-align: right"
               >
-                Net deposits&nbsp;&nbsp;
+                Net deposits
               </th>
               <th
                 scope="col"
                 title="Initial monthly withdrawal if retiring that year: 4% of projected portfolio value divided by 12"
                 style="text-align: right"
               >
-                Monthly income&nbsp;&nbsp;
+                Monthly income
               </th>
               <th
                 scope="col"
@@ -509,20 +498,20 @@ class SentinelPortfolioValue extends LitElement {
             </tr>
           </thead>
           <tbody>
-            ${checkpoints.map(
+            ${checkpoints.toReversed().map(
               ({ date, point, projectedNetDeposits, income }) => html`
                 <tr>
                   <th scope="row" style="font: inherit; text-align: left">
-                    ${date.getUTCFullYear()}&nbsp;&nbsp;
+                    ${date.getUTCFullYear()}
                   </th>
                   <td style="text-align: right">
-                    ${formatCurrency(point.projected_value_eur, "EUR", 0)}&nbsp;&nbsp;
+                    ${formatCurrency(point.projected_value_eur, "EUR", 0)}
                   </td>
                   <td style="text-align: right">
-                    ${formatCurrency(projectedNetDeposits, "EUR", 0)}&nbsp;&nbsp;
+                    ${formatCurrency(projectedNetDeposits, "EUR", 0)}
                   </td>
                   <td style="text-align: right">
-                    ${formatCurrency(income?.monthlyIncomeEur)}&nbsp;&nbsp;
+                    ${formatCurrency(income?.monthlyIncomeEur)}
                   </td>
                   <td style="text-align: right">
                     ${formatCurrency(income?.monthlyIncomeTodayEur)}
@@ -533,11 +522,12 @@ class SentinelPortfolioValue extends LitElement {
           </tbody>
         </table>
       </div>
-      <div style="color: var(--tui-disabled-color); font-size: 0.75em">
+      <div style="color: var(--wa-color-text-quiet); font-size: 0.75em">
         Monthly income assumes retiring in that year and withdrawing 4% of the
         projected value annually, divided by 12. Today's money accounts for
-        ${Number(expectedInflationPct).toFixed(2)}%
-        expected annual inflation.
+        ${Number(expectedInflationPct).toFixed(2)}% expected annual inflation.
+        The default is 2.11%, the mean Greece all-items HICP inflation for
+        2016–2025 (Eurostat).
       </div>
     `;
   }
@@ -553,7 +543,6 @@ class SentinelPortfolioValue extends LitElement {
     const endYear = checkpoints.at(-1).date.getUTCFullYear();
 
     return html`${this.renderFireCalculator(data)}
-    <div aria-hidden="true">&nbsp;</div>
     ${this.renderMetrics(data.summary, startYear, endYear)}
     ${this.renderTable(checkpoints, data.expectedInflationPct)}`;
   }
@@ -564,9 +553,7 @@ class SentinelPortfolioValue extends LitElement {
     if (this.projection.loading && !this.projection.value) {
       content = html`<span>Loading projection…</span>`;
     } else if (this.projection.error) {
-      content = html`<tui-text variant="error"
-        >Projection unavailable</tui-text
-      >`;
+      content = html`<span data-tone="error">Projection unavailable</span>`;
     } else if (
       !this.projection.value?.summary ||
       !this.projection.value?.projection?.length
@@ -576,11 +563,22 @@ class SentinelPortfolioValue extends LitElement {
       content = this.renderProjection(this.projection.value);
     }
 
-    return html`<tui-box
-      heading="FIRE (Financial Independence, Retire Early)"
-      border="single"
-      >${content}</tui-box
-    >`;
+    return html`
+      <wa-card>
+        <div slot="header" class="fire-header">
+          <span>FIRE (Financial Independence, Retire Early)</span>
+          ${this.projection.value
+            ? this.renderFireAssumptions(this.projection.value)
+            : ""}
+        </div>
+        ${this.fireAssumptionsError
+          ? html`<div role="alert" data-tone="error">
+              ${this.fireAssumptionsError}
+            </div>`
+          : ""}
+        ${content}
+      </wa-card>
+    `;
   }
 }
 

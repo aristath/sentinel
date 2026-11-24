@@ -62,16 +62,26 @@ class SentinelHeader extends LitElement {
     }
   }
 
-  requestModalClose(event) {
-    const contents = event.currentTarget.querySelectorAll(
-      "sentinel-backtest, sentinel-research, sentinel-scheduler, sentinel-settings, sentinel-tasks, sentinel-trades",
-    );
+  async requestModalClose(event) {
+    if (event.target !== event.currentTarget) return;
+    const dialog = event.currentTarget;
+    if (this.confirmedClose === dialog) {
+      this.confirmedClose = undefined;
+      return;
+    }
+    const tasks = dialog.querySelector("sentinel-tasks");
+    if (!tasks?.dirty) return;
 
-    for (const content of contents) {
-      if (content.confirmClose && !content.confirmClose()) {
-        event.preventDefault();
-        return;
+    event.preventDefault();
+    if (this.confirmingClose) return;
+    this.confirmingClose = true;
+    try {
+      if ((await tasks.confirmClose()) && dialog.isConnected) {
+        this.confirmedClose = dialog;
+        dialog.open = false;
       }
+    } finally {
+      this.confirmingClose = false;
     }
   }
 
@@ -81,17 +91,18 @@ class SentinelHeader extends LitElement {
     return actions.filter((action) => !action.researchOnly || !live);
   }
 
-  renderAction(action, index) {
+  renderAction(action) {
     const modalId = `sentinel-${action.id}-modal`;
 
     return html`
-      ${index > 0 ? html`<span aria-hidden="true">&nbsp;</span>` : ""}
-      <tui-button
+      <wa-button
+        size="xs"
+        appearance="plain"
+        variant="neutral"
         aria-controls=${modalId}
         aria-expanded=${this.activeModal === action.id ? "true" : "false"}
-        inverted
         @click=${() => this.openModal(action.id)}
-        >${action.label}</tui-button
+        >${action.label}</wa-button
       >
     `;
   }
@@ -121,13 +132,15 @@ class SentinelHeader extends LitElement {
     }
 
     return html`
-      <tui-modal
+      <wa-dialog
         id=${`sentinel-${action.id}-modal`}
-        heading=${action.heading}
+        label=${action.heading}
         open
-        @cancel=${this.requestModalClose}
-        @close=${() => this.closeModal(action.id)}
-        >${this.renderModalContent(action.id)}</tui-modal
+        @wa-hide=${this.requestModalClose}
+        @wa-after-hide=${(event) => {
+          if (event.target === event.currentTarget) this.closeModal(action.id);
+        }}
+        >${this.renderModalContent(action.id)}</wa-dialog
       >
     `;
   }
@@ -135,15 +148,17 @@ class SentinelHeader extends LitElement {
   render() {
     return html`
       <header>
-        <tui-bar>
+        <div class="sentinel-toolbar">
           <nav aria-label="Application">
-            <tui-flex align="baseline" wrap>
-              ${this.visibleActions.map((action, index) =>
-                this.renderAction(action, index),
-              )}
-            </tui-flex>
+            <div
+              class="sentinel-layout sentinel-app-nav"
+              data-align="center"
+              data-wrap
+            >
+              ${this.visibleActions.map((action) => this.renderAction(action))}
+            </div>
           </nav>
-        </tui-bar>
+        </div>
         ${this.renderModal()}
       </header>
     `;

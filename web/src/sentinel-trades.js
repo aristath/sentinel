@@ -87,54 +87,62 @@ class SentinelTrades extends LitElement {
       .sort();
 
     return html`
-      <tui-flex align="baseline" wrap>
+      <div class="sentinel-layout" data-align="baseline" data-wrap>
         <label
-          >Symbol&nbsp;<tui-select
-            value=${this.symbol}
+          >Symbol&nbsp;<wa-select
+            size="small"
+            .value=${this.symbol}
             @change=${(event) =>
               this.changeFilter("symbol", event.currentTarget.value)}
           >
-            <option value="">All symbols</option>
+            <wa-option value="">All symbols</wa-option>
             ${symbols.map(
-              (symbol) => html`<option value=${symbol}>${symbol}</option>`,
+              (symbol) =>
+                html`<wa-option value=${symbol}>${symbol}</wa-option>`,
             )}
-          </tui-select></label
+          </wa-select></label
         >
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
+
         <label
-          >Side&nbsp;<tui-select
-            value=${this.side}
+          >Side&nbsp;<wa-select
+            size="small"
+            .value=${this.side}
             @change=${(event) =>
               this.changeFilter("side", event.currentTarget.value)}
           >
-            <option value="">All</option>
-            <option value="BUY">Buy</option>
-            <option value="SELL">Sell</option>
-          </tui-select></label
+            <wa-option value="">All</wa-option>
+            <wa-option value="BUY">Buy</wa-option>
+            <wa-option value="SELL">Sell</wa-option>
+          </wa-select></label
         >
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
+
         <label
-          >From&nbsp;<tui-input
+          >From&nbsp;<wa-input
+            size="small"
             type="date"
-            value=${this.startDate}
+            .value=${this.startDate}
             @change=${(event) =>
               this.changeFilter("startDate", event.currentTarget.value)}
-          ></tui-input
+          ></wa-input
         ></label>
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
+
         <label
-          >To&nbsp;<tui-input
+          >To&nbsp;<wa-input
+            size="small"
             type="date"
-            value=${this.endDate}
+            .value=${this.endDate}
             @change=${(event) =>
               this.changeFilter("endDate", event.currentTarget.value)}
-          ></tui-input
+          ></wa-input
         ></label>
-        <span aria-hidden="true">&nbsp;│&nbsp;</span>
-        <tui-button ?disabled=${this.syncing} @click=${this.syncTrades}
-          >${this.syncing ? "Syncing…" : "Sync from Broker"}</tui-button
+
+        <wa-button
+          size="small"
+          ?disabled=${this.syncing}
+          @click=${this.syncTrades}
+          >${this.syncing ? "Syncing…" : "Sync from Broker"}</wa-button
         >
-      </tui-flex>
+      </div>
     `;
   }
 
@@ -151,13 +159,13 @@ class SentinelTrades extends LitElement {
           <thead>
             <tr>
               <th style="text-align: left">Date</th>
-              <th style="text-align: left">│ Symbol</th>
-              <th style="text-align: left">│ Side</th>
-              <th style="text-align: left">│ Qty</th>
-              <th style="text-align: left">│ Price</th>
-              <th style="text-align: left">│ Value</th>
-              <th style="text-align: left">│ Commission</th>
-              <th style="text-align: left">│ Currency</th>
+              <th style="text-align: left">Symbol</th>
+              <th style="text-align: left">Side</th>
+              <th style="text-align: left">Qty</th>
+              <th style="text-align: left">Price</th>
+              <th style="text-align: left">Value</th>
+              <th style="text-align: left">Commission</th>
+              <th style="text-align: left">Currency</th>
             </tr>
           </thead>
           <tbody>
@@ -177,29 +185,28 @@ class SentinelTrades extends LitElement {
                     ${formatDateTime(trade.executed_at, { seconds: true })}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${trade.symbol}
+                    ${trade.symbol}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │
-                    <tui-text
-                      variant=${trade.side === "BUY" ? "success" : "error"}
-                      >${trade.side}</tui-text
+                    <span
+                      data-tone=${trade.side === "BUY" ? "success" : "error"}
+                      >${trade.side}</span
                     >
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${formatNumber(quantity, 0)}
+                    ${formatNumber(quantity, 0)}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${formatNumber(price, 2)}
+                    ${formatNumber(price, 2)}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${formatNumber(value, 2)}
+                    ${formatNumber(value, 2)}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${formatNumber(commission, 2)}
+                    ${formatNumber(commission, 2)}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${currency}
+                    ${currency}
                   </td>
                 </tr>
               `;
@@ -220,16 +227,18 @@ class SentinelTrades extends LitElement {
 
     return html`
       <div>
-        <tui-button
+        <wa-button
+          size="small"
           ?disabled=${this.page <= 1}
           @click=${() => this.changePage(this.page - 1)}
-          >Previous</tui-button
+          >Previous</wa-button
         >
         Page ${this.page} / ${pages}
-        <tui-button
+        <wa-button
+          size="small"
           ?disabled=${this.page >= pages}
           @click=${() => this.changePage(this.page + 1)}
-          >Next</tui-button
+          >Next</wa-button
         >
       </div>
     `;
@@ -243,21 +252,17 @@ class SentinelTrades extends LitElement {
     return html`
       ${this.renderControls()}
       <div aria-hidden="true">&nbsp;</div>
-      ${
-        this.trades.loading && !this.trades.value
-          ? html`<div>Loading trades…</div>`
-          : this.trades.error
-            ? html`<tui-text variant="error"
-                >Error loading trades: ${this.trades.error.message}</tui-text
-              >`
-            : this.renderTable()
-      }
+      ${this.trades.loading && !this.trades.value
+        ? html`<div>Loading trades…</div>`
+        : this.trades.error
+          ? html`<span data-tone="error"
+              >Error loading trades: ${this.trades.error.message}</span
+            >`
+          : this.renderTable()}
       ${this.renderPagination()}
-      ${
-        this.actionError
-          ? html`<tui-text variant="error">${this.actionError}</tui-text>`
-          : ""
-      }
+      ${this.actionError
+        ? html`<span data-tone="error">${this.actionError}</span>`
+        : ""}
     `;
   }
 }

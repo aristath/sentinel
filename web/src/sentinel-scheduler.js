@@ -117,11 +117,12 @@ class SentinelScheduler extends LitElement {
 
     return html`
       <label
-        >${label}&nbsp;<tui-input
+        >${label}&nbsp;<wa-input
+          size="small"
           type="number"
           min="1"
           max="10080"
-          value=${display.value}
+          .value=${display.value}
           ?disabled=${this.busyAction !== ""}
           @change=${(event) =>
             this.updateInterval(
@@ -130,11 +131,12 @@ class SentinelScheduler extends LitElement {
               event.currentTarget.value,
               display.unit,
             )}
-        ></tui-input
+        ></wa-input
       ></label>
-      <tui-select
+      <wa-select
+        size="small"
         aria-label="${label} unit for ${job.job_type}"
-        value=${display.unit}
+        .value=${display.unit}
         ?disabled=${this.busyAction !== ""}
         @change=${(event) =>
           this.updateInterval(
@@ -144,10 +146,10 @@ class SentinelScheduler extends LitElement {
             event.currentTarget.value,
           )}
       >
-        <option value="minutes">Minutes</option>
-        <option value="hours">Hours</option>
-        <option value="days">Days</option>
-      </tui-select>
+        <wa-option value="minutes">Minutes</wa-option>
+        <wa-option value="hours">Hours</wa-option>
+        <wa-option value="days">Days</wa-option>
+      </wa-select>
     `;
   }
 
@@ -155,41 +157,38 @@ class SentinelScheduler extends LitElement {
     const status = this.status.value ?? {};
 
     return html`
-      <tui-box heading="Currently Running" border="single">
+      <wa-card
+        ><span slot="header">Currently Running</span>
         ${status.current ?? "No job running"}
-      </tui-box>
+      </wa-card>
       <div aria-hidden="true">&nbsp;</div>
-      <tui-box heading="Upcoming Jobs" border="single">
-        ${
-          status.upcoming?.length
-            ? status.upcoming.map(
-                (job) => html`
-                  <div>
-                    ${job.job_type} │ ${formatRelativeTime(job.next_run)}
-                  </div>
-                `,
-              )
-            : "No upcoming jobs"
-        }
-      </tui-box>
+      <wa-card
+        ><span slot="header">Upcoming Jobs</span>
+        ${status.upcoming?.length
+          ? status.upcoming.map(
+              (job) => html`
+                <div>${job.job_type} · ${formatRelativeTime(job.next_run)}</div>
+              `,
+            )
+          : "No upcoming jobs"}
+      </wa-card>
       <div aria-hidden="true">&nbsp;</div>
-      <tui-box heading="Recent Jobs" border="single">
-        ${
-          status.recent?.length
-            ? status.recent.map(
-                (job) => html`
-                  <div>
-                    ${job.job_type} │
-                    <tui-text variant=${statusVariant(job.status) || ""}
-                      >${job.status}</tui-text
-                    >
-                    │ ${formatRelativeTime(job.executed_at)}
-                  </div>
-                `,
-              )
-            : "No recent jobs"
-        }
-      </tui-box>
+      <wa-card
+        ><span slot="header">Recent Jobs</span>
+        ${status.recent?.length
+          ? status.recent.map(
+              (job) => html`
+                <div>
+                  ${job.job_type} ·
+                  <span data-tone=${statusVariant(job.status) || ""}
+                    >${job.status}</span
+                  >
+                  · ${formatRelativeTime(job.executed_at)}
+                </div>
+              `,
+            )
+          : "No recent jobs"}
+      </wa-card>
     `;
   }
 
@@ -198,58 +197,60 @@ class SentinelScheduler extends LitElement {
 
     return html`
       <div>
-        <tui-flex align="baseline" justify="between" wrap>
+        <div
+          class="sentinel-layout"
+          data-align="baseline"
+          data-justify="between"
+          data-wrap
+        >
           <span>
             ${job.job_type}
-            ${
-              job.last_status
-                ? html`<tui-text variant=${statusVariant(job.last_status) || ""}
-                    >${job.last_status}</tui-text
-                  >`
-                : ""
-            }
+            ${job.last_status
+              ? html`<span data-tone=${statusVariant(job.last_status) || ""}
+                  >${job.last_status}</span
+                >`
+              : ""}
           </span>
           <span>
             <label
-              >Timing&nbsp;<tui-select
-                value=${String(job.market_timing)}
+              >Timing&nbsp;<wa-select
+                size="small"
+                .value=${String(job.market_timing)}
                 ?disabled=${busy}
                 @change=${(event) =>
                   this.updateSchedule(job.job_type, {
                     market_timing: Number(event.currentTarget.value),
                   })}
               >
-                <option value="0">Any time</option>
-                <option value="1">After close</option>
-                <option value="2">During open</option>
-                <option value="3">All closed</option>
-              </tui-select></label
+                <wa-option value="0">Any time</wa-option>
+                <wa-option value="1">After close</wa-option>
+                <wa-option value="2">During open</wa-option>
+                <wa-option value="3">All closed</wa-option>
+              </wa-select></label
             >
-            <tui-button
+            <wa-button
+              size="small"
               ?disabled=${busy}
               @click=${() => this.runJob(job.job_type)}
-              >${
-                this.busyAction === `run:${job.job_type}` ? "Running…" : "Run"
-              }</tui-button
+              >${this.busyAction === `run:${job.job_type}`
+                ? "Running…"
+                : "Run"}</wa-button
             >
           </span>
-        </tui-flex>
+        </div>
         <div>${job.description ?? ""}</div>
-        <tui-flex align="baseline" wrap>
+        <div class="sentinel-layout" data-align="baseline" data-wrap>
           ${this.renderInterval(job, "interval_minutes", "Interval")}
-          <span aria-hidden="true">&nbsp;│&nbsp;</span>
           ${this.renderInterval(
             job,
             "interval_market_open_minutes",
             "Market open",
           )}
-          ${
-            job.next_run
-              ? html`<span aria-hidden="true">&nbsp;│&nbsp;</span
-                  ><span>Next ${formatRelativeTime(job.next_run)}</span>`
-              : ""
-          }
-        </tui-flex>
+          ${job.next_run
+            ? html`<span aria-hidden="true">&nbsp;·&nbsp;</span
+                ><span>Next ${formatRelativeTime(job.next_run)}</span>`
+            : ""}
+        </div>
       </div>
     `;
   }
@@ -263,20 +264,17 @@ class SentinelScheduler extends LitElement {
     return categories.map(
       (category, index) => html`
         ${index > 0 ? html`<div aria-hidden="true">&nbsp;</div>` : ""}
-        <tui-box heading=${category} border="single">
+        <wa-card
+          ><span slot="header">${category}</span>
           ${schedules
             .filter((job) => job.category === category)
             .map(
               (job, jobIndex) => html`
-                ${
-                  jobIndex > 0
-                    ? html`<div aria-hidden="true">────────────────</div>`
-                    : ""
-                }
+                ${jobIndex > 0 ? html`<wa-divider></wa-divider>` : ""}
                 ${this.renderJob(job)}
               `,
             )}
-        </tui-box>
+        </wa-card>
       `,
     );
   }
@@ -294,10 +292,10 @@ class SentinelScheduler extends LitElement {
           <thead>
             <tr>
               <th style="text-align: left">Job ID</th>
-              <th style="text-align: left">│ Status</th>
-              <th style="text-align: left">│ Duration</th>
-              <th style="text-align: left">│ Executed</th>
-              <th style="text-align: left">│ Error</th>
+              <th style="text-align: left">Status</th>
+              <th style="text-align: left">Duration</th>
+              <th style="text-align: left">Executed</th>
+              <th style="text-align: left">Error</th>
             </tr>
           </thead>
           <tbody>
@@ -308,21 +306,20 @@ class SentinelScheduler extends LitElement {
                     ${entry.job_id}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │
-                    <tui-text variant=${statusVariant(entry.status) || ""}
-                      >${entry.status}</tui-text
+                    <span data-tone=${statusVariant(entry.status) || ""}
+                      >${entry.status}</span
                     >
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${formatDuration(entry.duration_ms)}
+                    ${formatDuration(entry.duration_ms)}
                   </td>
                   <td style="text-align: left; vertical-align: top">
-                    │ ${formatDateTime(entry.executed_at, { seconds: true })}
+                    ${formatDateTime(entry.executed_at, { seconds: true })}
                   </td>
                   <td
                     style="text-align: left; vertical-align: top; overflow-wrap: anywhere"
                   >
-                    │ ${entry.error ?? "-"}
+                    ${entry.error ?? "-"}
                   </td>
                 </tr>
               `,
@@ -346,35 +343,32 @@ class SentinelScheduler extends LitElement {
     }
 
     if (error) {
-      return html`<tui-text variant="error"
-        >Error loading scheduler: ${error.message}</tui-text
+      return html`<span data-tone="error"
+        >Error loading scheduler: ${error.message}</span
       >`;
     }
 
     return html`
-      <tui-radio-buttonset
+      <wa-radio-group
+        size="small"
         aria-label="Scheduler view"
-        value=${this.tab}
+        .value=${this.tab}
         @change=${(event) => (this.tab = event.currentTarget.value)}
       >
-        <tui-radio-button value="status">Status</tui-radio-button>
-        <tui-radio-button value="jobs">Jobs</tui-radio-button>
-        <tui-radio-button value="history">History</tui-radio-button>
-      </tui-radio-buttonset>
+        <wa-radio appearance="button" value="status">Status</wa-radio>
+        <wa-radio appearance="button" value="jobs">Jobs</wa-radio>
+        <wa-radio appearance="button" value="history">History</wa-radio>
+      </wa-radio-group>
       <div aria-hidden="true">&nbsp;</div>
-      ${
-        this.tab === "jobs"
-          ? this.renderJobs()
-          : this.tab === "history"
-            ? this.renderHistory()
-            : this.renderStatus()
-      }
+      ${this.tab === "jobs"
+        ? this.renderJobs()
+        : this.tab === "history"
+          ? this.renderHistory()
+          : this.renderStatus()}
       ${this.notice ? html`<div aria-live="polite">${this.notice}</div>` : ""}
-      ${
-        this.actionError
-          ? html`<tui-text variant="error">${this.actionError}</tui-text>`
-          : ""
-      }
+      ${this.actionError
+        ? html`<span data-tone="error">${this.actionError}</span>`
+        : ""}
     `;
   }
 }

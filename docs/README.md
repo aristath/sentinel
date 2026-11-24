@@ -33,7 +33,7 @@ update the relevant document in the same change that alters a contract.
 |---|---|
 | [AI pipeline](ai-pipeline.md) | Research units, dependencies, artifacts, and monitoring |
 | [Editable tasks](tasks.md) | Folder format, overlays, execution, scheduling, and API |
-| [Frontend and Teract](frontend.md) | Lit/custom-element UI architecture and development rules |
+| [Frontend and Web Awesome](frontend.md) | Lit/custom-element UI architecture and development rules |
 | [Database](database.md) | SQLite ownership, schema groups, migrations, and backup rules |
 | [Arduino LED application](hardware-led.md) | Current UNO Q soroban display and bridge health |
 | [Go TUI](go-tui.md) | Separate terminal client |

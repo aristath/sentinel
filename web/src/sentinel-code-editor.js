@@ -1,7 +1,6 @@
 class SentinelCodeEditor extends HTMLElement {
   static observedAttributes = [
     "aria-label",
-    "color-scheme",
     "disabled",
     "document-id",
     "filename",
@@ -15,7 +14,6 @@ class SentinelCodeEditor extends HTMLElement {
   #fallback;
   #initialization = 0;
   #languageLoad = 0;
-  #colorSchemeLoad = 0;
   #documentSyncQueued = false;
 
   connectedCallback() {
@@ -31,7 +29,6 @@ class SentinelCodeEditor extends HTMLElement {
   disconnectedCallback() {
     this.#initialization += 1;
     this.#languageLoad += 1;
-    this.#colorSchemeLoad += 1;
     this.#view?.destroy();
     this.#view = undefined;
     this.#runtime = undefined;
@@ -51,11 +48,6 @@ class SentinelCodeEditor extends HTMLElement {
 
     if (name === "aria-label") {
       this.#syncAriaLabel();
-      return;
-    }
-
-    if (name === "color-scheme") {
-      void this.#syncColorScheme();
       return;
     }
 
@@ -103,15 +95,6 @@ class SentinelCodeEditor extends HTMLElement {
     return this.getAttribute("height") || "30lh";
   }
 
-  get colorScheme() {
-    const value = this.getAttribute("color-scheme") || "monochrome";
-    return ["monochrome", "latte", "frappe", "macchiato", "mocha"].includes(
-      value,
-    )
-      ? value
-      : "monochrome";
-  }
-
   get editorLabel() {
     return this.getAttribute("aria-label") || "Code editor";
   }
@@ -134,9 +117,9 @@ class SentinelCodeEditor extends HTMLElement {
     textarea.style.display = "block";
     textarea.style.height = "100%";
     textarea.style.width = "100%";
-    textarea.style.background = "var(--tui-background)";
-    textarea.style.color = "var(--tui-color)";
-    textarea.style.font = "inherit";
+    textarea.style.background = "var(--wa-color-surface-default)";
+    textarea.style.color = "var(--wa-color-text-normal)";
+    textarea.style.fontFamily = "var(--wa-font-family-code)";
     textarea.addEventListener("input", (event) => {
       event.stopPropagation();
       this.#value = textarea.value;
@@ -155,33 +138,29 @@ class SentinelCodeEditor extends HTMLElement {
         { Compartment, EditorState },
         { markdown },
         { languages },
-        { LanguageDescription },
+        { HighlightStyle, LanguageDescription, syntaxHighlighting },
+        { tags },
       ] = await Promise.all([
         import("codemirror"),
         import("@codemirror/state"),
         import("@codemirror/lang-markdown"),
         import("@codemirror/language-data"),
         import("@codemirror/language"),
+        import("@lezer/highlight"),
       ]);
 
       if (!this.isConnected || initialization !== this.#initialization) return;
 
       const languageCompartment = new Compartment();
-      const colorSchemeCompartment = new Compartment();
       const editableCompartment = new Compartment();
       const readOnlyCompartment = new Compartment();
       const ariaCompartment = new Compartment();
       const initialLanguageKey = this.#languageKey();
-      const initialColorScheme = this.colorScheme;
       const languageExtension = await this.#loadLanguageExtension({
         LanguageDescription,
         languages,
         markdown,
       });
-      const colorSchemeExtension = await this.#loadColorSchemeExtension(
-        { EditorView },
-        initialColorScheme,
-      );
 
       if (!this.isConnected || initialization !== this.#initialization) return;
 
@@ -190,10 +169,15 @@ class SentinelCodeEditor extends HTMLElement {
           height: "100%",
           maxWidth: "100%",
           fontSize: "inherit",
+          backgroundColor: "var(--wa-color-surface-default)",
+          color: "var(--wa-color-text-normal)",
+          border:
+            "var(--wa-border-width-s) solid var(--wa-color-surface-border)",
+          borderRadius: "var(--wa-border-radius-s)",
         },
         ".cm-scroller": {
           height: "100%",
-          fontFamily: "var(--tui-font-family)",
+          fontFamily: "var(--wa-font-family-code)",
           lineHeight: "inherit",
           overflow: "auto",
         },
@@ -201,12 +185,46 @@ class SentinelCodeEditor extends HTMLElement {
         ".cm-line": { padding: "0 1ch" },
         ".cm-gutters": {
           border: "0",
+          backgroundColor: "var(--wa-color-surface-lowered)",
+          color: "var(--wa-color-text-quiet)",
+        },
+        ".cm-cursor, .cm-dropCursor": {
+          borderLeftColor: "var(--wa-color-text-normal)",
+        },
+        "& .cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+          backgroundColor: "var(--wa-color-brand-fill-normal)",
         },
         ".cm-activeLine, .cm-activeLineGutter": {
           backgroundColor: "transparent",
         },
-        "&.cm-focused": { outline: "none" },
+        "&.cm-focused": {
+          outline: "var(--wa-focus-ring)",
+          outlineOffset: "calc(-1 * var(--wa-focus-ring-width))",
+        },
       });
+
+      const highlighting = syntaxHighlighting(
+        HighlightStyle.define([
+          {
+            tag: [tags.keyword, tags.operatorKeyword],
+            color: "var(--wa-color-brand-on-quiet)",
+          },
+          {
+            tag: [tags.string, tags.regexp],
+            color: "var(--wa-color-success-on-quiet)",
+          },
+          {
+            tag: [tags.number, tags.bool, tags.null],
+            color: "var(--wa-color-warning-on-quiet)",
+          },
+          {
+            tag: tags.comment,
+            color: "var(--wa-color-text-quiet)",
+            fontStyle: "italic",
+          },
+          { tag: [tags.heading, tags.strong], fontWeight: "bold" },
+        ]),
+      );
 
       const runtime = {
         EditorState,
@@ -215,14 +233,11 @@ class SentinelCodeEditor extends HTMLElement {
         languages,
         markdown,
         languageCompartment,
-        colorSchemeCompartment,
         editableCompartment,
         readOnlyCompartment,
         ariaCompartment,
         languageExtension,
         languageKey: initialLanguageKey,
-        colorSchemeExtension,
-        colorScheme: initialColorScheme,
         documentId: this.documentId,
         lastDocument: this.#value,
       };
@@ -240,7 +255,7 @@ class SentinelCodeEditor extends HTMLElement {
               }),
             ),
             layoutTheme,
-            colorSchemeCompartment.of(runtime.colorSchemeExtension),
+            highlighting,
             editableCompartment.of(EditorView.editable.of(!this.disabled)),
             readOnlyCompartment.of(EditorState.readOnly.of(this.disabled)),
             EditorView.updateListener.of((update) => {
@@ -264,7 +279,6 @@ class SentinelCodeEditor extends HTMLElement {
         parent: this,
       });
       void this.#syncLanguage();
-      void this.#syncColorScheme();
     } catch (error) {
       console.error("Failed to load Sentinel code editor", error);
     }
@@ -318,66 +332,6 @@ class SentinelCodeEditor extends HTMLElement {
 
   #languageKey() {
     return `${this.language}\n${this.filename}`;
-  }
-
-  async #loadColorSchemeExtension(runtime, colorScheme) {
-    if (colorScheme === "monochrome") {
-      return runtime.EditorView.theme({
-        "&": {
-          backgroundColor: "var(--tui-background)",
-          color: "var(--tui-color)",
-        },
-        ".cm-gutters": {
-          backgroundColor: "var(--tui-background)",
-          color: "var(--tui-color)",
-          border: "0",
-        },
-        ".cm-cursor, .cm-dropCursor": {
-          borderLeftColor: "var(--tui-color)",
-        },
-        ".cm-content *": {
-          color: "var(--tui-color) !important",
-        },
-      });
-    }
-
-    const {
-      catppuccinFrappe,
-      catppuccinLatte,
-      catppuccinMacchiato,
-      catppuccinMocha,
-    } = await import("@catppuccin/codemirror");
-    return {
-      latte: catppuccinLatte,
-      frappe: catppuccinFrappe,
-      macchiato: catppuccinMacchiato,
-      mocha: catppuccinMocha,
-    }[colorScheme];
-  }
-
-  async #syncColorScheme() {
-    const runtime = this.#runtime;
-    const view = this.#view;
-    if (!runtime || !view) return;
-    const nextColorScheme = this.colorScheme;
-    if (nextColorScheme === runtime.colorScheme) return;
-    const colorSchemeLoad = ++this.#colorSchemeLoad;
-    const extension = await this.#loadColorSchemeExtension(
-      runtime,
-      nextColorScheme,
-    );
-    if (
-      colorSchemeLoad !== this.#colorSchemeLoad ||
-      runtime !== this.#runtime ||
-      view !== this.#view
-    ) {
-      return;
-    }
-    runtime.colorSchemeExtension = extension;
-    runtime.colorScheme = nextColorScheme;
-    view.dispatch({
-      effects: runtime.colorSchemeCompartment.reconfigure(extension),
-    });
   }
 
   #queueDocumentSync() {

@@ -3,6 +3,23 @@ import { getJson } from "./api.js";
 import { formatCurrency } from "./format.js";
 import { LiveResource } from "./live-resource.js";
 
+const rowStyle = `
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.25rem 1rem;
+`;
+const labelStyle = "flex: 0 0 6.5rem; font-weight: 600";
+const listStyle = `
+  display: flex; flex: 1 1 21rem; flex-wrap: wrap; align-items: baseline;
+  gap: 0.375rem 1rem; min-inline-size: 0; margin: 0; padding: 0; list-style: none;
+`;
+const planHeading = html`
+  <h2
+    id="sentinel-plan-title"
+    style="${labelStyle}; font-size: 1rem; line-height: 1.25; margin: 0"
+  >
+    Plan
+  </h2>
+`;
+
 class SentinelPlannerStatus extends LitElement {
   planner = new LiveResource(
     this,
@@ -39,18 +56,22 @@ class SentinelPlannerStatus extends LitElement {
     super.disconnectedCallback();
   }
 
-  renderRecommendation(recommendation, index) {
+  renderRecommendation(recommendation) {
     const isSell = recommendation.action === "sell";
     const waitingForMarket = recommendation.market_open === false;
     const percentage =
       isSell && recommendation.current_value_eur > 0
-        ? ` ${Math.round(
+        ? `${Math.round(
             (Math.abs(recommendation.value_delta_eur) /
               recommendation.current_value_eur) *
               100,
           )}%`
         : "";
-    const variant = waitingForMarket ? "default" : isSell ? "error" : "success";
+    const variant = waitingForMarket
+      ? "neutral"
+      : isSell
+        ? "danger"
+        : "success";
     const title = [
       waitingForMarket ? "Waiting for market to open" : "",
       recommendation.reason ?? "",
@@ -58,17 +79,31 @@ class SentinelPlannerStatus extends LitElement {
       .filter(Boolean)
       .join(" · ");
 
-    // TuiText manages its own inline styles; scope the waiting color on a parent.
     return html`
-      <span
-        style=${waitingForMarket ? "--tui-color: var(--tui-disabled-color)" : ""}
+      <li
+        title=${title}
+        style="
+          display: inline-flex; flex-wrap: wrap; align-items: center;
+          gap: 0.15rem 0.35rem; min-inline-size: 0;
+        "
       >
-        <tui-text variant=${variant} title=${title}
-          >${index > 0 ? html`<span aria-hidden="true">&nbsp;&nbsp;</span>` : ""}${recommendation.action.toUpperCase()}
-          ${formatCurrency(Math.abs(recommendation.value_delta_eur))}${percentage}
-          ${recommendation.symbol}</tui-text
+        <wa-badge variant=${variant} appearance="filled"
+          >${isSell ? "Sell" : "Buy"}</wa-badge
         >
-      </span>
+        <strong style="font-weight: 650">${recommendation.symbol}</strong>
+        <span>${formatCurrency(Math.abs(recommendation.value_delta_eur))}</span>
+        ${percentage
+          ? html`<span style="color: var(--wa-color-text-quiet)"
+              >(${percentage})</span
+            >`
+          : ""}
+        ${waitingForMarket
+          ? html`<span
+              style="color: var(--wa-color-text-quiet); font-size: 0.75rem"
+              >Market closed</span
+            >`
+          : ""}
+      </li>
     `;
   }
 
@@ -100,13 +135,12 @@ class SentinelPlannerStatus extends LitElement {
       );
   }
 
-  renderTarget(target, index) {
+  renderTarget(target) {
     const gap = Number(target.gap_eur ?? 0);
     const quantityDelta = Number(target.quantity_delta ?? 0);
     const quantity =
       !target.isCash && Math.abs(quantityDelta) > 0.0001
-        ? html`&nbsp;·&nbsp;${quantityDelta > 0 ? "+" : "-"}${Math.abs(quantityDelta).toLocaleString()}
-          sh`
+        ? `${quantityDelta > 0 ? "+" : "-"}${Math.abs(quantityDelta).toLocaleString()} sh`
         : "";
     const title = target.isCash
       ? "Cash left after deploying all affordable whole-lot purchases"
@@ -115,10 +149,18 @@ class SentinelPlannerStatus extends LitElement {
         ).toFixed(2)}`;
 
     return html`
-      <span title=${title}
-        >${index > 0 ? html`<span aria-hidden="true">&nbsp;&nbsp;</span>` : ""}${target.symbol}&nbsp;${formatCurrency(target.target_value_eur)}
-        (${gap >= 0 ? "+" : "-"}${formatCurrency(Math.abs(gap))}${quantity})</span
-      >
+      <li class="plan-target" title=${title}>
+        <strong style="font-weight: 600">${target.symbol}</strong>
+        <span title="Target value"
+          >${formatCurrency(target.target_value_eur)}</span
+        >
+        <span class="plan-target-gap" title="Gap to target"
+          >${gap >= 0 ? "+" : "-"}${formatCurrency(Math.abs(gap))}</span
+        >
+        <span class="plan-target-quantity" title="Share change"
+          >${quantity}</span
+        >
+      </li>
     `;
   }
 
@@ -127,74 +169,118 @@ class SentinelPlannerStatus extends LitElement {
     const plan = planner.plan;
     const summary = planner.summary;
     const targets = this.targetItems(plan);
-    const gapLabel = `${plan?.horizon_months ?? 12} mo gaps:`;
+    const gapLabel = `${plan?.horizon_months ?? 12} mo gaps`;
 
     return html`
-      <tui-flex wrap>
-        <span>Current plan:&nbsp;</span>
-        ${
-          recommendations.length > 0
-            ? recommendations.map((recommendation, index) =>
-                this.renderRecommendation(recommendation, index),
+      <div style=${rowStyle}>
+        ${planHeading}
+        <ul
+          class="plan-inline-list"
+          role="list"
+          aria-label="Current plan"
+          style=${listStyle}
+        >
+          ${recommendations.length > 0
+            ? recommendations.map((recommendation) =>
+                this.renderRecommendation(recommendation),
               )
-            : html`<span>No pending actions</span>`
-        }
-      </tui-flex>
-      <tui-flex
-        wrap
-        style="font-size: 0.85rem; color: var(--tui-disabled-color)"
-      >
-        <span>${gapLabel}&nbsp;</span>
-        ${
-          targets.length > 0
-            ? targets.map((target, index) => this.renderTarget(target, index))
-            : html`<span>Target unavailable</span>`
-        }
-      </tui-flex>
-      ${
-        plan
-          ? html`
-              <tui-flex wrap>
-                <span
-                  >${formatCurrency(plan.terminal_portfolio_value_eur)} by
-                  ${plan.horizon_end_date}</span
-                >
-                <span aria-hidden="true">&nbsp;·&nbsp;</span>
-                <span
-                  >${formatCurrency(plan.avg_monthly_net_deposit_eur)}/mo</span
-                >
-                <span aria-hidden="true">&nbsp;·&nbsp;</span>
-                <span>${(plan.targets ?? []).length} securities</span>
-                ${
-                  summary
-                    ? html`
-                        <span aria-hidden="true">&nbsp;·&nbsp;</span>
-                        <span
-                          >cash after trades
-                          ${formatCurrency(summary.cash_after_plan)}</span
-                        >
-                      `
-                    : ""
-                }
-              </tui-flex>
-            `
-          : ""
-      }
+            : html`<li style="color: var(--wa-color-text-quiet)">
+                No pending actions
+              </li>`}
+        </ul>
+      </div>
+      ${plan
+        ? html`
+            <div style="${rowStyle} color: var(--wa-color-text-quiet)">
+              <span id="sentinel-plan-projection-label" style=${labelStyle}
+                >Projection</span
+              >
+              <ul
+                class="plan-inline-list"
+                role="list"
+                aria-labelledby="sentinel-plan-projection-label"
+                style=${listStyle}
+              >
+                <li>
+                  <strong
+                    style="color: var(--wa-color-text-normal); font-weight: 650"
+                    >${formatCurrency(
+                      plan.terminal_portfolio_value_eur,
+                    )}</strong
+                  >
+                  by
+                  <time datetime=${plan.horizon_end_date}
+                    >${plan.horizon_end_date}</time
+                  >
+                </li>
+                <li>${formatCurrency(plan.avg_monthly_net_deposit_eur)}/mo</li>
+                <li>${(plan.targets ?? []).length} securities</li>
+                ${summary
+                  ? html`<li>
+                      Cash after trades
+                      ${formatCurrency(summary.cash_after_plan)}
+                    </li>`
+                  : ""}
+              </ul>
+            </div>
+          `
+        : ""}
+      <div>
+        <div class="plan-targets-header">
+          <span id="sentinel-plan-gap-label" style="font-weight: 600"
+            >${gapLabel}</span
+          >
+          ${targets.length > 0
+            ? html`<span class="plan-target-gap"
+                >Target value · Gap · Shares</span
+              >`
+            : ""}
+        </div>
+        <ul
+          role="list"
+          aria-labelledby="sentinel-plan-gap-label"
+          class="plan-targets"
+        >
+          ${targets.length > 0
+            ? targets.map((target) => this.renderTarget(target))
+            : html`<li>Target unavailable</li>`}
+        </ul>
+      </div>
     `;
   }
 
   render() {
-    let content;
+    const loading = this.planner.loading && !this.planner.value;
+    const error = this.planner.error;
 
-    if (this.planner.loading && !this.planner.value) {
-      content = html`<span>Loading plan…</span>`;
-    } else if (this.planner.error) {
-      content = html`<tui-text variant="error">Plan unavailable</tui-text>`;
-    } else {
-      content = this.renderPlanner(this.planner.value);
-    }
-
-    return html`<tui-box heading="Plan" border="single">${content}</tui-box>`;
+    return html`
+      <wa-card appearance="outlined">
+        <section
+          aria-labelledby="sentinel-plan-title"
+          style="
+          display: grid;
+          gap: 0.45rem;
+          overflow-wrap: anywhere;
+        "
+        >
+          ${loading || error
+            ? html`
+                <div style=${rowStyle}>
+                  ${planHeading}
+                  <span
+                    role="status"
+                    style="color: ${error
+                      ? "var(--wa-color-danger-on-normal)"
+                      : "var(--wa-color-text-quiet)"}"
+                  >
+                    ${error ? "Plan unavailable" : "Loading plan…"}
+                  </span>
+                </div>
+              `
+            : this.renderPlanner(this.planner.value)}
+        </section>
+      </wa-card>
+    `;
   }
 }
 

@@ -17,6 +17,8 @@ MARKDOWN_FILES = sorted(
 LINK_RE = re.compile(r"(?<!!)\[[^]]*]\(([^)]+)\)")
 HEADING_RE = re.compile(r"^#{1,6}\s+(.+?)\s*#*\s*$", re.MULTILINE)
 API_HEADING_RE = re.compile(r"^#{1,6}\s+`?(GET|POST|PUT|PATCH|DELETE)\s+([^`\s]+)`?\s*$", re.MULTILINE)
+PATH_CONVERTER_RE = re.compile(r"\{([^{}:]+):[^{}]+\}")
+OPENAPI_METHODS = {"get", "post", "put", "patch", "delete", "trace"}
 
 
 def github_anchor(value: str) -> str:
@@ -73,21 +75,20 @@ def documented_operations() -> set[tuple[str, str]]:
     operations: set[tuple[str, str]] = set()
     for path in sorted((ROOT / "docs" / "api").glob("*.md")):
         for method, route in API_HEADING_RE.findall(path.read_text(encoding="utf-8")):
-            operations.add((method, route.rstrip("/")))
+            route_template = PATH_CONVERTER_RE.sub(r"{\1}", route)
+            operations.add((method, route_template.rstrip("/")))
     return operations
 
 
 def application_operations() -> set[tuple[str, str]]:
     from sentinel.app import app
 
-    operations: set[tuple[str, str]] = set()
-    for route in app.routes:
-        path = getattr(route, "path", "")
-        if not path.startswith("/api"):
-            continue
-        for method in getattr(route, "methods", set()) - {"HEAD", "OPTIONS"}:
-            operations.add((method, path.rstrip("/")))
-    return operations
+    return {
+        (method.upper(), path.rstrip("/"))
+        for path, item in app.openapi()["paths"].items()
+        if path.startswith("/api/")
+        for method in OPENAPI_METHODS.intersection(item)
+    }
 
 
 def check_json_examples() -> list[str]:

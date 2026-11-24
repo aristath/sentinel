@@ -6,16 +6,6 @@
 - Python 3.13 or newer
 - [`uv`](https://docs.astral.sh/uv/)
 - Node.js and npm
-- Git checkouts laid out as sibling directories:
-
-```text
-workspace/
-├── sentinel/
-└── teract/
-```
-
-The sibling layout is required because `web/package.json` resolves Teract from
-`../../teract` relative to `sentinel/web/`.
 
 ## Python environment
 
@@ -75,7 +65,7 @@ npm run build
 ```
 
 The generated `web/dist/` tree is tracked because FastAPI serves it directly in
-production. See [Frontend and Teract](frontend.md).
+production. See [Frontend and Web Awesome](frontend.md).
 
 ## Initial configuration
 

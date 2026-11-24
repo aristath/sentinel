@@ -50,7 +50,7 @@ invocation-only overrides for workstation-specific ports.
 - `sentinel/task_definitions/` contains bundled task definitions and prompts.
 - `sentinel/jobs/` owns fixed application jobs and APScheduler integration.
 - `sentinel/led/`, `arduino-app/`, and `firmware/` own optional hardware output.
-- `web/src/` is a JavaScript frontend using Lit, Teract custom elements, and
+- `web/src/` is a JavaScript frontend using Lit, Web Awesome, and
   CodeMirror. It is not React and does not use Mantine.
 - `TUI/` is the separate Go terminal client.
 
@@ -137,11 +137,11 @@ registry. See [Tasks](docs/tasks.md) and [Scheduler](docs/scheduler.md).
 
 ### Frontend
 
-- Use native custom elements and shared Teract primitives.
-- Teract remains minimal and dependency-free; Sentinel may depend on Lit and
-  CodeMirror.
-- Component visual CSS is self-contained in element templates as inline style
-  attributes. Global page/theme defaults belong in Teract global CSS.
+- Use Lit custom elements for application behavior and Web Awesome for
+  interface components. Use native HTML for document and table semantics.
+- Use Web Awesome's built-in theme and tokens for color, type, and spacing.
+  Keep component-specific CSS with its component and shared layout in
+  `web/src/sentinel.css`.
 - Preserve light-DOM children; do not replace `innerHTML` or `textContent` around
   Lit `ChildPart` markers.
 - Build output is tracked in `web/dist/` and served by FastAPI.

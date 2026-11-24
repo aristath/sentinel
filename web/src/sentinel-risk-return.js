@@ -36,7 +36,9 @@ export class SentinelRiskReturn extends LitElement {
   }
 
   storeCollapsed(event) {
-    storeWidgetCollapsed("risk-return", !event.currentTarget.open);
+    if (event.target === event.currentTarget) {
+      storeWidgetCollapsed("risk-return", !event.currentTarget.open);
+    }
   }
 
   metricRows(metrics) {
@@ -160,61 +162,60 @@ export class SentinelRiskReturn extends LitElement {
   }
 
   metricColor(row) {
-    if (row.goodDirection === "neutral") {
-      return "var(--tui-color)";
+    if (row.goodDirection === "neutral" || !Number.isFinite(row.value)) {
+      return "var(--wa-color-text-normal)";
     }
     const good =
       row.goodDirection === "high"
         ? row.value >= row.reference
         : row.value <= row.reference;
-    return good ? "var(--tui-success-color)" : "var(--tui-error-color)";
+    return good
+      ? "var(--wa-color-success-on-normal)"
+      : "var(--wa-color-danger-on-normal)";
   }
 
-  renderMetric(row) {
+  renderMetric(row, index) {
     const span = row.max - row.min;
-    const valuePosition =
-      span > 0 ? clamp01((row.value - row.min) / span) : 0.5;
     const referencePosition =
       span > 0 ? clamp01((row.reference - row.min) / span) : 0.5;
+    const valuePosition =
+      span > 0 && Number.isFinite(row.value)
+        ? clamp01((row.value - row.min) / span)
+        : referencePosition;
     const color = this.metricColor(row);
+    const tooltipTarget = `risk-return-metric-${index}`;
 
     return html`
-      <div style="display: grid; gap: 2px">
-        <div
-          style="display: flex; justify-content: space-between; gap: 1ch; align-items: baseline"
-        >
-          <div style="flex: 1 1 auto; min-width: 0">
-            <div style="font-weight: 600">${row.label}</div>
-            <div style="color: var(--tui-disabled-color); font-size: 0.75em">
-              ${row.subLabel}
-            </div>
-          </div>
-          <div style="color: ${color}; flex: 0 0 auto; font-weight: 600">
-            ${row.formatted}
-          </div>
-        </div>
-        <div
-          aria-hidden="true"
-          style="position: relative; height: 10px; margin: 4px 0 2px; overflow: hidden; background: color-mix(in srgb, var(--tui-color) 18%, transparent)"
-        >
-          <div
-            style="position: absolute; left: ${Math.min(referencePosition, valuePosition) * 100}%; width: ${Math.abs(valuePosition - referencePosition) * 100}%; top: 0; bottom: 0; background: ${color}"
-          ></div>
-          <div
-            style="position: absolute; left: ${referencePosition * 100}%; top: -2px; bottom: -2px; width: 1px; background: var(--tui-disabled-color); transform: translateX(-0.5px)"
-          ></div>
-        </div>
-        <div
-          aria-hidden="true"
-          style="position: relative; height: 1.1em; color: var(--tui-disabled-color); font-size: 0.75em"
-        >
-          <span style="position: absolute; left: 0">${row.minLabel}</span>
-          <span
-            style="position: absolute; left: ${referencePosition * 100}%; transform: translateX(-50%); white-space: nowrap"
-            >${row.referenceLabel}</span
+      <div class="risk-metric">
+        <dt>
+          <wa-button
+            id=${tooltipTarget}
+            class="risk-metric-label"
+            size="xs"
+            appearance="plain"
           >
-          <span style="position: absolute; right: 0">${row.maxLabel}</span>
-        </div>
+            ${row.label}
+          </wa-button>
+          <wa-tooltip for=${tooltipTarget}>
+            <div>${row.subLabel}</div>
+            <div>
+              Scale ${row.minLabel} to ${row.maxLabel} · Marker
+              ${row.referenceLabel}
+            </div>
+          </wa-tooltip>
+        </dt>
+        <dd>
+          <span style="color: ${color}">${row.formatted}</span>
+          <span
+            class="risk-metric-gauge"
+            aria-hidden="true"
+            style="
+              --risk-reference: ${referencePosition * 100}%;
+              --risk-value: ${valuePosition * 100}%;
+              --risk-value-color: ${color};
+            "
+          ></span>
+        </dd>
       </div>
     `;
   }
@@ -222,40 +223,46 @@ export class SentinelRiskReturn extends LitElement {
   renderHomeMarkets(data) {
     const markets = data.home_markets || [];
     if (markets.length === 0 || !(data.metrics.home_coverage_pct > 0)) {
-      return html`<div
-        style="color: var(--tui-disabled-color); font-size: 0.75em; font-style: italic"
-      >
-        Benchmarks not yet synced — home-market comparison will populate on
-        next sync cycle.
-      </div>`;
+      return html`<p class="risk-market-empty">
+        Benchmarks not yet synced — home-market comparison will populate on next
+        sync cycle.
+      </p>`;
     }
 
     return html`
-      <div style="display: grid; gap: 2px">
-        <div
-          style="color: var(--tui-disabled-color); font-size: 0.75em; font-weight: 600; text-transform: uppercase"
-        >
-          vs home markets
-        </div>
-        ${markets.map(
-          (market) => html`
-            <div
-              style="display: flex; justify-content: space-between; gap: 1ch; font-size: 0.75em"
-            >
-              <span style="color: var(--tui-disabled-color)"
-                >${market.group} (${percent(market.weight_pct, 0)})</span
-              >
-              <span
-                style="color: ${market.alpha_1y >= 0
-                  ? "var(--tui-success-color)"
-                  : "var(--tui-error-color)"}"
-                >${percent(market.alpha_1y)} α · β
-                ${number(market.beta)}</span
-              >
-            </div>
-          `,
-        )}
-      </div>
+      <table class="risk-market-table">
+        <caption>
+          Home markets
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Market</th>
+            <th scope="col">Weight</th>
+            <th scope="col">Alpha</th>
+            <th scope="col">Beta</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${markets.map(
+            (market) => html`
+              <tr>
+                <th scope="row">${market.group}</th>
+                <td>${percent(market.weight_pct, 0)}</td>
+                <td
+                  data-tone=${!Number.isFinite(market.alpha_1y)
+                    ? ""
+                    : market.alpha_1y >= 0
+                      ? "success"
+                      : "error"}
+                >
+                  ${percent(market.alpha_1y)}
+                </td>
+                <td>${number(market.beta)}</td>
+              </tr>
+            `,
+          )}
+        </tbody>
+      </table>
     `;
   }
 
@@ -270,18 +277,21 @@ export class SentinelRiskReturn extends LitElement {
     }
 
     return html`
-      <details
+      <wa-details
         ?open=${!widgetCollapsed("risk-return")}
-        @toggle=${this.storeCollapsed}
+        @wa-after-show=${this.storeCollapsed}
+        @wa-after-hide=${this.storeCollapsed}
       >
-        <summary style="cursor: pointer; font-weight: 600">Risk / Return</summary>
-        <tui-box heading="Risk / Return" border="single">
-          <div style="display: grid; gap: 1em">
-            ${this.metricRows(data.metrics).map((row) => this.renderMetric(row))}
-            ${this.renderHomeMarkets(data)}
-          </div>
-        </tui-box>
-      </details>
+        <span slot="summary">Risk / Return</span>
+        <div class="risk-return-layout">
+          <dl class="risk-metrics">
+            ${this.metricRows(data.metrics).map((row, index) =>
+              this.renderMetric(row, index),
+            )}
+          </dl>
+          ${this.renderHomeMarkets(data)}
+        </div>
+      </wa-details>
     `;
   }
 }

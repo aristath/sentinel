@@ -1,25 +1,64 @@
-import { LitElement, html } from "lit";
+import { LitElement, html, svg } from "lit";
+import { repeat } from "lit/directives/repeat.js";
 import { getJson } from "./api.js";
 import { formatCurrency } from "./format.js";
 import { LiveResource } from "./live-resource.js";
 import { storeWidgetCollapsed, widgetCollapsed } from "./widget-state.js";
 
-function percent(value) {
-  return `${Number(value || 0).toFixed(1)}%`;
+const TARGET_SERIES = [
+  { key: "targetWeight", style: "target", label: "12-month target" },
+  { key: "idealWeight", style: "ideal", label: "Ideal allocation" },
+];
+
+function weightFor(value, total) {
+  return total > 0 && Number.isFinite(value) ? (value / total) * 100 : null;
+}
+
+function valueFor(weight, total) {
+  return total > 0 && Number.isFinite(weight) ? (weight / 100) * total : null;
+}
+
+function weightLabel(weight) {
+  return Number.isFinite(weight) ? `${Number(weight.toFixed(2))}%` : "—";
+}
+
+function scaleTicks(highest) {
+  const interval = Math.max((highest || 4) / 4, 0.01);
+  const magnitude = 10 ** Math.floor(Math.log10(interval));
+  const step =
+    [1, 1.25, 1.5, 2, 2.5, 3, 5, 10].find((n) => n * magnitude >= interval) *
+    magnitude;
+  return Array.from(
+    { length: Math.ceil((highest || 4) / step) + 1 },
+    (_, index) => index * step,
+  );
+}
+
+function targetPath(rows, key, scale) {
+  let command = "M";
+  return rows
+    .map((row, index) => {
+      if (!Number.isFinite(row[key])) {
+        command = "M";
+        return "";
+      }
+      const point = `${command}${scale(row[key])},${index + 0.5}`;
+      command = "L";
+      return point;
+    })
+    .join(" ");
 }
 
 export class SentinelSecurityAllocation extends LitElement {
   static properties = {
     sortBy: { state: true },
-    showIdeal: { state: true },
-    compact: { state: true },
+    showTargets: { state: true },
   };
 
   constructor() {
     super();
-    this.sortBy = "allocation";
-    this.showIdeal = true;
-    this.compact = false;
+    this.sortBy = "currentWeight";
+    this.showTargets = true;
   }
 
   allocation = new LiveResource(
@@ -44,19 +83,9 @@ export class SentinelSecurityAllocation extends LitElement {
       "sentinel-setting-changed",
       this.refreshForCashSetting,
     );
-    if (typeof ResizeObserver !== "undefined") {
-      this.resizeObserver = new ResizeObserver(([entry]) => {
-        const compact = entry.contentRect.width <= 520;
-        if (compact !== this.compact) {
-          this.compact = compact;
-        }
-      });
-      this.resizeObserver.observe(this);
-    }
   }
 
   disconnectedCallback() {
-    this.resizeObserver?.disconnect();
     window.removeEventListener(
       "sentinel-setting-changed",
       this.refreshForCashSetting,
@@ -74,310 +103,333 @@ export class SentinelSecurityAllocation extends LitElement {
   };
 
   storeCollapsed(event) {
-    storeWidgetCollapsed("security-allocation", !event.currentTarget.open);
-  }
-
-  changeSort(event) {
-    this.sortBy = event.currentTarget.value;
-  }
-
-  changeIdeal(event) {
-    this.showIdeal = event.currentTarget.checked;
+    if (event.target === event.currentTarget) {
+      storeWidgetCollapsed("security-allocation", !event.currentTarget.open);
+    }
   }
 
   get rows() {
-    const securities = this.allocation.value?.securities || [];
-    const planner = this.allocation.value?.planner || {};
-    const recommendations = planner.recommendations || [];
-    const longTermPlan = planner.plan;
+    const { securities = [], planner = {} } = this.allocation.value ?? {};
+    const { plan, summary } = planner;
     const targets = new Map(
-      (longTermPlan?.targets || []).map((target) => [target.symbol, target]),
+      (plan?.targets ?? []).map((target) => [target.symbol, target]),
     );
+    const recommendations = new Map(
+      (planner.recommendations ?? []).map((trade) => [trade.symbol, trade]),
+    );
+    const total = plan?.current_total_value_eur;
+    const terminal = plan?.terminal_portfolio_value_eur;
+    const afterPlanTotal = total - (summary?.total_fees ?? 0);
+    const rows = [];
 
-    const rows = securities
-      .filter((security) => {
-        const hasPosition = security.has_position && security.value_eur > 0;
-        const hasRecommendation = recommendations.some(
-          (recommendation) => recommendation.symbol === security.symbol,
-        );
-        const hasIdeal = this.showIdeal && targets.has(security.symbol);
-        return hasPosition || hasRecommendation || hasIdeal;
-      })
-      .map((security) => {
-        const recommendation = recommendations.find(
-          (candidate) => candidate.symbol === security.symbol,
-        );
-        const delta = recommendation ? recommendation.value_delta_eur : 0;
-        const target = targets.get(security.symbol);
-        const current = security.value_eur || 0;
-        const final = current + delta;
-        const ideal = Number(
-          target?.target_value_eur ??
-            recommendation?.target_value_eur ??
-            current,
-        );
-        const modelIdeal = Number(target?.model_target_value_eur ?? ideal);
+    for (const security of securities) {
+      const target = targets.get(security.symbol);
+      const trade = recommendations.get(security.symbol);
+      const current = security.value_eur ?? 0;
+      const delta = trade?.value_delta_eur ?? 0;
+      const targetWeight = target?.target_allocation_pct;
+      const idealWeight =
+        target?.model_target_allocation_pct ?? security.ideal_allocation;
+      const hasPosition = security.has_position && current > 0;
+      const hasTarget =
+        this.showTargets && (targetWeight > 0 || idealWeight > 0);
+      if (!hasPosition && !delta && !hasTarget) {
+        continue;
+      }
 
-        if (final <= 0 && current <= 0 && ideal <= 0) {
-          return undefined;
-        }
-
-        return {
-          symbol: security.symbol,
-          current,
-          final: Math.max(0, final),
-          delta,
-          ideal,
-          currentAllocation: security.current_allocation || 0,
-          postPlanAllocation:
-            security.post_plan_allocation ?? security.current_allocation ?? 0,
-          idealAllocation:
-            target?.target_allocation_pct ?? security.ideal_allocation ?? 0,
-          targetGap: Number(target?.gap_eur || 0),
-          quantityDelta: Number(target?.quantity_delta || 0),
-          modelIdeal,
-          sellLocked: Boolean(target?.sell_locked),
-          isBuy: delta > 0,
-          isSell: delta < 0,
-          maxBar: this.showIdeal
-            ? Math.max(current, final, ideal)
-            : Math.max(current, final),
-        };
-      })
-      .filter(Boolean);
-
-    const currentCash = Number(longTermPlan?.current_cash_eur || 0);
-    const targetCash = Number(longTermPlan?.target_cash_value_eur || 0);
-    if (currentCash > 0 || targetCash > 0) {
-      const currentTotal = Number(longTermPlan?.current_total_value_eur || 0);
-      const plannedCash = Number.isFinite(
-        Number(planner.summary?.cash_after_plan),
-      )
-        ? Math.max(0, Number(planner.summary.cash_after_plan))
-        : currentCash;
-      const delta = plannedCash - currentCash;
+      const planned = Math.max(0, current + delta);
+      const currentWeight =
+        security.current_allocation ?? weightFor(current, total) ?? 0;
       rows.push({
-        symbol: "CASH",
-        current: currentCash,
-        final: plannedCash,
+        id: `allocation-security-${encodeURIComponent(security.symbol)}`,
+        symbol: security.symbol,
+        current,
+        planned,
         delta,
-        ideal: targetCash,
-        currentAllocation:
-          currentTotal > 0 ? (currentCash / currentTotal) * 100 : 0,
-        postPlanAllocation:
-          currentTotal > 0 ? (plannedCash / currentTotal) * 100 : 0,
-        idealAllocation: Number(
-          longTermPlan?.target_cash_allocation_pct || 0,
-        ),
-        targetGap: Number(longTermPlan?.cash_gap_eur || 0),
-        quantityDelta: 0,
-        modelIdeal: targetCash,
-        sellLocked: false,
-        isBuy: delta > 0,
-        isSell: delta < 0,
-        maxBar: this.showIdeal
-          ? Math.max(currentCash, plannedCash, targetCash)
-          : Math.max(currentCash, plannedCash),
+        currentWeight,
+        plannedWeight:
+          security.post_plan_allocation ??
+          weightFor(planned, afterPlanTotal) ??
+          currentWeight,
+        targetWeight,
+        targetValue: target?.target_value_eur,
+        idealWeight,
+        idealValue:
+          target?.model_target_value_eur ?? valueFor(idealWeight, terminal),
+        targetGap: target?.gap_eur,
+        quantityDelta: target?.quantity_delta,
+        sellLocked: target?.sell_locked,
       });
     }
 
-    rows.sort((left, right) =>
-      this.sortBy === "ideal"
-        ? right.ideal - left.ideal
-        : Math.max(right.final, right.current) -
-          Math.max(left.final, left.current),
-    );
+    const cash = plan?.current_cash_eur ?? 0;
+    const plannedCash = Math.max(0, summary?.cash_after_plan ?? cash);
+    const targetCash = plan?.target_cash_value_eur;
+    if (cash > 0 || plannedCash > 0 || (this.showTargets && targetCash > 0)) {
+      const idealCashWeight = plan?.targets
+        ? Math.max(
+            0,
+            100 -
+              plan.targets.reduce(
+                (sum, target) =>
+                  sum +
+                  (target.model_target_allocation_pct ??
+                    target.target_allocation_pct ??
+                    0),
+                0,
+              ),
+          )
+        : null;
+      const currentWeight = weightFor(cash, total) ?? 0;
+      rows.push({
+        id: "allocation-cash",
+        symbol: "CASH",
+        current: cash,
+        planned: plannedCash,
+        delta: plannedCash - cash,
+        currentWeight,
+        plannedWeight: weightFor(plannedCash, afterPlanTotal) ?? currentWeight,
+        targetWeight: plan?.target_cash_allocation_pct,
+        targetValue: targetCash,
+        idealWeight: idealCashWeight,
+        idealValue: valueFor(idealCashWeight, terminal),
+        targetGap: plan?.cash_gap_eur,
+      });
+    }
 
-    return rows;
+    return rows.sort(
+      (left, right) =>
+        (right[this.sortBy] ?? -1) - (left[this.sortBy] ?? -1) ||
+        right.currentWeight - left.currentWeight ||
+        left.symbol.localeCompare(right.symbol),
+    );
   }
 
-  renderRow(row, maximum) {
-    const grayWidth =
-      maximum > 0
-        ? ((row.isBuy ? row.final - row.delta : row.final) / maximum) * 100
-        : 0;
-    const deltaWidth = maximum > 0 ? (Math.abs(row.delta) / maximum) * 100 : 0;
-    const idealPosition = maximum > 0 ? (row.ideal / maximum) * 100 : 0;
-    const targetGapText = `${row.targetGap >= 0 ? "+" : "-"}${formatCurrency(Math.abs(row.targetGap), "EUR")}`;
-    const quantityText =
-      Math.abs(row.quantityDelta || 0) > 0.0001
-        ? `; ${row.quantityDelta > 0 ? "+" : "-"}${Math.abs(row.quantityDelta).toLocaleString()} shares`
-        : "";
-    const idealTitle = row.sellLocked
-      ? `No-sell holding remains unchanged; model target: ${formatCurrency(row.modelIdeal, "EUR")}`
-      : `12-month target: ${formatCurrency(row.ideal, "EUR")}; gap: ${targetGapText}${quantityText}`;
-
+  renderBar(row, index, scale) {
+    const base =
+      row.delta < 0
+        ? Math.min(row.currentWeight, row.plannedWeight)
+        : row.currentWeight;
+    const end =
+      row.delta > 0
+        ? Math.max(row.currentWeight, row.plannedWeight)
+        : row.currentWeight;
     return html`
-      <tr>
-        <td
-          title=${row.symbol}
-          style="width: ${this.compact ? "62px" : "76px"}; padding: 4px 8px 4px 0; font-size: 0.75em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
-        >
-          ${row.symbol}
-        </td>
-        <td style="width: 100%; padding: 4px 8px 4px 0">
-          <div
-            style="position: relative; display: flex; width: 100%; height: 16px; overflow: hidden; background: color-mix(in srgb, var(--tui-color) 8%, transparent); border: 1px solid color-mix(in srgb, var(--tui-color) 30%, transparent)"
-          >
-            ${grayWidth > 0
-              ? html`<div
-                  style="height: 100%; width: ${grayWidth}%; background: var(--tui-disabled-color)"
-                ></div>`
-              : ""}
-            ${row.isBuy && deltaWidth > 0
-              ? html`<div
-                  style="height: 100%; width: ${deltaWidth}%; background: var(--tui-success-color)"
-                ></div>`
-              : ""}
-            ${row.isSell && deltaWidth > 0
-              ? html`<div
-                  style="height: 100%; width: ${deltaWidth}%; background: var(--tui-error-color)"
-                ></div>`
-              : ""}
-            ${this.showIdeal
-              ? html`<div
-                  title=${idealTitle}
-                  style="position: absolute; left: ${idealPosition}%; top: -2px; bottom: -2px; width: 2px; background: light-dark(blue, deepskyblue); transform: translateX(-1px)"
-                ></div>`
-              : ""}
-          </div>
-        </td>
-        <td
-          style="width: ${this.compact ? "118px" : "174px"}; padding: 4px 0; color: var(--tui-disabled-color); font-size: 0.6875em; text-align: right; white-space: ${this.compact ? "normal" : "nowrap"}"
-        >
-          ${this.compact
-            ? ""
-            : html`<div>
-                <span>${percent(row.currentAllocation)}</span>
-                <span style="padding: 0 4px">→</span>
-                <span
-                  style="color: ${row.isBuy
-                    ? "var(--tui-success-color)"
-                    : row.isSell
-                      ? "var(--tui-error-color)"
-                      : "inherit"}; font-weight: ${row.isBuy || row.isSell
-                    ? "600"
-                    : "inherit"}"
-                  >${percent(row.postPlanAllocation)}</span
-                >
-                <span style="padding-left: 4px; color: light-dark(blue, deepskyblue)"
-                  >/ ${percent(row.idealAllocation)}</span
-                >
-              </div>`}
-          <div
-            style="margin-top: 2px; color: var(--tui-disabled-color); font-size: ${this.compact ? "0.82em" : "0.91em"}"
-          >
-            ${formatCurrency(row.ideal, "EUR")} ·
-            ${row.sellLocked ? "unchanged" : targetGapText}
-          </div>
-        </td>
-      </tr>
+      <div
+        class="allocation-bar"
+        style="grid-row: ${index + 1}; --allocation-bar-base: ${scale(base)}%"
+      >
+        <span class="allocation-held"></span>
+        ${end > base
+          ? html`<span
+              class=${row.delta > 0 ? "allocation-add" : "allocation-remove"}
+              style="inline-size: ${scale(end - base)}%"
+            ></span>`
+          : ""}
+      </div>
     `;
   }
 
-  legend(color, label, ideal = false) {
-    return html`<span
-      style="display: inline-flex; align-items: center; gap: 0.5ch; white-space: nowrap"
-    >
-      <span
-        aria-hidden="true"
-        style="display: inline-block; flex: 0 0 auto; width: ${ideal
-          ? "2px"
-          : "12px"}; height: ${ideal
-          ? "12px"
-          : "10px"}; background: ${color}; border: ${ideal
-          ? "none"
-          : "1px solid color-mix(in srgb, var(--tui-color) 30%, transparent)"}"
-      ></span>
-      <span style="color: var(--tui-disabled-color); font-size: 0.75em"
-        >${label}</span
+  renderChart(rows) {
+    const series = this.showTargets ? TARGET_SERIES : [];
+    const tooltipTrigger = globalThis.matchMedia?.("(hover: none)").matches
+      ? "click"
+      : "hover focus";
+    const highest = Math.max(
+      0,
+      ...rows.map((row) =>
+        Math.max(
+          row.currentWeight,
+          row.plannedWeight,
+          ...series.map(({ key }) => row[key] ?? 0),
+        ),
+      ),
+    );
+    const ticks = scaleTicks(highest);
+    const scale = (weight) => (weight / ticks.at(-1)) * 100;
+    return html`
+      <figure
+        class="allocation-figure"
+        style="--allocation-count: ${rows.length}"
       >
-    </span>`;
+        <figcaption>Portfolio weight</figcaption>
+        <div class="allocation-axis" aria-hidden="true">
+          ${ticks.map(
+            (tick) =>
+              html`<span style="inset-inline-start: ${scale(tick)}%">
+                ${weightLabel(tick)}
+              </span>`,
+          )}
+        </div>
+        <div class="allocation-tickers">
+          ${repeat(
+            rows,
+            (row) => row.id,
+            (row) =>
+              html`<wa-button id=${row.id} appearance="plain" size="small"
+                >${row.symbol}</wa-button
+              >`,
+          )}
+        </div>
+        <div class="allocation-plot" aria-hidden="true">
+          ${ticks.map(
+            (tick) =>
+              html`<span
+                class="allocation-gridline"
+                style="inset-inline-start: ${scale(tick)}%"
+              ></span>`,
+          )}
+          ${rows.map((row, index) => this.renderBar(row, index, scale))}
+          ${series.length
+            ? svg`<svg
+                class="allocation-lines"
+                viewBox="0 0 100 ${rows.length}"
+                preserveAspectRatio="none"
+              >
+                ${series.map(
+                  ({ key, style }) => svg`<path
+                    class="allocation-${style}"
+                    d=${targetPath(rows, key, scale)}
+                  />`,
+                )}
+              </svg>`
+            : ""}
+          ${series.length
+            ? rows.map(
+                (row, index) =>
+                  html`<div
+                    class="allocation-points"
+                    style="grid-row: ${index + 1}"
+                  >
+                    ${series.map(({ key, style }) =>
+                      Number.isFinite(row[key])
+                        ? html`<span
+                            class="allocation-point allocation-${style}"
+                            style="inset-inline-start: ${scale(row[key])}%"
+                          ></span>`
+                        : "",
+                    )}
+                  </div>`,
+              )
+            : ""}
+        </div>
+        ${repeat(
+          rows,
+          (row) => row.id,
+          (row) => this.renderTooltip(row, tooltipTrigger),
+        )}
+      </figure>
+    `;
+  }
+
+  renderTooltip(row, trigger) {
+    const entries = [
+      ["Current", row.currentWeight, row.current],
+      ["After plan", row.plannedWeight, row.planned],
+    ];
+    if (this.showTargets) {
+      entries.push(
+        ["12-month target", row.targetWeight, row.targetValue],
+        ["Ideal allocation", row.idealWeight, row.idealValue],
+      );
+    }
+    return html`
+      <wa-tooltip for=${row.id} trigger=${trigger}>
+        <strong>${row.symbol}</strong>
+        <dl class="allocation-tooltip-values">
+          ${entries.map(
+            ([label, weight, value]) => html`
+              <dt>${label}</dt>
+              <dd>${weightLabel(weight)}</dd>
+              <dd>${Number.isFinite(value) ? formatCurrency(value) : "—"}</dd>
+            `,
+          )}
+        </dl>
+        ${this.showTargets && Number.isFinite(row.targetGap)
+          ? html`<div>
+              Target gap
+              ${row.targetGap > 0 ? "+" : ""}${formatCurrency(row.targetGap)}
+              ${row.quantityDelta
+                ? html` ·
+                  ${row.quantityDelta > 0
+                    ? "+"
+                    : ""}${row.quantityDelta.toLocaleString()}
+                  shares`
+                : ""}
+            </div>`
+          : ""}
+        ${this.showTargets && row.sellLocked
+          ? html`<div>Selling disabled</div>`
+          : ""}
+      </wa-tooltip>
+    `;
+  }
+
+  renderLegend() {
+    const entries = [
+      { style: "held", label: "Current holding" },
+      { style: "add", label: "Plan increase" },
+      { style: "remove", label: "Plan decrease" },
+      ...(this.showTargets ? TARGET_SERIES : []),
+    ];
+    return html`
+      <ul class="allocation-legend" aria-label="Chart legend">
+        ${entries.map(
+          ({ style, label }) =>
+            html`<li>
+              <span
+                class="allocation-swatch allocation-${style}"
+                aria-hidden="true"
+              ></span>
+              ${label}
+            </li>`,
+        )}
+      </ul>
+    `;
   }
 
   render() {
-    if (
-      (this.allocation.loading && !this.allocation.value) ||
-      this.allocation.error ||
-      !this.allocation.value
-    ) {
+    if (this.allocation.error || !this.allocation.value) {
       return "";
     }
 
     const rows = this.rows;
-    const maximum = Math.max(...rows.map((row) => row.maxBar), 0);
-
     return html`
-      <details
+      <wa-details
         ?open=${!widgetCollapsed("security-allocation")}
-        @toggle=${this.storeCollapsed}
+        @wa-after-show=${this.storeCollapsed}
+        @wa-after-hide=${this.storeCollapsed}
       >
-        <summary style="cursor: pointer; font-weight: 600">
-          Security Allocation
-        </summary>
-        <tui-box heading="Security Allocation" border="single">
-          <div style="display: grid; gap: 0.75em">
-            <div
-              style="display: flex; justify-content: space-between; align-items: baseline; gap: 1ch; flex-wrap: wrap"
+        <span slot="summary">Security Allocation</span>
+        <div class="allocation-toolbar">
+          ${this.renderLegend()}
+          <div class="allocation-controls">
+            <wa-select
+              size="small"
+              aria-label="Sort securities by"
+              .value=${this.sortBy}
+              @change=${(event) => {
+                this.sortBy = event.currentTarget.value;
+              }}
             >
-              <span
-                style="color: var(--tui-disabled-color); font-size: 0.75em; font-weight: 600; text-transform: uppercase"
-                >Security Allocation</span
-              >
-              <span style="display: inline-flex; gap: 1ch; align-items: baseline">
-                <tui-radio-buttonset
-                  aria-label="Security allocation sorting"
-                  value=${this.sortBy}
-                  @change=${this.changeSort}
-                >
-                  <tui-radio-button value="allocation"
-                    >By allocation</tui-radio-button
-                  >
-                  <tui-radio-button value="ideal">By ideal</tui-radio-button>
-                </tui-radio-buttonset>
-                <tui-toggle
-                  ?checked=${this.showIdeal}
-                  @change=${this.changeIdeal}
-                  >Ideal</tui-toggle
-                >
-              </span>
-            </div>
-            ${rows.length > 0
-              ? html`<div style="min-width: 0; overflow-x: auto">
-                  <table
-                    aria-label="Security Allocation"
-                    style="width: 100%; border-collapse: collapse; table-layout: ${this
-                      .compact
-                      ? "auto"
-                      : "fixed"}"
-                  >
-                    <tbody>
-                      ${rows.map((row) => this.renderRow(row, maximum))}
-                    </tbody>
-                  </table>
-                </div>`
-              : html`<div
-                  style="padding: 2em 0; color: var(--tui-disabled-color); text-align: center"
-                >
-                  No allocation data available
-                </div>`}
-            <div
-              style="display: flex; gap: 1em; flex-wrap: wrap; padding-top: 4px"
+              <wa-option value="currentWeight">Current weight</wa-option>
+              <wa-option value="targetWeight">12-month target</wa-option>
+              <wa-option value="idealWeight">Ideal allocation</wa-option>
+            </wa-select>
+            <wa-switch
+              size="small"
+              .checked=${this.showTargets}
+              @change=${(event) => {
+                this.showTargets = event.currentTarget.checked;
+              }}
+              >Show targets</wa-switch
             >
-              ${this.legend("var(--tui-disabled-color)", "Current holding")}
-              ${this.legend("var(--tui-success-color)", "Today's increase")}
-              ${this.legend("var(--tui-error-color)", "Today's decrease")}
-              ${this.showIdeal
-                ? this.legend(
-                    "light-dark(blue, deepskyblue)",
-                    "12-month target",
-                    true,
-                  )
-                : ""}
-            </div>
           </div>
-        </tui-box>
-      </details>
+        </div>
+        ${rows.length
+          ? this.renderChart(rows)
+          : html`<p class="allocation-empty">No allocation data available</p>`}
+      </wa-details>
     `;
   }
 }
